@@ -1,0 +1,26 @@
+# Core dependencies
+opencv-python>=4.8.0
+mediapipe>=0.10.0
+numpy>=1.24.0
+
+# Input control
+pynput>=1.7.6
+PyAutoGUI>=0.9.54
+
+# UI
+PySide6>=6.5.0
+
+# Configuration
+PyYAML>=6.0
+
+# Audio processing (optional, for Teaching Mode)
+pyaudio>=0.2.13
+SpeechRecognition>=3.10.0
+
+# macOS specific (install only if needed)
+# pyobjc-framework-Quartz>=9.0; sys_platform == 'darwin'
+# pyobjc-framework-Cocoa>=9.0; sys_platform == 'darwin'
+
+# Linux specific (install only if needed)
+# python-xlib>=0.33; sys_platform == 'linux'
+# evdev>=1.6.0; sys_platform == 'linux'
