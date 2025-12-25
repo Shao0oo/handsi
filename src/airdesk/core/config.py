@@ -46,12 +46,13 @@ class GestureConfig(BaseModel):
     smoothing_window: int = Field(default=3, ge=1, le=10)
     consistency_threshold: float = Field(default=0.6, ge=0.0, le=1.0)
 
-    # Detection thresholds
-    pinch_threshold: float = Field(default=0.05, ge=0.01, le=0.2)
-    fist_threshold: float = Field(default=0.15, ge=0.05, le=0.5)
-    open_hand_distance_threshold: float = Field(default=0.25, ge=0.1, le=0.6)
-    open_hand_spread_threshold: float = Field(default=0.08, ge=0.02, le=0.3)
-    swipe_velocity_threshold: float = Field(default=0.3, ge=0.1, le=2.0)
+    # Detection thresholds (hand-relative: fraction of hand size)
+    # Hand size = distance from wrist to middle finger MCP knuckle
+    pinch_threshold: float = Field(default=0.2, ge=0.05, le=0.5)
+    fist_threshold: float = Field(default=0.65, ge=0.3, le=1.0)
+    open_hand_distance_threshold: float = Field(default=0.25, ge=0.1, le=0.6)  # DEPRECATED
+    open_hand_spread_threshold: float = Field(default=0.3, ge=0.1, le=0.8)
+    swipe_velocity_threshold: float = Field(default=0.8, ge=0.3, le=5.0)
     confidence_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
 
 

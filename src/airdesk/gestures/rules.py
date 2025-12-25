@@ -210,6 +210,10 @@ class GestureDetector:
         Returns:
             True if finger is closed, False otherwise
         """
+        # Special handling for thumb (different geometry)
+        if finger_tip_idx == 4:
+            return self._is_thumb_closed(lm)
+
         wrist = lm[0]
         tip = lm[finger_tip_idx]
         mcp = lm[finger_mcp_idx]
@@ -223,6 +227,31 @@ class GestureDetector:
 
         ratio = tip_distance / mcp_distance
         return ratio <= curl_ratio
+
+    def _is_thumb_closed(self, lm: list) -> bool:
+        """
+        Check if thumb is closed (curled across palm).
+
+        Thumb has different geometry - when closed, it curls across the palm
+        toward the fingers.
+
+        Args:
+            lm: List of landmarks
+
+        Returns:
+            True if thumb is closed, False otherwise
+        """
+        thumb_tip = lm[4]
+        index_mcp = lm[5]  # Index finger base (thumb curls toward this)
+
+        # Get hand scale for normalization
+        hand_scale = self._get_hand_scale(lm)
+
+        # Check if thumb tip is close to index MCP (palm area)
+        dist_to_index_mcp = self._normalized_distance(thumb_tip, index_mcp, hand_scale)
+
+        # Thumb is closed if tip is within 50% of hand size from index MCP
+        return dist_to_index_mcp < 0.5
 
     # === Single Hand Gestures ===
 
@@ -343,9 +372,9 @@ class GestureDetector:
         # Get hand scale for normalization
         hand_scale = self._get_hand_scale(lm)
 
-        # Check if ALL fingers are closed
+        # Check if ALL fingers are closed (using correct joints)
         fingers = [
-            (4, 2),   # Thumb
+            (4, 1),   # Thumb (tip to CMC, not MCP)
             (8, 5),   # Index
             (12, 9),  # Middle
             (16, 13), # Ring
@@ -354,26 +383,21 @@ class GestureDetector:
 
         closed_count = 0
         for tip_idx, mcp_idx in fingers:
-            if self._is_finger_closed(lm, tip_idx, mcp_idx):
+            # Use slightly looser curl ratio for fist detection (allow 20% extension)
+            if self._is_finger_closed(lm, tip_idx, mcp_idx, curl_ratio=1.2):
                 closed_count += 1
 
         # Require at least 4 of 5 fingers to be closed
-        if closed_count < 4:
+        if closed_count < 5:
             return None
 
-        # Secondary check: normalized average distance from wrist
-        wrist = lm[0]
-        fingertips = [lm[i] for i in [4, 8, 12, 16, 20]]
-        distances = [self._normalized_distance(tip, wrist, hand_scale) for tip in fingertips]
-        avg_distance = np.mean(distances)
+        # Calculate confidence based on how closed the fingers are
+        # Since we already validated with ratio checks, just return high confidence
+        confidence = min(closed_count / 5.0, 1.0)
 
-        if avg_distance < self.fist_threshold:
-            confidence = 1.0 - (avg_distance / self.fist_threshold)
-            return ("fist", confidence, {
-                "avg_distance": avg_distance,
-                "closed_count": closed_count
-            })  # type: ignore
-        return None
+        return ("fist", confidence, {
+            "closed_count": closed_count
+        })
 
     def _detect_open_hand(self, lm: list) -> Optional[tuple[str, float, dict]]:
         """Detect open hand (all 5 fingers fully extended and spread)."""
@@ -432,12 +456,11 @@ class GestureDetector:
 
         # Check thumb is extended
         if not self._is_finger_extended(lm, 4, 2, extension_ratio=1.5):
-            
             return None
 
         # Check thumb is pointing upward (lower y = higher in image space)
         # Normalize the vertical threshold by hand scale
-        vertical_threshold = 0.5 * hand_scale  # 50% of hand size
+        vertical_threshold = 1.5 * hand_scale  # 150% of hand size
         thumb_vertical = thumb_tip[1] < wrist[1] - vertical_threshold
 
         if not thumb_vertical:
@@ -449,7 +472,7 @@ class GestureDetector:
                           if self._is_finger_closed(lm, tip, mcp))
 
         # Require at least 3 of 4 fingers to be closed
-        if closed_count < 3:
+        if closed_count < 4:
             return None
 
         # Calculate normalized vertical distance
