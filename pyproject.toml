@@ -1,0 +1,62 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "airdesk"
+version = "0.1.0"
+description = "Contactless desktop control using hand/head/body tracking"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  # Core
+  "numpy>=1.24.0,<2.0.0",
+  "typing-extensions>=4.7.0",
+  "pydantic>=2.0.0,<3.0.0",
+  "PyYAML>=6.0,<7.0",
+  # Computer Vision
+  "opencv-python>=4.8.0,<5.0.0",
+  "mediapipe==0.10.21",
+]
+
+[project.optional-dependencies]
+phase2 = [
+  # Input control (Phase 2)
+  "pynput>=1.7.6,<2.0.0",
+  "PyAutoGUI>=0.9.54,<1.0.0",
+]
+ui = [
+  # System tray UI (Phase 2)
+  "PySide6>=6.5.0,<7.0.0",
+]
+teach = [
+  # Teaching mode (Phase 3)
+  "pyaudio>=0.2.13,<1.0.0",
+  "SpeechRecognition>=3.10.0,<4.0.0",
+]
+macos = [
+  # macOS-specific (Phase 2)
+  "pyobjc-framework-Quartz>=9.0",
+  "pyobjc-framework-Cocoa>=9.0",
+]
+linux = [
+  # Linux-specific (Phase 2)
+  "python-xlib>=0.33",
+  "evdev>=1.6.0",
+]
+dev = [
+  # Development tools
+  "pytest>=7.0.0",
+  "black>=23.0.0",
+  "mypy>=1.0.0",
+  "ruff>=0.1.0",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.scripts]
+airdesk = "airdesk.main:main"
