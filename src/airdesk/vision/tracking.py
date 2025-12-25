@@ -13,6 +13,10 @@ import cv2
 import mediapipe as mp
 import numpy as np
 
+from typing import Optional, Any
+from mediapipe.python.solutions import hands as mp_hands
+from mediapipe.python.solutions.hands import Hands
+
 from airdesk.core.bus import (
     FeatureQueue,
     FeatureVector,
@@ -21,7 +25,6 @@ from airdesk.core.bus import (
 )
 from airdesk.core.config import TrackingConfig
 from airdesk.core.logging import log_debug, log_error, log_info, log_warning
-
 
 class MediaPipeTracker:
     """
@@ -41,8 +44,8 @@ class MediaPipeTracker:
         self.min_tracking_confidence = min_tracking_confidence
 
         # Initialize MediaPipe Hands
-        self.mp_hands = mp.solutions.hands
-        self.hands: Optional[mp.solutions.hands.Hands] = None
+        self.mp_hands = mp_hands
+        self.hands: Optional[Hands] = None
 
     def initialize(self) -> bool:
         """
@@ -231,7 +234,9 @@ class TrackingThread(threading.Thread):
             self.latest_landmarks = results.multi_hand_landmarks
 
             # Extract features inline
-            features = self._extract_features(results, frame.image.shape)
+            h, w, c = frame.image.shape
+            image_shape: tuple[int, int, int] = (int(h), int(w), int(c))
+            features = self._extract_features(results, image_shape)
 
             # Determine if hands are detected
             hands_detected = features["hand_count"] > 0

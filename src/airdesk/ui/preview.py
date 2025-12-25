@@ -36,7 +36,8 @@ class PreviewWindow:
         self,
         runtime_state: RuntimeState,
         tracking_thread: Any,  # Reference to TrackingThread for frame access
-        window_name: str = "AirDesk Preview"
+        window_name: str = "AirDesk Preview",
+        show_features: bool = False
     ):
         self.runtime_state = runtime_state
         self.tracking_thread = tracking_thread
@@ -46,6 +47,9 @@ class PreviewWindow:
         self.mp_hands = mp.solutions.hands
         self.mp_drawing = mp.solutions.drawing_utils
         self.mp_drawing_styles = mp.solutions.drawing_styles
+
+        # Feature display toggle
+        self.show_features = show_features
 
         # Window created flag
         self._window_created = False
@@ -105,8 +109,12 @@ class PreviewWindow:
                         self.mp_drawing_styles.get_default_hand_connections_style()
                     )
 
-                    # Draw feature info for this hand
+                    # Draw basic hand info
                     self._draw_hand_features(display_frame, hand_landmarks, hand_idx)
+
+                    # Draw detailed features if enabled
+                    if self.show_features:
+                        self._draw_detailed_features(display_frame, hand_landmarks, hand_idx)
 
             # Draw status overlay
             self._draw_status_overlay(display_frame, len(landmarks) if landmarks else 0)
@@ -114,9 +122,19 @@ class PreviewWindow:
             # Display frame
             cv2.imshow(self.window_name, display_frame)
 
-            # Check for 'q' key
+            # Handle keyboard input
             key = cv2.waitKey(1) & 0xFF
-            return key != ord('q')
+
+            # Check for 'q' key (quit)
+            if key == ord('q'):
+                return False
+
+            # Check for 'f' key (toggle features)
+            if key == ord('f'):
+                self.show_features = not self.show_features
+                log_debug(f"Feature display toggled: {self.show_features}")
+
+            return True
 
         except Exception as e:
             log_debug(f"Frame rendering skipped: {e}")
@@ -124,7 +142,7 @@ class PreviewWindow:
 
     def _draw_hand_features(self, frame: np.ndarray, hand_landmarks: Any, hand_idx: int) -> None:
         """
-        Draw feature information for a detected hand.
+        Draw basic feature information for a detected hand.
 
         Args:
             frame: Frame to draw on (modified in-place)
@@ -168,6 +186,67 @@ class PreviewWindow:
             1
         )
 
+    def _draw_detailed_features(self, frame: np.ndarray, hand_landmarks: Any, hand_idx: int) -> None:
+        """
+        Draw detailed feature information for a detected hand.
+
+        Shows:
+        - Hand center of mass
+        - Finger tip positions
+        - Key landmark coordinates
+
+        Args:
+            frame: Frame to draw on (modified in-place)
+            hand_landmarks: MediaPipe hand landmarks
+            hand_idx: Hand index (0 or 1)
+        """
+        h, w, _ = frame.shape
+
+        # Calculate center of mass (average of all landmarks)
+        x_coords = [lm.x for lm in hand_landmarks.landmark]
+        y_coords = [lm.y for lm in hand_landmarks.landmark]
+        z_coords = [lm.z for lm in hand_landmarks.landmark]
+
+        center_x = int(sum(x_coords) / len(x_coords) * w)
+        center_y = int(sum(y_coords) / len(y_coords) * h)
+        avg_z = sum(z_coords) / len(z_coords)
+
+        # Draw center of mass
+        cv2.circle(frame, (center_x, center_y), 5, (255, 0, 255), -1)
+        cv2.putText(
+            frame,
+            f"CoM: ({center_x}, {center_y}, {avg_z:.3f})",
+            (center_x + 10, center_y),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.3,
+            (255, 0, 255),
+            1
+        )
+
+        # Draw finger tip positions (landmarks 4, 8, 12, 16, 20)
+        finger_tips = [4, 8, 12, 16, 20]
+        finger_names = ["Thumb", "Index", "Middle", "Ring", "Pinky"]
+
+        for tip_idx, name in zip(finger_tips, finger_names):
+            landmark = hand_landmarks.landmark[tip_idx]
+            tip_x = int(landmark.x * w)
+            tip_y = int(landmark.y * h)
+
+            # Draw small circle at tip
+            cv2.circle(frame, (tip_x, tip_y), 3, (0, 255, 255), -1)
+
+            # Draw coordinate text
+            coord_text = f"{name[:1]}: ({landmark.x:.2f}, {landmark.y:.2f})"
+            cv2.putText(
+                frame,
+                coord_text,
+                (tip_x + 5, tip_y - 5),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.25,
+                (0, 255, 255),
+                1
+            )
+
     def _draw_status_overlay(self, frame: np.ndarray, hand_count: int) -> None:
         """
         Draw system status overlay on frame.
@@ -191,7 +270,8 @@ class PreviewWindow:
             f"Target FPS: {current_fps}",
             f"Captured: {frames_captured}",
             f"Processed: {frames_processed}",
-            f"Latch: {'ON' if latch_active else 'OFF'}"
+            f"Latch: {'ON' if latch_active else 'OFF'}",
+            f"Features: {'ON' if self.show_features else 'OFF'} (f)"
         ]
 
         # Draw background rectangle for text

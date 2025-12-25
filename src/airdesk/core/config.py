@@ -56,6 +56,7 @@ class SystemConfig(BaseModel):
     log_level: str = Field(default="INFO")
     log_file: str = Field(default="logs/airdesk.log")
     preview: bool = Field(default=False)
+    preview_show_features: bool = Field(default=False)
     debug: bool = Field(default=False)
 
     @field_validator("log_level")

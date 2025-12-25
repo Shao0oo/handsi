@@ -122,7 +122,8 @@ def main() -> int:
     if config.system.preview:
         preview_window = PreviewWindow(
             runtime_state=runtime_state,
-            tracking_thread=tracking_thread
+            tracking_thread=tracking_thread,
+            show_features=config.system.preview_show_features
         )
         if not preview_window.initialize():
             log_info("Preview disabled due to initialization error")
@@ -144,7 +145,7 @@ def main() -> int:
 
     log_info("All threads started. Press Ctrl+C to stop.")
     if preview_window:
-        log_info("Preview: Press 'q' in window to quit")
+        log_info("Preview: Press 'q' to quit, 'f' to toggle feature display")
 
     # Main loop
     try:
