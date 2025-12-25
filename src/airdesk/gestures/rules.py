@@ -118,116 +118,354 @@ class GestureDetector:
         """Calculate Euclidean distance between two 3D points."""
         return np.sqrt(sum((a - b) ** 2 for a, b in zip(p1, p2)))
 
+    def _get_hand_scale(self, lm: list) -> float:
+        """
+        Calculate hand scale (size reference) for normalizing distances.
+
+        Uses the distance from wrist to middle finger MCP as the base unit.
+        This makes all distance measurements relative to hand size, allowing
+        gestures to work consistently regardless of distance from camera.
+
+        Args:
+            lm: List of landmarks
+
+        Returns:
+            Hand scale (distance from wrist to middle MCP), or 1.0 if invalid
+        """
+        wrist = lm[0]
+        middle_mcp = lm[9]  # Middle finger MCP (base knuckle)
+
+        hand_scale = self._euclidean_distance(wrist, middle_mcp)
+
+        # Avoid division by zero - return 1.0 as fallback
+        if hand_scale < 0.01:
+            return 1.0
+
+        return hand_scale
+
+    def _normalized_distance(self, p1: tuple, p2: tuple, hand_scale: float) -> float:
+        """
+        Calculate distance normalized by hand scale.
+
+        This makes distance measurements scale-invariant - a pinch gesture
+        will have the same normalized distance whether the hand is close
+        to or far from the camera.
+
+        Args:
+            p1: First point
+            p2: Second point
+            hand_scale: Hand size reference (from _get_hand_scale)
+
+        Returns:
+            Distance as fraction of hand size
+        """
+        distance = self._euclidean_distance(p1, p2)
+        return distance / hand_scale
+
+    def _is_finger_extended(self, lm: list, finger_tip_idx: int, finger_mcp_idx: int,
+                           extension_ratio: float = 1.3) -> bool:
+        """
+        Check if a finger is extended (straight).
+
+        A finger is considered extended if the distance from fingertip to wrist
+        is significantly greater than the distance from MCP knuckle to wrist.
+
+        Args:
+            lm: List of landmarks
+            finger_tip_idx: Index of fingertip landmark
+            finger_mcp_idx: Index of MCP (knuckle) landmark
+            extension_ratio: Minimum ratio of tip:mcp distance (default 1.3)
+
+        Returns:
+            True if finger is extended, False otherwise
+        """
+        wrist = lm[0]
+        tip = lm[finger_tip_idx]
+        mcp = lm[finger_mcp_idx]
+
+        tip_distance = self._euclidean_distance(tip, wrist)
+        mcp_distance = self._euclidean_distance(mcp, wrist)
+
+        # Avoid division by zero
+        if mcp_distance < 0.01:
+            return False
+
+        ratio = tip_distance / mcp_distance
+        return ratio >= extension_ratio
+
+    def _is_finger_closed(self, lm: list, finger_tip_idx: int, finger_mcp_idx: int,
+                         curl_ratio: float = 1.1) -> bool:
+        """
+        Check if a finger is closed (curled).
+
+        A finger is considered closed if the distance from fingertip to wrist
+        is close to the distance from MCP knuckle to wrist.
+
+        Args:
+            lm: List of landmarks
+            finger_tip_idx: Index of fingertip landmark
+            finger_mcp_idx: Index of MCP (knuckle) landmark
+            curl_ratio: Maximum ratio of tip:mcp distance for closed finger (default 1.1)
+
+        Returns:
+            True if finger is closed, False otherwise
+        """
+        wrist = lm[0]
+        tip = lm[finger_tip_idx]
+        mcp = lm[finger_mcp_idx]
+
+        tip_distance = self._euclidean_distance(tip, wrist)
+        mcp_distance = self._euclidean_distance(mcp, wrist)
+
+        # Avoid division by zero
+        if mcp_distance < 0.01:
+            return True  # Default to closed if too close to wrist
+
+        ratio = tip_distance / mcp_distance
+        return ratio <= curl_ratio
+
     # === Single Hand Gestures ===
 
     def _detect_index_pinch(self, lm: list) -> Optional[tuple[str, float, dict]]:
-        """Detect index finger touching thumb tip."""
+        """Detect index finger touching thumb tip (other fingers extended)."""
+        # Get hand scale for normalization
+        hand_scale = self._get_hand_scale(lm)
+
+        # Calculate normalized distance
         thumb_tip = lm[4]
         index_tip = lm[8]
-        distance = self._euclidean_distance(thumb_tip, index_tip)
+        distance = self._normalized_distance(thumb_tip, index_tip, hand_scale)
 
-        if distance < self.pinch_threshold:
-            confidence = 1.0 - (distance / self.pinch_threshold)
-            return ("index_pinch", confidence, {"distance": distance})
-        return None
+        if distance >= self.pinch_threshold:
+            return None
+
+        # Check that other fingers (middle, ring, pinky) are extended
+        other_fingers = [(12, 9), (16, 13), (20, 17)]  # (tip, mcp)
+        extended_count = sum(1 for tip, mcp in other_fingers
+                            if self._is_finger_extended(lm, tip, mcp))
+
+        # Require at least 2 of 3 other fingers to be extended
+        if extended_count < 2:
+            return None
+
+        confidence = 1.0 - (distance / self.pinch_threshold)
+        return ("index_pinch", confidence, {
+            "distance": distance,
+            "extended_count": extended_count
+        })
 
     def _detect_middle_pinch(self, lm: list) -> Optional[tuple[str, float, dict]]:
-        """Detect middle finger touching thumb tip."""
+        """Detect middle finger touching thumb tip (other fingers extended)."""
+        # Get hand scale for normalization
+        hand_scale = self._get_hand_scale(lm)
+
+        # Calculate normalized distance
         thumb_tip = lm[4]
         middle_tip = lm[12]
-        distance = self._euclidean_distance(thumb_tip, middle_tip)
+        distance = self._normalized_distance(thumb_tip, middle_tip, hand_scale)
 
-        if distance < self.pinch_threshold:
-            confidence = 1.0 - (distance / self.pinch_threshold)
-            return ("middle_pinch", confidence, {"distance": distance})
-        return None
+        if distance >= self.pinch_threshold:
+            return None
+
+        # Check that other fingers (index, ring, pinky) are extended
+        other_fingers = [(8, 5), (16, 13), (20, 17)]  # (tip, mcp)
+        extended_count = sum(1 for tip, mcp in other_fingers
+                            if self._is_finger_extended(lm, tip, mcp))
+
+        # Require at least 2 of 3 other fingers to be extended
+        if extended_count < 2:
+            return None
+
+        confidence = 1.0 - (distance / self.pinch_threshold)
+        return ("middle_pinch", confidence, {
+            "distance": distance,
+            "extended_count": extended_count
+        })
 
     def _detect_ring_pinch(self, lm: list) -> Optional[tuple[str, float, dict]]:
-        """Detect ring finger touching thumb tip."""
+        """Detect ring finger touching thumb tip (other fingers extended)."""
+        # Get hand scale for normalization
+        hand_scale = self._get_hand_scale(lm)
+
+        # Calculate normalized distance
         thumb_tip = lm[4]
         ring_tip = lm[16]
-        distance = self._euclidean_distance(thumb_tip, ring_tip)
+        distance = self._normalized_distance(thumb_tip, ring_tip, hand_scale)
 
-        if distance < self.pinch_threshold:
-            confidence = 1.0 - (distance / self.pinch_threshold)
-            return ("ring_pinch", confidence, {"distance": distance})
-        return None
+        if distance >= self.pinch_threshold:
+            return None
+
+        # Check that other fingers (index, middle, pinky) are extended
+        other_fingers = [(8, 5), (12, 9), (20, 17)]  # (tip, mcp)
+        extended_count = sum(1 for tip, mcp in other_fingers
+                            if self._is_finger_extended(lm, tip, mcp))
+
+        # Require at least 2 of 3 other fingers to be extended
+        if extended_count < 2:
+            return None
+
+        confidence = 1.0 - (distance / self.pinch_threshold)
+        return ("ring_pinch", confidence, {
+            "distance": distance,
+            "extended_count": extended_count
+        })
 
     def _detect_pinky_pinch(self, lm: list) -> Optional[tuple[str, float, dict]]:
-        """Detect pinky finger touching thumb tip."""
+        """Detect pinky finger touching thumb tip (other fingers extended)."""
+        # Get hand scale for normalization
+        hand_scale = self._get_hand_scale(lm)
+
+        # Calculate normalized distance
         thumb_tip = lm[4]
         pinky_tip = lm[20]
-        distance = self._euclidean_distance(thumb_tip, pinky_tip)
+        distance = self._normalized_distance(thumb_tip, pinky_tip, hand_scale)
 
-        if distance < self.pinch_threshold:
-            confidence = 1.0 - (distance / self.pinch_threshold)
-            return ("pinky_pinch", confidence, {"distance": distance})
-        return None
+        if distance >= self.pinch_threshold:
+            return None
+
+        # Check that other fingers (index, middle, ring) are extended
+        other_fingers = [(8, 5), (12, 9), (16, 13)]  # (tip, mcp)
+        extended_count = sum(1 for tip, mcp in other_fingers
+                            if self._is_finger_extended(lm, tip, mcp))
+
+        # Require at least 2 of 3 other fingers to be extended
+        if extended_count < 2:
+            return None
+
+        confidence = 1.0 - (distance / self.pinch_threshold)
+        return ("pinky_pinch", confidence, {
+            "distance": distance,
+            "extended_count": extended_count
+        })
 
     def _detect_fist(self, lm: list) -> Optional[tuple[str, float, dict]]:
-        """Detect closed fist (all fingertips close to palm)."""
+        """Detect closed fist (all fingers curled/closed)."""
+        # Get hand scale for normalization
+        hand_scale = self._get_hand_scale(lm)
+
+        # Check if ALL fingers are closed
+        fingers = [
+            (4, 2),   # Thumb
+            (8, 5),   # Index
+            (12, 9),  # Middle
+            (16, 13), # Ring
+            (20, 17)  # Pinky
+        ]
+
+        closed_count = 0
+        for tip_idx, mcp_idx in fingers:
+            if self._is_finger_closed(lm, tip_idx, mcp_idx):
+                closed_count += 1
+
+        # Require at least 4 of 5 fingers to be closed
+        if closed_count < 4:
+            return None
+
+        # Secondary check: normalized average distance from wrist
         wrist = lm[0]
         fingertips = [lm[i] for i in [4, 8, 12, 16, 20]]
-
-        # Calculate average distance from wrist
-        avg_distance = np.mean([self._euclidean_distance(tip, wrist) for tip in fingertips])
+        distances = [self._normalized_distance(tip, wrist, hand_scale) for tip in fingertips]
+        avg_distance = np.mean(distances)
 
         if avg_distance < self.fist_threshold:
             confidence = 1.0 - (avg_distance / self.fist_threshold)
-            return ("fist", confidence, {"avg_distance": avg_distance})  # type: ignore
+            return ("fist", confidence, {
+                "avg_distance": avg_distance,
+                "closed_count": closed_count
+            })  # type: ignore
         return None
 
     def _detect_open_hand(self, lm: list) -> Optional[tuple[str, float, dict]]:
-        """Detect open hand (fingers extended and spread)."""
-        wrist = lm[0]
+        """Detect open hand (all 5 fingers fully extended and spread)."""
+        # Get hand scale for normalization
+        hand_scale = self._get_hand_scale(lm)
+
+        # Check if ALL fingers are extended
+        # Finger landmarks: (tip, mcp)
+        fingers = [
+            (4, 2),   # Thumb (tip, base - using CMC instead of MCP)
+            (8, 5),   # Index
+            (12, 9),  # Middle
+            (16, 13), # Ring
+            (20, 17)  # Pinky
+        ]
+
+        # All fingers must be extended
+        extended_count = 0
+        for tip_idx, mcp_idx in fingers:
+            if self._is_finger_extended(lm, tip_idx, mcp_idx):
+                extended_count += 1
+
+        # Require all 5 fingers to be extended
+        if extended_count < 5:
+            return None
+
+        # Secondary checks: normalized finger spread
         fingertips = [lm[i] for i in [4, 8, 12, 16, 20]]
-
-        # Check if fingertips are far from wrist (extended)
-        avg_distance = np.mean([self._euclidean_distance(tip, wrist) for tip in fingertips])
-
-        # Check finger spread (distance between adjacent fingertips)
         spreads = [
-            self._euclidean_distance(fingertips[i], fingertips[i + 1])
+            self._normalized_distance(fingertips[i], fingertips[i + 1], hand_scale)
             for i in range(len(fingertips) - 1)
         ]
         avg_spread = np.mean(spreads)
 
-        if (avg_distance > self.open_hand_distance_threshold and
-                avg_spread > self.open_hand_spread_threshold):
-            # Confidence based on how far fingers are extended and spread
-            conf_distance = min(avg_distance / 0.4, 1.0)
-            conf_spread = min(avg_spread / 0.15, 1.0)
-            confidence = (conf_distance + conf_spread) / 2
-            return ("open_hand", confidence, {
-                "avg_distance": avg_distance,
-                "avg_spread": avg_spread
-            })  # type: ignore
-        return None
+        # Check minimum spread
+        if avg_spread < self.open_hand_spread_threshold:
+            return None
+
+        # Calculate confidence based on spread
+        conf_spread = min(avg_spread / 0.5, 1.0)
+        confidence = conf_spread
+
+        return ("open_hand", confidence, {
+            "extended_count": extended_count,
+            "avg_spread": avg_spread
+        })  # type: ignore
 
     def _detect_thumbs_up(self, lm: list) -> Optional[tuple[str, float, dict]]:
         """Detect thumbs up (thumb extended upward, other fingers curled)."""
+        # Get hand scale for normalization
+        hand_scale = self._get_hand_scale(lm)
+
         thumb_tip = lm[4]
         thumb_base = lm[2]
         wrist = lm[0]
 
-        # Check thumb is above base (lower y in image coordinates = higher in real space)
-        thumb_extended_up = thumb_tip[1] < thumb_base[1]
-
-        if not thumb_extended_up:
+        # Check thumb is extended
+        if not self._is_finger_extended(lm, 4, 2, extension_ratio=1.5):
+            
             return None
 
-        # Check other fingers are curled (close to palm)
-        other_fingertips = [lm[i] for i in [8, 12, 16, 20]]
-        avg_curl = np.mean([self._euclidean_distance(tip, wrist) for tip in other_fingertips])
+        # Check thumb is pointing upward (lower y = higher in image space)
+        # Normalize the vertical threshold by hand scale
+        vertical_threshold = 0.5 * hand_scale  # 50% of hand size
+        thumb_vertical = thumb_tip[1] < wrist[1] - vertical_threshold
 
-        curl_threshold = 0.2
-        if avg_curl < curl_threshold:
-            confidence = 1.0 - (avg_curl / curl_threshold)
-            return ("thumbs_up", confidence, {"avg_curl": avg_curl})  # type: ignore
-        return None
+        if not thumb_vertical:
+            return None
+
+        # Check other 4 fingers are closed
+        other_fingers = [(8, 5), (12, 9), (16, 13), (20, 17)]  # (tip, mcp)
+        closed_count = sum(1 for tip, mcp in other_fingers
+                          if self._is_finger_closed(lm, tip, mcp))
+
+        # Require at least 3 of 4 fingers to be closed
+        if closed_count < 3:
+            return None
+
+        # Calculate normalized vertical distance
+        vertical_distance = (wrist[1] - thumb_tip[1]) / hand_scale
+        confidence = min(vertical_distance / 0.5, 1.0)
+
+        return ("thumbs_up", confidence, {
+            "vertical_distance": vertical_distance,
+            "closed_count": closed_count
+        })  # type: ignore
 
     def _detect_swipe(self, lm: list, hand_idx: int) -> Optional[tuple[str, float, dict]]:
         """Detect horizontal swipe (left/right) based on wrist movement."""
+        # Get hand scale for normalization
+        hand_scale = self._get_hand_scale(lm)
+
         wrist = lm[0]
         current_time = time.time()
 
@@ -235,8 +473,8 @@ class GestureDetector:
         if hand_idx not in self.wrist_history:
             self.wrist_history[hand_idx] = deque(maxlen=self.history_length)
 
-        # Add current position
-        self.wrist_history[hand_idx].append((wrist[0], wrist[1], current_time))
+        # Add current position with hand scale
+        self.wrist_history[hand_idx].append((wrist[0], wrist[1], current_time, hand_scale))
 
         # Need enough history to detect swipe
         if len(self.wrist_history[hand_idx]) < 5:
@@ -244,22 +482,24 @@ class GestureDetector:
 
         history = list(self.wrist_history[hand_idx])
 
-        # Calculate horizontal velocity
+        # Calculate horizontal velocity normalized by hand scale
         dx = history[-1][0] - history[0][0]
         dt = history[-1][2] - history[0][2]
+        avg_hand_scale = (history[-1][3] + history[0][3]) / 2  # Average scale over time
 
-        if dt <= 0:
+        if dt <= 0 or avg_hand_scale < 0.01:
             return None
 
-        velocity_x = dx / dt
+        # Normalize velocity by hand scale
+        velocity_x = (dx / dt) / avg_hand_scale
 
         # Check if velocity exceeds threshold
         if abs(velocity_x) > self.swipe_velocity_threshold:
             if velocity_x > 0:
-                confidence = min(abs(velocity_x) / 1.0, 1.0)
+                confidence = min(abs(velocity_x) / 2.0, 1.0)
                 return ("swipe_right", confidence, {"velocity": velocity_x})
             else:
-                confidence = min(abs(velocity_x) / 1.0, 1.0)
+                confidence = min(abs(velocity_x) / 2.0, 1.0)
                 return ("swipe_left", confidence, {"velocity": velocity_x})
 
         return None
@@ -281,12 +521,17 @@ class GestureDetector:
 
     def _detect_two_hands_spread(self, lm_left: list, lm_right: list) -> Optional[tuple[str, float, dict]]:
         """Detect two hands moving apart (spread gesture)."""
+        # Get hand scales for normalization (average both hands)
+        left_scale = self._get_hand_scale(lm_left)
+        right_scale = self._get_hand_scale(lm_right)
+        avg_hand_scale = (left_scale + right_scale) / 2
+
         left_wrist = lm_left[0]
         right_wrist = lm_right[0]
-        distance = self._euclidean_distance(left_wrist, right_wrist)
+        distance = self._normalized_distance(left_wrist, right_wrist, avg_hand_scale)
 
         current_time = time.time()
-        self.hand_distance_history.append((distance, current_time))
+        self.hand_distance_history.append((distance, current_time, avg_hand_scale))
 
         # Need history to detect movement
         if len(self.hand_distance_history) < 5:
@@ -294,7 +539,7 @@ class GestureDetector:
 
         history = list(self.hand_distance_history)
 
-        # Calculate velocity (distance change over time)
+        # Calculate normalized velocity (distance change over time)
         d_distance = history[-1][0] - history[0][0]
         dt = history[-1][1] - history[0][1]
 
@@ -303,10 +548,10 @@ class GestureDetector:
 
         velocity = d_distance / dt
 
-        # Positive velocity = spreading apart
-        spread_threshold = 0.2
+        # Positive velocity = spreading apart (threshold now in hand-relative units)
+        spread_threshold = 0.5  # 50% of hand size per second
         if velocity > spread_threshold:
-            confidence = min(velocity / 1.0, 1.0)
+            confidence = min(velocity / 2.0, 1.0)
             return ("two_hands_spread", confidence, {
                 "velocity": velocity,
                 "distance": distance
@@ -316,12 +561,17 @@ class GestureDetector:
 
     def _detect_two_hands_close(self, lm_left: list, lm_right: list) -> Optional[tuple[str, float, dict]]:
         """Detect two hands moving together (close gesture)."""
+        # Get hand scales for normalization (average both hands)
+        left_scale = self._get_hand_scale(lm_left)
+        right_scale = self._get_hand_scale(lm_right)
+        avg_hand_scale = (left_scale + right_scale) / 2
+
         left_wrist = lm_left[0]
         right_wrist = lm_right[0]
-        distance = self._euclidean_distance(left_wrist, right_wrist)
+        distance = self._normalized_distance(left_wrist, right_wrist, avg_hand_scale)
 
         current_time = time.time()
-        self.hand_distance_history.append((distance, current_time))
+        self.hand_distance_history.append((distance, current_time, avg_hand_scale))
 
         # Need history to detect movement
         if len(self.hand_distance_history) < 5:
@@ -329,7 +579,7 @@ class GestureDetector:
 
         history = list(self.hand_distance_history)
 
-        # Calculate velocity (distance change over time)
+        # Calculate normalized velocity (distance change over time)
         d_distance = history[-1][0] - history[0][0]
         dt = history[-1][1] - history[0][1]
 
@@ -338,10 +588,10 @@ class GestureDetector:
 
         velocity = d_distance / dt
 
-        # Negative velocity = closing together
-        close_threshold = -0.2
+        # Negative velocity = closing together (threshold now in hand-relative units)
+        close_threshold = -0.5  # -50% of hand size per second
         if velocity < close_threshold:
-            confidence = min(abs(velocity) / 1.0, 1.0)
+            confidence = min(abs(velocity) / 2.0, 1.0)
             return ("two_hands_close", confidence, {
                 "velocity": velocity,
                 "distance": distance
