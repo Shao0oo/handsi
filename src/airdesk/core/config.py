@@ -44,6 +44,16 @@ class GestureConfig(BaseModel):
     debounce_ms: int = Field(default=300, ge=0, le=2000)
     latch_cooldown_ms: int = Field(default=500, ge=0, le=2000)
     smoothing_window: int = Field(default=3, ge=1, le=10)
+    consistency_threshold: float = Field(default=0.6, ge=0.0, le=1.0)
+
+    # Detection thresholds (hand-relative: fraction of hand size)
+    # Hand size = distance from wrist to middle finger MCP knuckle
+    pinch_threshold: float = Field(default=0.2, ge=0.05, le=0.5)
+    fist_threshold: float = Field(default=0.65, ge=0.3, le=1.0)
+    open_hand_distance_threshold: float = Field(default=0.25, ge=0.1, le=0.6)  # DEPRECATED
+    open_hand_spread_threshold: float = Field(default=0.3, ge=0.1, le=0.8)
+    swipe_velocity_threshold: float = Field(default=0.8, ge=0.3, le=5.0)
+    confidence_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
 
 
 class ActionConfig(BaseModel):
@@ -56,6 +66,7 @@ class SystemConfig(BaseModel):
     log_level: str = Field(default="INFO")
     log_file: str = Field(default="logs/airdesk.log")
     preview: bool = Field(default=False)
+    preview_show_features: bool = Field(default=False)
     debug: bool = Field(default=False)
 
     @field_validator("log_level")

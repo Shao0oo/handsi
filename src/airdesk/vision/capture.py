@@ -127,6 +127,11 @@ class CaptureThread(threading.Thread):
             if image.size == 0:
                 log_warning("CAP-003", "Empty frame captured")
                 return
+            
+            if image.ndim == 2:
+                image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+            elif image.ndim == 3 and image.shape[2] == 4:
+                image = cv2.cvtColor(image, cv2.COLOR_BGRA2BGR)
 
             # Create Frame object
             frame = Frame(

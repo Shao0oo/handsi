@@ -21,6 +21,18 @@ gestures:
   latch_cooldown_ms: 500    # prevent rapid latch on/off
   # Temporal smoothing
   smoothing_window: 3       # frames to average over
+  consistency_threshold: 0.6  # fraction of frames that must agree (0-1)
+
+  # Detection thresholds - ALL VALUES ARE NOW HAND-RELATIVE (as fraction of hand size)
+  # Hand size = distance from wrist to middle finger MCP knuckle
+  # This makes gestures work consistently regardless of distance from camera
+
+  pinch_threshold: 0.3           # max distance for pinch (15% of hand size)
+  fist_threshold: 0.65            # max fingertip distance from wrist (65% of hand size)
+  open_hand_distance_threshold: 0.25   # DEPRECATED - now using extension ratio checks
+  open_hand_spread_threshold: 0.3     # min spread between adjacent fingers (25% of hand size)
+  swipe_velocity_threshold: 0.3        # min horizontal velocity (80% of hand size per second)
+  confidence_threshold: 0.7            # min confidence to confirm gesture
 
 actions:
   # Gesture → Action mappings (modular for future changes)
@@ -39,6 +51,7 @@ system:
   log_level: INFO           # DEBUG | INFO | WARN | ERROR
   log_file: logs/airdesk.log
   preview: false            # override with --preview
+  preview_show_features: false  # toggle with 'f' key in preview window
   debug: false              # override with --debug
 
 macos:

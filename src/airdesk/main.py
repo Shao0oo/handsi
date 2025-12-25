@@ -16,6 +16,7 @@ from airdesk.core.bus import RuntimeState, create_queues
 from airdesk.core.config import load_config
 from airdesk.core.logging import log_info, setup_logging
 from airdesk.core.utils import find_config_path
+from airdesk.gestures.infer import GestureInferenceThread
 from airdesk.ui.preview import PreviewWindow
 from airdesk.vision.capture import CaptureThread
 from airdesk.vision.tracking import TrackingThread
@@ -117,6 +118,13 @@ def main() -> int:
         runtime_state=runtime_state
     )
 
+    gesture_thread = GestureInferenceThread(
+        config=config.gestures,
+        feature_queue=feature_queue,
+        gesture_queue=gesture_queue,
+        runtime_state=runtime_state
+    )
+
     # Create preview window (non-threaded, runs in main loop)
     preview_window = None
     if config.system.preview:
@@ -141,10 +149,11 @@ def main() -> int:
     log_info("Starting threads...")
     capture_thread.start()
     tracking_thread.start()
+    gesture_thread.start()
 
     log_info("All threads started. Press Ctrl+C to stop.")
     if preview_window:
-        log_info("Preview: Press 'q' in window to quit")
+        log_info("Preview: Press 'q' to quit, 'g' to toggle gestures, 'f' to toggle features")
 
     # Main loop
     try:
@@ -187,6 +196,7 @@ def main() -> int:
     log_info("Waiting for threads to finish...")
     capture_thread.join(timeout=2.0)
     tracking_thread.join(timeout=2.0)
+    gesture_thread.join(timeout=2.0)
 
     log_info("AirDesk stopped")
     return 0
