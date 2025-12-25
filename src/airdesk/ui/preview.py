@@ -36,20 +36,20 @@ class PreviewWindow:
         self,
         runtime_state: RuntimeState,
         tracking_thread: Any,  # Reference to TrackingThread for frame access
-        window_name: str = "AirDesk Preview",
-        show_features: bool = False
+        window_name: str = "AirDesk Preview"
     ):
         self.runtime_state = runtime_state
         self.tracking_thread = tracking_thread
         self.window_name = window_name
 
         # MediaPipe drawing utilities
-        self.mp_hands = mp.solutions.hands
-        self.mp_drawing = mp.solutions.drawing_utils
-        self.mp_drawing_styles = mp.solutions.drawing_styles
+        self.mp_hands = mp.solutions.hands # type: ignore
+        self.mp_drawing = mp.solutions.drawing_utils # type: ignore
+        self.mp_drawing_styles = mp.solutions.drawing_styles # type: ignore
 
-        # Feature display toggle
-        self.show_features = show_features
+        # Display toggles
+        self.show_gestures = False  # Toggle with 'g' key
+        self.show_features = False  # For detailed features (future use)
 
         # Window created flag
         self._window_created = False
@@ -119,6 +119,10 @@ class PreviewWindow:
             # Draw status overlay
             self._draw_status_overlay(display_frame, len(landmarks) if landmarks else 0)
 
+            # Draw gesture overlay if enabled
+            if self.show_gestures:
+                self._draw_gesture_overlay(display_frame)
+
             # Display frame
             cv2.imshow(self.window_name, display_frame)
 
@@ -129,10 +133,15 @@ class PreviewWindow:
             if key == ord('q'):
                 return False
 
-            # Check for 'f' key (toggle features)
+            # Check for 'g' key (toggle gesture overlay)
+            if key == ord('g'):
+                self.show_gestures = not self.show_gestures
+                log_info(f"Gesture overlay: {'ON' if self.show_gestures else 'OFF'}")
+
+            # Check for 'f' key (toggle detailed features)
             if key == ord('f'):
                 self.show_features = not self.show_features
-                log_debug(f"Feature display toggled: {self.show_features}")
+                log_info(f"Feature display: {'ON' if self.show_features else 'OFF'}")
 
             return True
 
@@ -263,49 +272,48 @@ class PreviewWindow:
             frames_processed = self.runtime_state.frames_processed
             latch_active = self.runtime_state.latch_active
 
-        # Prepare status text
+        # Prepare status text (compact)
+        # Status / Legend:
         status_lines = [
-            f"Hands: {hand_count}",
-            f"Activity: {activity_level.upper()}",
-            f"Target FPS: {current_fps}",
-            f"Captured: {frames_captured}",
-            f"Processed: {frames_processed}",
-            f"Latch: {'ON' if latch_active else 'OFF'}",
-            f"Features: {'ON' if self.show_features else 'OFF'} (f)"
+            f"Hands: {hand_count} | FPS: {current_fps} | {activity_level.upper()}",
+            f"Features: {'ON' if self.show_features else 'OFF'} (g)",
+            f"Gestures: {'ON' if self.show_gestures else 'OFF'} (g)",
         ]
 
-        # Draw background rectangle for text
-        overlay_height = 30 + len(status_lines) * 25
+        # Draw background rectangle for text (compact)
+        line_height = 18
+        overlay_height = 20 + len(status_lines) * line_height
+        overlay_width = 280
         cv2.rectangle(
             frame,
             (10, 10),
-            (300, overlay_height),
+            (10 + overlay_width, 10 + overlay_height),
             (0, 0, 0),
             -1  # Filled
         )
         cv2.rectangle(
             frame,
             (10, 10),
-            (300, overlay_height),
+            (10 + overlay_width, 10 + overlay_height),
             (255, 255, 255),
-            2  # Border
+            1  # Border
         )
 
-        # Draw text lines
-        y_offset = 35
+        # Draw text lines (smaller font)
+        y_offset = 25
         for line in status_lines:
             cv2.putText(
                 frame,
                 line,
-                (20, y_offset),
+                (15, y_offset),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
+                0.4,
                 (255, 255, 255),
-                2
+                1
             )
-            y_offset += 25
+            y_offset += line_height
 
-        # Draw activity level indicator (color-coded)
+        # Draw activity level indicator (color-coded circle)
         color_map = {
             "idle": (100, 100, 100),      # Gray
             "attentive": (0, 255, 255),   # Yellow
@@ -315,10 +323,131 @@ class PreviewWindow:
 
         cv2.circle(
             frame,
-            (270, 30),
-            10,
+            (overlay_width - 5, 20),
+            6,
             indicator_color,
             -1
+        )
+
+    def _draw_gesture_overlay(self, frame: np.ndarray) -> None:
+        """
+        Draw gesture information overlay.
+
+        Shows:
+        - Current detected gesture
+        - Confidence bar
+        - Color-coded by gesture type
+
+        Args:
+            frame: Frame to draw on (modified in-place)
+        """
+        # Get latest gesture from RuntimeState
+        with self.runtime_state.lock:
+            gesture_name = getattr(self.runtime_state, 'latest_gesture', None)
+            confidence = getattr(self.runtime_state, 'latest_gesture_confidence', 0.0)
+
+        if not gesture_name:
+            # No gesture detected, show "None"
+            gesture_display = "No Gesture"
+            confidence = 0.0
+            color = (100, 100, 100)  # Gray
+        else:
+            gesture_display = gesture_name.replace('_', ' ').upper()
+
+            # Color-code by gesture type
+            if 'pinch' in gesture_name.lower():
+                color = (255, 150, 0)  # Blue-ish
+            elif gesture_name.lower() in ['fist', 'open_hand']:
+                color = (0, 255, 0)  # Green
+            elif 'swipe' in gesture_name.lower():
+                color = (0, 255, 255)  # Yellow
+            elif 'two_hands' in gesture_name.lower():
+                color = (255, 0, 255)  # Purple
+            elif 'thumbs_up' in gesture_name.lower():
+                color = (0, 200, 255)  # Orange
+            else:
+                color = (255, 255, 255)  # White
+
+        h, w, _ = frame.shape
+
+        # Position at bottom center
+        overlay_width = 400
+        overlay_height = 100
+        overlay_x = (w - overlay_width) // 2
+        overlay_y = h - overlay_height - 20
+
+        # Draw background rectangle
+        cv2.rectangle(
+            frame,
+            (overlay_x, overlay_y),
+            (overlay_x + overlay_width, overlay_y + overlay_height),
+            (0, 0, 0),
+            -1  # Filled
+        )
+        cv2.rectangle(
+            frame,
+            (overlay_x, overlay_y),
+            (overlay_x + overlay_width, overlay_y + overlay_height),
+            color,
+            3  # Border
+        )
+
+        # Draw gesture name
+        text_y = overlay_y + 40
+        cv2.putText(
+            frame,
+            gesture_display,
+            (overlay_x + 20, text_y),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            color,
+            2
+        )
+
+        # Draw confidence bar
+        bar_x = overlay_x + 20
+        bar_y = overlay_y + 60
+        bar_width = overlay_width - 40
+        bar_height = 20
+
+        # Background bar
+        cv2.rectangle(
+            frame,
+            (bar_x, bar_y),
+            (bar_x + bar_width, bar_y + bar_height),
+            (50, 50, 50),
+            -1
+        )
+
+        # Confidence bar (filled portion)
+        filled_width = int(bar_width * confidence)
+        cv2.rectangle(
+            frame,
+            (bar_x, bar_y),
+            (bar_x + filled_width, bar_y + bar_height),
+            color,
+            -1
+        )
+
+        # Border around bar
+        cv2.rectangle(
+            frame,
+            (bar_x, bar_y),
+            (bar_x + bar_width, bar_y + bar_height),
+            color,
+            2
+        )
+
+        # Confidence percentage
+        conf_text = f"{int(confidence * 100)}%"
+        cv2.putText(
+            frame,
+            conf_text,
+            (bar_x + bar_width + 10, bar_y + 15),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            color,
+            2
         )
 
     def cleanup(self) -> None:

@@ -21,6 +21,15 @@ gestures:
   latch_cooldown_ms: 500    # prevent rapid latch on/off
   # Temporal smoothing
   smoothing_window: 3       # frames to average over
+  consistency_threshold: 0.6  # fraction of frames that must agree (0-1)
+
+  # Detection thresholds (normalized distances)
+  pinch_threshold: 0.05           # max distance for pinch detection
+  fist_threshold: 0.15            # max distance from wrist for fist
+  open_hand_distance_threshold: 0.25   # min distance from wrist for open hand
+  open_hand_spread_threshold: 0.08     # min spread between fingers
+  swipe_velocity_threshold: 0.3        # min horizontal velocity for swipe
+  confidence_threshold: 0.7            # min confidence to confirm gesture
 
 actions:
   # Gesture → Action mappings (modular for future changes)

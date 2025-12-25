@@ -50,6 +50,11 @@ class RuntimeState:
     frames_processed: int = 0
     gestures_detected: int = 0
 
+    # Latest gesture (for preview display)
+    latest_gesture: Optional[str] = None
+    latest_gesture_confidence: float = 0.0
+    latest_gesture_time: float = 0.0
+
     def update_activity_level(
         self,
         hands_detected: bool,

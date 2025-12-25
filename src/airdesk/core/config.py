@@ -44,6 +44,15 @@ class GestureConfig(BaseModel):
     debounce_ms: int = Field(default=300, ge=0, le=2000)
     latch_cooldown_ms: int = Field(default=500, ge=0, le=2000)
     smoothing_window: int = Field(default=3, ge=1, le=10)
+    consistency_threshold: float = Field(default=0.6, ge=0.0, le=1.0)
+
+    # Detection thresholds
+    pinch_threshold: float = Field(default=0.05, ge=0.01, le=0.2)
+    fist_threshold: float = Field(default=0.15, ge=0.05, le=0.5)
+    open_hand_distance_threshold: float = Field(default=0.25, ge=0.1, le=0.6)
+    open_hand_spread_threshold: float = Field(default=0.08, ge=0.02, le=0.3)
+    swipe_velocity_threshold: float = Field(default=0.3, ge=0.1, le=2.0)
+    confidence_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
 
 
 class ActionConfig(BaseModel):
