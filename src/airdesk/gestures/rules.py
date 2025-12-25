@@ -274,10 +274,10 @@ class GestureDetector:
                             if self._is_finger_extended(lm, tip, mcp))
 
         # Require at least 2 of 3 other fingers to be extended
-        if extended_count < 2:
+        if extended_count < 3:
             return None
 
-        confidence = 1.0 - (distance / self.pinch_threshold)
+        confidence = 1.0 - distance
         return ("index_pinch", confidence, {
             "distance": distance,
             "extended_count": extended_count
@@ -305,7 +305,7 @@ class GestureDetector:
         if extended_count < 2:
             return None
 
-        confidence = 1.0 - (distance / self.pinch_threshold)
+        confidence = 1.0 - distance
         return ("middle_pinch", confidence, {
             "distance": distance,
             "extended_count": extended_count
@@ -333,7 +333,7 @@ class GestureDetector:
         if extended_count < 2:
             return None
 
-        confidence = 1.0 - (distance / self.pinch_threshold)
+        confidence = 1.0 - distance
         return ("ring_pinch", confidence, {
             "distance": distance,
             "extended_count": extended_count
@@ -361,7 +361,7 @@ class GestureDetector:
         if extended_count < 2:
             return None
 
-        confidence = 1.0 - (distance / self.pinch_threshold)
+        confidence = 1.0 - distance
         return ("pinky_pinch", confidence, {
             "distance": distance,
             "extended_count": extended_count
