@@ -9,7 +9,7 @@ AirDesk is a local, background-running gesture control system that lets you oper
 
 ---
 
-## Features (MVP)
+## Features (Minimal Viable Product MVP)
 - Real-time hand tracking (single webcam)
 - Gesture toggle: enable/disable control mode via an intentional gesture
 - Gesture → action mapping (YAML config or alternative suggestion)
@@ -101,7 +101,7 @@ flowchart TD
   - `CustomModelBackend` (trained gestures)
 - `airdesk/gestures/state.py` — temporal smoothing, latch, combos, debouncing, cooldowns
 
-#### Teaching Mode
+#### Teaching Mode (Phase 3)
 - `airdesk/teach/teacher.py` — orchestrates teach sessions (start/stop, record, commit)
 - `airdesk/teach/labeling.py` — voice label parsing and/or UI label selection
 - `airdesk/teach/dataset.py` — stores labeled examples (feature windows + metadata)
@@ -114,7 +114,7 @@ flowchart TD
 - `airdesk/actions/adapters/macos.py` — macOS adapter (Quartz / Accessibility APIs)
 - `airdesk/actions/adapters/linux.py` — Linux adapter (uinput/evdev/xdotool backend)
 
-#### UI
+#### UI (Phase 2)
 - `airdesk/ui/tray.py` — tray app (toggle active mode, status, optional preview)
 - `airdesk/ui/teach_panel.py` — Teaching Mode panel (label, record, save, test)
 
