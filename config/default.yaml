@@ -31,7 +31,7 @@ gestures:
   fist_threshold: 0.65            # max fingertip distance from wrist (65% of hand size)
   open_hand_distance_threshold: 0.25   # DEPRECATED - now using extension ratio checks
   open_hand_spread_threshold: 0.3     # min spread between adjacent fingers (25% of hand size)
-  swipe_velocity_threshold: 0.8        # min horizontal velocity (80% of hand size per second)
+  swipe_velocity_threshold: 0.3        # min horizontal velocity (80% of hand size per second)
   confidence_threshold: 0.7            # min confidence to confirm gesture
 
 actions:

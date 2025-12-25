@@ -82,7 +82,7 @@ class GestureDetector:
                 self._detect_ring_pinch(lm),
                 self._detect_pinky_pinch(lm),
                 self._detect_fist(lm),
-                self._detect_open_hand(lm),
+                # self._detect_open_hand(lm),
                 self._detect_thumbs_up(lm),
                 self._detect_swipe(lm, hand_idx)
             ]
@@ -485,7 +485,17 @@ class GestureDetector:
         })  # type: ignore
 
     def _detect_swipe(self, lm: list, hand_idx: int) -> Optional[tuple[str, float, dict]]:
-        """Detect horizontal swipe (left/right) based on wrist movement."""
+        """
+        Detect swipe (left/right/up/down) with open hand.
+
+        Swipe requires an open hand as prerequisite. If detected, swipe takes
+        precedence over open_hand to avoid competing detections.
+        """
+        # PREREQUISITE: Check if hand is open
+        open_hand_result = self._detect_open_hand(lm)
+        if open_hand_result is None:
+            return None  # Hand is not open, cannot swipe
+
         # Get hand scale for normalization
         hand_scale = self._get_hand_scale(lm)
 
@@ -501,31 +511,69 @@ class GestureDetector:
 
         # Need enough history to detect swipe
         if len(self.wrist_history[hand_idx]) < 5:
-            return None
+            print("Not enough history to detect swipe")
+            return open_hand_result
 
         history = list(self.wrist_history[hand_idx])
 
-        # Calculate horizontal velocity normalized by hand scale
-        dx = history[-1][0] - history[0][0]
-        dt = history[-1][2] - history[0][2]
-        avg_hand_scale = (history[-1][3] + history[0][3]) / 2  # Average scale over time
+        # Calculate average velocity over last 5 frames
+        n = min(5, len(history))
+        dx = sum(history[i][0] - history[i-1][0] for i in range(-n+1, 0)) if n > 1 else 0
+        dy = sum(history[i][1] - history[i-1][1] for i in range(-n+1, 0)) if n > 1 else 0
+        dt = history[-1][2] - history[-n][2]
+        avg_hand_scale = sum(h[3] for h in history[-n:]) / n
 
         if dt <= 0 or avg_hand_scale < 0.01:
-            return None
+            print("Invalid swipe history - no movement detected")
+            return open_hand_result
 
-        # Normalize velocity by hand scale
+        # Normalize velocities by hand scale
         velocity_x = (dx / dt) / avg_hand_scale
+        velocity_y = (dy / dt) / avg_hand_scale
+
+        # Determine dominant direction (horizontal vs vertical)
+        abs_vx = abs(velocity_x)
+        abs_vy = abs(velocity_y)
+
+        print(f"Hand scale: {avg_hand_scale}, Swipe velocity thresholds {self.swipe_velocity_threshold}, vx={abs_vx:.3f}, vy={abs_vy:.3f},")
 
         # Check if velocity exceeds threshold
-        if abs(velocity_x) > self.swipe_velocity_threshold:
-            if velocity_x > 0:
-                confidence = min(abs(velocity_x) / 2.0, 1.0)
-                return ("swipe_right", confidence, {"velocity": velocity_x})
+        if abs_vx > self.swipe_velocity_threshold or abs_vy > self.swipe_velocity_threshold:
+            # Return the dominant direction
+            if abs_vx > abs_vy:
+                # Horizontal swipe (left/right)
+                if velocity_x > 0:
+                    confidence = min(abs_vx * 5, 1.0)  # TODO: tune this multiplier
+                    return ("swipe_right", confidence, {
+                        "velocity_x": velocity_x,
+                        "velocity_y": velocity_y
+                    })
+                else:
+                    confidence = min(abs_vx * 5, 1.0)  # TODO: tune this multiplier
+                    return ("swipe_left", confidence, {
+                        "velocity_x": velocity_x,
+                        "velocity_y": velocity_y
+                    })
             else:
-                confidence = min(abs(velocity_x) / 2.0, 1.0)
-                return ("swipe_left", confidence, {"velocity": velocity_x})
+                # Vertical swipe (up/down)
+                # Note: in image coordinates, lower y = higher in real space
+                if velocity_y < 0:
+                    confidence = min(abs_vy * 5, 1.0)
+                    print(f"Swipe up detected with confidence {confidence:.2f}")
+                    return ("swipe_up", confidence, {
+                        "velocity_x": velocity_x,
+                        "velocity_y": velocity_y
+                    })
+                else:
+                    confidence = min(abs_vy * 5, 1.0)
+                    print(f"Swipe down detected with confidence {confidence:.2f}")
+                    return ("swipe_down", confidence, {
+                        "velocity_x": velocity_x,
+                        "velocity_y": velocity_y
+                    })
 
-        return None
+        # No swipe detected, but hand is open - return None so open_hand can fire
+        return open_hand_result
 
     # === Two Hand Gestures ===
 
