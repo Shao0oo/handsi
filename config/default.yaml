@@ -1,0 +1,48 @@
+camera:
+  device_id: 0
+  resolution: [640, 480]
+  # Adaptive FPS ranges
+  fps_idle: 2         # Hz when no hands detected
+  fps_attentive: 5    # Hz when hands present, no gesture
+  fps_active: 10      # Hz during/after gesture execution
+
+tracking:
+  max_hands: 2
+  min_detection_confidence: 0.5
+  min_tracking_confidence: 0.5
+  # Activity level transitions
+  idle_timeout: 3.0        # seconds without hands → IDLE
+  attentive_timeout: 2.0   # seconds without gesture → ATTENTIVE
+
+gestures:
+  # Debouncing: cooldown after gesture fires
+  debounce_ms: 300          # ignore same gesture for 300ms after firing
+  # Latch: cooldown for activation gesture
+  latch_cooldown_ms: 500    # prevent rapid latch on/off
+  # Temporal smoothing
+  smoothing_window: 3       # frames to average over
+
+actions:
+  # Gesture → Action mappings (modular for future changes)
+  mappings:
+    pinch: click
+    fist: drag_start
+    open_palm: drag_end
+    swipe_left: prev_desktop
+    swipe_right: next_desktop
+    two_finger_spread: zoom_in
+    two_finger_pinch: zoom_out
+    # Latch gesture (enables/disables control mode)
+    thumbs_up: toggle_latch
+
+system:
+  log_level: INFO           # DEBUG | INFO | WARN | ERROR
+  log_file: logs/airdesk.log
+  preview: false            # override with --preview
+  debug: false              # override with --debug
+
+macos:
+  # macOS-specific settings
+  accessibility_check: true  # verify permissions on startup
+  scroll_speed: 10           # pixels per scroll event
+  zoom_step: 0.1             # zoom increment (0.1 = 10%)
