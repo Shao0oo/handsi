@@ -271,13 +271,27 @@ class PreviewWindow:
             frames_captured = self.runtime_state.frames_captured
             frames_processed = self.runtime_state.frames_processed
             latch_active = self.runtime_state.latch_active
+            latest_action = getattr(self.runtime_state, 'latest_action', None)
+            actions_executed = getattr(self.runtime_state, 'actions_executed', 0)
 
-        # Prepare status text (compact)
-        # Status / Legend:
+        # Format action display (compact, with checkmark if recent)
+        if latest_action:
+            current_time = time.time()
+            action_time = getattr(self.runtime_state, 'latest_action_time', 0.0)
+            time_since_action = current_time - action_time
+
+            # Show checkmark if action executed in last 1 second
+            if time_since_action < 1.0:
+                action_display = f"{latest_action} \u2713"  # ✓ checkmark
+            else:
+                action_display = latest_action
+        else:
+            action_display = "none"
+
+        # Prepare status text (compact, 2-3 lines max)
         status_lines = [
             f"Hands: {hand_count} | FPS: {current_fps} | {activity_level.upper()}",
-            f"Features: {'ON' if self.show_features else 'OFF'} (g)",
-            f"Gestures: {'ON' if self.show_gestures else 'OFF'} (g)",
+            f"Gestures: {'ON' if self.show_gestures else 'OFF'} (g) | Action: {action_display}",
         ]
 
         # Draw background rectangle for text (compact)

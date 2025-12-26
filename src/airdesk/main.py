@@ -12,6 +12,7 @@ import sys
 import time
 from pathlib import Path
 
+from airdesk.actions.executor import ActionExecutorThread
 from airdesk.core.bus import RuntimeState, create_queues
 from airdesk.core.config import load_config
 from airdesk.core.logging import log_info, setup_logging
@@ -93,7 +94,7 @@ def main() -> int:
     )
 
     log_info("=" * 60)
-    log_info("AirDesk Phase 1 - Capture + Tracking")
+    log_info("AirDesk Phase 1 - Capture + Tracking + Gestures + Actions")
     log_info("=" * 60)
     log_info(f"Config: {args.config}")
     log_info(f"Preview: {config.system.preview}")
@@ -125,6 +126,13 @@ def main() -> int:
         runtime_state=runtime_state
     )
 
+    action_thread = ActionExecutorThread(
+        action_config=config.actions,
+        macos_config=config.macos,
+        gesture_queue=gesture_queue,
+        runtime_state=runtime_state
+    )
+
     # Create preview window (non-threaded, runs in main loop)
     preview_window = None
     if config.system.preview:
@@ -150,6 +158,7 @@ def main() -> int:
     capture_thread.start()
     tracking_thread.start()
     gesture_thread.start()
+    action_thread.start()
 
     log_info("All threads started. Press Ctrl+C to stop.")
     if preview_window:
@@ -197,6 +206,7 @@ def main() -> int:
     capture_thread.join(timeout=2.0)
     tracking_thread.join(timeout=2.0)
     gesture_thread.join(timeout=2.0)
+    action_thread.join(timeout=2.0)
 
     log_info("AirDesk stopped")
     return 0

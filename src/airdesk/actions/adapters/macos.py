@@ -1,0 +1,343 @@
+"""
+macOS-specific action adapter using Quartz Core Graphics.
+
+Implements ActionAdapter interface using PyObjC bindings to CGEvent APIs
+for mouse/keyboard control and system-level actions.
+"""
+
+import subprocess
+from typing import Literal
+
+from airdesk.actions.adapters.base import ActionAdapter
+from airdesk.core.logging import log_debug, log_error, log_info, log_warning
+
+try:
+    from Quartz import (
+        CGEventCreateMouseEvent,
+        CGEventCreateScrollWheelEvent,
+        CGEventPost,
+        CGMainDisplayID,
+        CGDisplayBounds,
+        CGEventSourceCreate,
+        kCGEventSourceStateHIDSystemState,
+        kCGEventMouseMoved,
+        kCGEventLeftMouseDown,
+        kCGEventLeftMouseUp,
+        kCGEventRightMouseDown,
+        kCGEventRightMouseUp,
+        kCGEventOtherMouseDown,
+        kCGEventOtherMouseUp,
+        kCGHIDEventTap,
+        kCGScrollEventUnitPixel,
+    )
+    from AppKit import NSEvent
+    QUARTZ_AVAILABLE = True
+except ImportError:
+    QUARTZ_AVAILABLE = False
+    log_warning("ACT-004", "PyObjC Quartz not available - macOS adapter will not function")
+
+
+class MacOSAdapter(ActionAdapter):
+    """
+    macOS action adapter using Quartz Core Graphics.
+
+    Requires:
+    - pyobjc-framework-Quartz
+    - Accessibility permissions granted in System Preferences
+    """
+
+    def __init__(self):
+        self._initialized = False
+        self._screen_width = 0
+        self._screen_height = 0
+
+    def initialize(self) -> bool:
+        """
+        Initialize macOS adapter and get screen dimensions.
+
+        Returns:
+            True if initialization successful, False otherwise
+        """
+        if not QUARTZ_AVAILABLE:
+            log_error("ACT-004", "Quartz framework not available - install pyobjc-framework-Quartz")
+            return False
+
+        try:
+            # Get screen dimensions
+            main_display = CGMainDisplayID()
+            bounds = CGDisplayBounds(main_display)
+            self._screen_width = int(bounds.size.width)
+            self._screen_height = int(bounds.size.height)
+
+            log_info(f"macOS adapter initialized (screen: {self._screen_width}x{self._screen_height})")
+            self._initialized = True
+            return True
+
+        except Exception as e:
+            log_error("ACT-004", f"macOS adapter initialization failed: {e}")
+            return False
+
+    def check_permissions(self) -> bool:
+        """
+        Check if Accessibility permissions are granted.
+
+        Note: There's no reliable programmatic way to check this on modern macOS.
+        We'll just log a warning and let the user verify.
+
+        Returns:
+            True (always - actual permission check happens on first action)
+        """
+        log_info(
+            "macOS Accessibility permissions required. "
+            "If actions don't work, grant permissions in System Preferences > Privacy & Security > Accessibility"
+        )
+        return True
+
+    def move_mouse(
+        self,
+        x: float,
+        y: float,
+        normalized: bool = True,
+        relative: bool = False
+    ) -> bool:
+        """
+        Move mouse cursor to specified position.
+
+        Args:
+            x: X coordinate (0-1 if normalized, pixels if not)
+            y: Y coordinate (0-1 if normalized, pixels if not)
+            normalized: If True, x/y are in range [0, 1]
+            relative: If True, move relative to current position (not supported)
+
+        Returns:
+            True if movement successful, False otherwise
+        """
+        if not self._initialized:
+            log_error("ACT-001", "Adapter not initialized")
+            return False
+
+        try:
+            # Convert normalized to screen coordinates
+            if normalized:
+                pixel_x = int(x * self._screen_width)
+                pixel_y = int(y * self._screen_height)
+            else:
+                pixel_x = int(x)
+                pixel_y = int(y)
+
+            # Clamp to screen bounds
+            pixel_x = max(0, min(self._screen_width - 1, pixel_x))
+            pixel_y = max(0, min(self._screen_height - 1, pixel_y))
+
+            # Create event source for proper mouse control
+            source = CGEventSourceCreate(kCGEventSourceStateHIDSystemState)
+
+            # Create and post mouse move event
+            event = CGEventCreateMouseEvent(
+                source,
+                kCGEventMouseMoved,
+                (pixel_x, pixel_y),
+                0  # button number (irrelevant for move)
+            )
+            CGEventPost(kCGHIDEventTap, event)
+
+            log_debug(f"Mouse moved to ({pixel_x}, {pixel_y})")
+            return True
+
+        except Exception as e:
+            log_error("ACT-001", f"Mouse move failed: {e}")
+            return False
+
+    def click(self, button: Literal['left', 'right', 'middle'] = 'left') -> bool:
+        """
+        Perform a mouse click.
+
+        Args:
+            button: Which mouse button to click
+
+        Returns:
+            True if click successful, False otherwise
+        """
+        if not self._initialized:
+            log_error("ACT-001", "Adapter not initialized")
+            return False
+
+        try:
+            # Get current mouse position (we'll click at current location)
+            # Note: For simplicity, we'll use the last known position
+            # In a real implementation, you'd query current cursor position
+
+            # Map button to CGEvent constants
+            if button == 'left':
+                down_event_type = kCGEventLeftMouseDown
+                up_event_type = kCGEventLeftMouseUp
+                button_num = 0
+            elif button == 'right':
+                down_event_type = kCGEventRightMouseDown
+                up_event_type = kCGEventRightMouseUp
+                button_num = 1
+            elif button == 'middle':
+                down_event_type = kCGEventOtherMouseDown
+                up_event_type = kCGEventOtherMouseUp
+                button_num = 2
+            else:
+                log_error("ACT-003", f"Invalid mouse button: {button}")
+                return False
+
+            # Query current mouse position
+            mouse_loc = NSEvent.mouseLocation()
+            # Note: NSEvent.mouseLocation() returns Cocoa coordinates (origin at bottom-left)
+            # Need to convert to Quartz coordinates (origin at top-left)
+            pos = (int(mouse_loc.x), int(self._screen_height - mouse_loc.y))
+
+            # Create and post mouse down event
+            down_event = CGEventCreateMouseEvent(
+                None,
+                down_event_type,
+                pos,
+                button_num
+            )
+            CGEventPost(kCGHIDEventTap, down_event)
+
+            # Create and post mouse up event
+            up_event = CGEventCreateMouseEvent(
+                None,
+                up_event_type,
+                pos,
+                button_num
+            )
+            CGEventPost(kCGHIDEventTap, up_event)
+
+            log_debug(f"Mouse {button} click executed")
+            return True
+
+        except Exception as e:
+            log_error("ACT-001", f"Mouse click failed: {e}")
+            return False
+
+    def scroll(self, dx: int = 0, dy: int = 0) -> bool:
+        """
+        Scroll the mouse wheel.
+
+        Args:
+            dx: Horizontal scroll amount (pixels)
+            dy: Vertical scroll amount (pixels, positive = down)
+
+        Returns:
+            True if scroll successful, False otherwise
+        """
+        if not self._initialized:
+            log_error("ACT-001", "Adapter not initialized")
+            return False
+
+        try:
+            # CGEventCreateScrollWheelEvent uses scroll lines, not pixels
+            # We'll convert pixels to lines (rough approximation)
+            scroll_lines = dy // 10  # Approximate: 10 pixels = 1 line
+
+            if scroll_lines == 0 and dy != 0:
+                scroll_lines = 1 if dy > 0 else -1
+
+            # Create and post scroll event
+            # Note: macOS scroll is inverted (negative = down)
+            event = CGEventCreateScrollWheelEvent(
+                None,
+                kCGScrollEventUnitPixel,
+                1,  # Number of wheels (1 for vertical)
+                -scroll_lines  # Invert for natural scrolling
+            )
+            CGEventPost(kCGHIDEventTap, event)
+
+            log_debug(f"Scroll executed: dy={dy} (lines={scroll_lines})")
+            return True
+
+        except Exception as e:
+            log_error("ACT-001", f"Scroll failed: {e}")
+            return False
+
+    def zoom(self, direction: Literal['in', 'out'], step: float = 0.1) -> bool:
+        """
+        Zoom in or out using system-wide zoom (Accessibility zoom).
+
+        Args:
+            direction: 'in' to zoom in, 'out' to zoom out
+            step: Zoom increment (ignored - macOS zoom is toggle-based)
+
+        Returns:
+            True if zoom successful, False otherwise
+        """
+        if not self._initialized:
+            log_error("ACT-001", "Adapter not initialized")
+            return False
+
+        try:
+            # Use AppleScript to trigger macOS accessibility zoom
+            # This requires "Use scroll gesture with modifier keys to zoom" enabled
+            # Alternative: Use Cmd+Plus/Minus for browser zoom
+
+            # For now, we'll simulate browser zoom using keyboard shortcut
+            # This requires implementing keyboard event posting
+
+            log_warning("ACT-001", "Zoom action not yet fully implemented")
+            return False
+
+        except Exception as e:
+            log_error("ACT-001", f"Zoom failed: {e}")
+            return False
+
+    def switch_desktop(self, direction: Literal['left', 'right', 'next', 'prev']) -> bool:
+        """
+        Switch to adjacent virtual desktop using Mission Control.
+
+        Args:
+            direction: Direction to switch ('left'/'prev' or 'right'/'next')
+
+        Returns:
+            True if switch successful, False otherwise
+        """
+        if not self._initialized:
+            log_error("ACT-001", "Adapter not initialized")
+            return False
+
+        try:
+            # Map direction
+            if direction in ('left', 'prev'):
+                # Ctrl+Left Arrow
+                key_code = 123  # Left arrow
+            elif direction in ('right', 'next'):
+                # Ctrl+Right Arrow
+                key_code = 124  # Right arrow
+            else:
+                log_error("ACT-003", f"Invalid desktop switch direction: {direction}")
+                return False
+
+            # Use AppleScript to simulate keyboard shortcut
+            # This is more reliable than CGEventCreateKeyboardEvent
+            script = f'''
+            tell application "System Events"
+                key code {key_code} using control down
+            end tell
+            '''
+
+            result = subprocess.run(
+                ['osascript', '-e', script],
+                capture_output=True,
+                text=True,
+                timeout=2.0
+            )
+
+            if result.returncode == 0:
+                log_debug(f"Desktop switched: {direction}")
+                return True
+            else:
+                log_warning("ACT-001", f"Desktop switch failed: {result.stderr}")
+                return False
+
+        except Exception as e:
+            log_error("ACT-001", f"Desktop switch failed: {e}")
+            return False
+
+    def cleanup(self) -> None:
+        """Clean up macOS adapter resources."""
+        log_info("macOS adapter cleaned up")
+        self._initialized = False
