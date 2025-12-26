@@ -181,49 +181,50 @@ class MacOSAdapter(ActionAdapter):
             log_error("ACT-001", f"Mouse move failed: {e}")
             return False
 
-    def click(self, button: Literal['left', 'right', 'middle'] = 'left') -> bool:
+    def _get_button_event_types(self, button: str) -> tuple[int, int, int]:
         """
-        Perform a mouse click.
+        Get CGEvent constants for a mouse button.
 
         Args:
-            button: Which mouse button to click
+            button: 'left', 'right', or 'middle'
 
         Returns:
-            True if click successful, False otherwise
+            Tuple of (down_event_type, up_event_type, button_num)
+
+        Raises:
+            ValueError: If button is invalid
+        """
+        if button == 'left':
+            return (kCGEventLeftMouseDown, kCGEventLeftMouseUp, 0)
+        elif button == 'right':
+            return (kCGEventRightMouseDown, kCGEventRightMouseUp, 1)
+        elif button == 'middle':
+            return (kCGEventOtherMouseDown, kCGEventOtherMouseUp, 2)
+        else:
+            raise ValueError(f"Invalid mouse button: {button}")
+
+    def mouse_down(self, button: Literal['left', 'right', 'middle'] = 'left') -> bool:
+        """
+        Press and hold mouse button without releasing.
+
+        Args:
+            button: Which mouse button to press
+
+        Returns:
+            True if successful, False otherwise
         """
         if not self._initialized:
             log_error("ACT-001", "Adapter not initialized")
             return False
 
         try:
-            # Get current mouse position (we'll click at current location)
-            # Note: For simplicity, we'll use the last known position
-            # In a real implementation, you'd query current cursor position
-
-            # Map button to CGEvent constants
-            if button == 'left':
-                down_event_type = kCGEventLeftMouseDown
-                up_event_type = kCGEventLeftMouseUp
-                button_num = 0
-            elif button == 'right':
-                down_event_type = kCGEventRightMouseDown
-                up_event_type = kCGEventRightMouseUp
-                button_num = 1
-            elif button == 'middle':
-                down_event_type = kCGEventOtherMouseDown
-                up_event_type = kCGEventOtherMouseUp
-                button_num = 2
-            else:
-                log_error("ACT-003", f"Invalid mouse button: {button}")
-                return False
+            down_event_type, _, button_num = self._get_button_event_types(button)
 
             # Query current mouse position
             mouse_loc = NSEvent.mouseLocation()
-            # Note: NSEvent.mouseLocation() returns Cocoa coordinates (origin at bottom-left)
-            # Need to convert to Quartz coordinates (origin at top-left)
             pos = (int(mouse_loc.x), int(self._screen_height - mouse_loc.y))
 
-            # Create and post mouse down event
+            # Create and post mouse down event (hold button)
             down_event = CGEventCreateMouseEvent(
                 None,
                 down_event_type,
@@ -232,7 +233,35 @@ class MacOSAdapter(ActionAdapter):
             )
             CGEventPost(kCGHIDEventTap, down_event)
 
-            # Create and post mouse up event
+            log_debug(f"Mouse {button} button pressed (held)")
+            return True
+
+        except Exception as e:
+            log_error("ACT-001", f"Mouse down failed: {e}")
+            return False
+
+    def mouse_up(self, button: Literal['left', 'right', 'middle'] = 'left') -> bool:
+        """
+        Release held mouse button.
+
+        Args:
+            button: Which mouse button to release
+
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self._initialized:
+            log_error("ACT-001", "Adapter not initialized")
+            return False
+
+        try:
+            _, up_event_type, button_num = self._get_button_event_types(button)
+
+            # Query current mouse position
+            mouse_loc = NSEvent.mouseLocation()
+            pos = (int(mouse_loc.x), int(self._screen_height - mouse_loc.y))
+
+            # Create and post mouse up event (release button)
             up_event = CGEventCreateMouseEvent(
                 None,
                 up_event_type,
@@ -241,12 +270,27 @@ class MacOSAdapter(ActionAdapter):
             )
             CGEventPost(kCGHIDEventTap, up_event)
 
-            log_debug(f"Mouse {button} click executed")
+            log_debug(f"Mouse {button} button released")
             return True
 
         except Exception as e:
-            log_error("ACT-001", f"Mouse click failed: {e}")
+            log_error("ACT-001", f"Mouse up failed: {e}")
             return False
+
+    def click(self, button: Literal['left', 'right', 'middle'] = 'left') -> bool:
+        """
+        Perform a mouse click (press and release).
+
+        Args:
+            button: Which mouse button to click
+
+        Returns:
+            True if click successful, False otherwise
+        """
+        # Refactored to use mouse_down() and mouse_up()
+        if not self.mouse_down(button):
+            return False
+        return self.mouse_up(button)
 
     def scroll(self, dx: int = 0, dy: int = 0) -> bool:
         """

@@ -70,6 +70,32 @@ class ActionAdapter(ABC):
         pass
 
     @abstractmethod
+    def mouse_down(self, button: Literal['left', 'right', 'middle'] = 'left') -> bool:
+        """
+        Press and hold mouse button without releasing.
+
+        Args:
+            button: Which mouse button to press
+
+        Returns:
+            True if successful, False otherwise
+        """
+        pass
+
+    @abstractmethod
+    def mouse_up(self, button: Literal['left', 'right', 'middle'] = 'left') -> bool:
+        """
+        Release held mouse button.
+
+        Args:
+            button: Which mouse button to release
+
+        Returns:
+            True if successful, False otherwise
+        """
+        pass
+
+    @abstractmethod
     def click(self, button: Literal['left', 'right', 'middle'] = 'left') -> bool:
         """
         Perform a mouse click.

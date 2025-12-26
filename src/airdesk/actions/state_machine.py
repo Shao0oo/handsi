@@ -37,7 +37,7 @@ class GestureStateMachine:
         self._last_gesture_time: dict[str, float] = {}
 
         # Continuous gesture state
-        self._continuous_gestures = {'mouse_move'}  # Actions that are continuous
+        self._continuous_gestures = {'mouse_move'}  # Actions that execute without debouncing
         self._current_continuous_gesture: Optional[str] = None
 
     def should_execute(self, gesture_event: GestureEvent, action_name: str) -> bool:

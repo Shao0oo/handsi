@@ -61,6 +61,10 @@ class ActionExecutorThread(threading.Thread):
         self._hand_anchor_pos: Optional[tuple[float, float]] = None  # Where hand was when gesture started
         self._last_mouse_move_time = 0.0  # Track when mouse_move last executed
 
+        # Gesture state tracking for click-and-hold
+        self._last_tracked_gesture: Optional[str] = None  # Previous gesture state
+        self._held_mouse_button: Optional[str] = None  # Which button is currently held
+
     def run(self) -> None:
         """Main action executor loop."""
         log_info(f"{self.name} started")
@@ -122,53 +126,108 @@ class ActionExecutorThread(threading.Thread):
         Process a single gesture event from the queue.
 
         Maps gesture to action and executes via adapter.
+        Tracks gesture state transitions for click-and-hold functionality.
         """
         try:
             # Get gesture event from queue (blocking with timeout)
-            gesture_event: Optional[GestureEvent] = self.gesture_queue.get(timeout=1.0)
+            gesture_event: Optional[GestureEvent] = self.gesture_queue.get(timeout=0.1)
 
-            if gesture_event is None:
-                return
+            if gesture_event is not None:
+                # Map gesture to action
+                action_name = self._map_gesture_to_action(gesture_event.gesture_name)
 
-            # self.runtime_state = gesture_event.metadata
+                if not action_name:
+                    log_debug(f"No action mapped for gesture: {gesture_event.gesture_name}")
+                else:
+                    # Update hand state from gesture metadata (for mouse movement)
+                    self.state_machine.update_hand_state(gesture_event.metadata)
 
-            # Map gesture to action
-            action_name = self._map_gesture_to_action(gesture_event.gesture_name)
+                    # Skip queue-based execution for click - it's handled by state transitions
+                    if action_name != "click" and self.state_machine.should_execute(gesture_event, action_name):
+                        # Execute action
+                        success = self._execute_action(action_name, gesture_event)
 
-            if not action_name:
-                log_debug(f"No action mapped for gesture: {gesture_event.gesture_name}")
-                return
+                        if success:
+                            # Update RuntimeState with latest action
+                            with self.runtime_state.lock:
+                                self.runtime_state.latest_action = action_name
+                                self.runtime_state.latest_action_time = time.time()
+                                self.runtime_state.actions_executed += 1
+                                self.runtime_state.mark_gesture_detected()
 
-            # Update hand state from gesture metadata (for mouse movement)
-            self.state_machine.update_hand_state(gesture_event.metadata)
-
-            # Check if action should execute (debouncing, latch, etc.)
-            if not self.state_machine.should_execute(gesture_event, action_name):
-                return
-
-            # Execute action
-            success = self._execute_action(action_name, gesture_event)
-
-            if success:
-                # Update RuntimeState with latest action
-                with self.runtime_state.lock:
-                    self.runtime_state.latest_action = action_name
-                    self.runtime_state.latest_action_time = time.time()
-                    self.runtime_state.actions_executed += 1
-                    self.runtime_state.mark_gesture_detected()
-
-                log_info(
-                    f"Action executed: {action_name} "
-                    f"(from gesture: {gesture_event.gesture_name}, "
-                    f"confidence: {gesture_event.confidence:.2f})"
-                )
-            else:
-                log_error("ACT-002", f"Action: {success}")
+                            log_info(
+                                f"Action executed: {action_name} "
+                                f"(from gesture: {gesture_event.gesture_name}, "
+                                f"confidence: {gesture_event.confidence:.2f})"
+                            )
+                        else:
+                            log_error("ACT-002", f"Action: {success}")
 
         except Exception as e:
-            # Queue timeout is normal during shutdown
+            # Queue timeout is normal (we use short timeout for responsive state tracking)
             if not self.runtime_state.shutdown_requested:
                 log_debug(f"Gesture queue timeout or error: {e}")
+
+        # NEW: Track gesture state transitions for click-and-hold
+        # Read current gesture from RuntimeState (updated by inference thread)
+        current_gesture = None
+        with self.runtime_state.lock:
+            current_gesture = self.runtime_state.latest_gesture
+
+        # Detect gesture state transition
+        if current_gesture != self._last_tracked_gesture:
+            self._handle_gesture_transition(self._last_tracked_gesture, current_gesture)
+            self._last_tracked_gesture = current_gesture
+        elif current_gesture is not None:
+            # Same gesture continuing
+            self._handle_gesture_continue(current_gesture)
+
+    def _handle_gesture_transition(self, old_gesture: Optional[str], new_gesture: Optional[str]) -> None:
+        """
+        Handle gesture state transition (start/end).
+
+        Args:
+            old_gesture: Previous gesture (or None)
+            new_gesture: New gesture (or None)
+        """
+        # Handle gesture END
+        if old_gesture is not None:
+            action = self._map_gesture_to_action(old_gesture)
+
+            if action == "click" and self._held_mouse_button:
+                # Release held mouse button
+                self.adapter.mouse_up(self._held_mouse_button)  # type: ignore
+                log_info(f"Released {self._held_mouse_button} button (gesture '{old_gesture}' ended)")
+                self._held_mouse_button = None
+
+        # Handle gesture START
+        if new_gesture is not None:
+            action = self._map_gesture_to_action(new_gesture)
+
+            if action == "click":
+                # Press and hold mouse button
+                self.adapter.mouse_down('left')  # type: ignore
+                self._held_mouse_button = 'left'
+                log_info(f"Pressed left button (gesture '{new_gesture}' started)")
+            elif action == "mouse_move":
+                # Reset anchor for mouse movement when starting mouse_move gesture
+                self._hand_anchor_pos = None
+
+    def _handle_gesture_continue(self, gesture_name: str) -> None:
+        """
+        Handle gesture continuation (same gesture still active).
+
+        Enables click-and-drag by moving cursor while button is held.
+
+        Args:
+            gesture_name: Name of continuing gesture
+        """
+        action = self._map_gesture_to_action(gesture_name)
+
+        # If holding button and gesture is click, enable drag by moving cursor
+        if action == "click" and self._held_mouse_button:
+            # Move cursor based on hand position while button is held (drag!)
+            self._action_mouse_move()
 
     def _map_gesture_to_action(self, gesture_name: str) -> Optional[str]:
         """
