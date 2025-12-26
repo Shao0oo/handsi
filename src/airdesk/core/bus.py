@@ -55,6 +55,15 @@ class RuntimeState:
     latest_gesture_confidence: float = 0.0
     latest_gesture_time: float = 0.0
 
+    # Latest action (for preview display)
+    latest_action: Optional[str] = None
+    latest_action_time: float = 0.0
+    actions_executed: int = 0
+
+    # Hand tracking state (for mouse movement normalization)
+    hand_scale: float = 0.0  # Current hand size (wrist to MCP distance)
+    cursor_position: tuple[float, float] = (0.0, 0.0)  # Normalized hand position
+
     def update_activity_level(
         self,
         hands_detected: bool,

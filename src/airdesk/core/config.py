@@ -56,9 +56,18 @@ class GestureConfig(BaseModel):
     confidence_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
 
 
+class MouseConfig(BaseModel):
+    """Mouse movement settings."""
+    mirror_x: bool = Field(default=True)
+    smoothing_factor: float = Field(default=0.3, ge=0.0, le=1.0)
+    dead_zone: float = Field(default=0.02, ge=0.0, le=0.1)
+    sensitivity: float = Field(default=1.5, ge=0.1, le=5.0)
+
+
 class ActionConfig(BaseModel):
     """Action execution settings."""
     mappings: dict[str, str] = Field(default_factory=dict)
+    mouse: MouseConfig = Field(default_factory=MouseConfig)
 
 
 class SystemConfig(BaseModel):

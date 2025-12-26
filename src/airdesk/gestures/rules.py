@@ -463,7 +463,7 @@ class GestureDetector:
 
         # Require all 5 fingers to be extended
         if extended_count < 5:
-            print(f"Open hand: only {extended_count} fingers extended, need 5")
+            # print(f"Open hand: only {extended_count} fingers extended, need 5")
             return None
 
         # Secondary checks: normalized finger spread
@@ -481,15 +481,15 @@ class GestureDetector:
 
         # Check minimum spread
         if avg_spread < self.open_hand_spread_threshold:
-            print(f"Open hand average spread too small: {avg_spread:.3f} < {self.open_hand_spread_threshold:.3f}")
+            # print(f"Open hand average spread too small: {avg_spread:.3f} < {self.open_hand_spread_threshold:.3f}")
             return None
         if min_spread < self.open_hand_distance_threshold:
-            print(f"Open hand spread too small: {min_spread:.3f} < {self.open_hand_distance_threshold:.3f}")
+            # print(f"Open hand spread too small: {min_spread:.3f} < {self.open_hand_distance_threshold:.3f}")
             return None
 
         # Calculate confidence based on spread
         conf_spread = min(avg_spread / 0.5, 1.0)
-        print(f"Open hand detected with average spread {avg_spread:.3f}, confidence {conf_spread:.2f}")
+        # print(f"Open hand detected with average spread {avg_spread:.3f}, confidence {conf_spread:.2f}")
         confidence = conf_spread
         position = self._get_hand_center_of_mass(lm)
 
@@ -625,7 +625,7 @@ class GestureDetector:
                 hand_scale = self._get_hand_scale(lm)
                 if velocity_y < 0:
                     confidence = min(abs_vy * 5, 1.0)
-                    print(f"Swipe up detected with confidence {confidence:.2f}")
+                    # print(f"Swipe up detected with confidence {confidence:.2f}")
                     return ("swipe_up", confidence, {
                         "velocity_x": velocity_x,
                         "velocity_y": velocity_y,
@@ -634,7 +634,7 @@ class GestureDetector:
                     })
                 else:
                     confidence = min(abs_vy * 5, 1.0)
-                    print(f"Swipe down detected with confidence {confidence:.2f}")
+                    # print(f"Swipe down detected with confidence {confidence:.2f}")
                     return ("swipe_down", confidence, {
                         "velocity_x": velocity_x,
                         "velocity_y": velocity_y,
