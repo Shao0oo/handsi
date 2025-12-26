@@ -39,7 +39,7 @@ def setup_logging(
     debug: bool = False
 ) -> logging.Logger:
     """
-    Configure structured logging for AirDesk.
+    Configure structured logging for Handsi.
 
     Args:
         log_level: Logging level (DEBUG, INFO, WARN, ERROR)
@@ -56,7 +56,7 @@ def setup_logging(
         effective_level = getattr(logging, log_level.upper(), logging.INFO)
 
     # Create logger
-    logger = logging.getLogger("airdesk")
+    logger = logging.getLogger("handsi")
     logger.setLevel(effective_level)
     logger.handlers.clear()  # Clear any existing handlers
 
@@ -85,8 +85,8 @@ def setup_logging(
 
 
 def get_logger() -> logging.Logger:
-    """Get the configured AirDesk logger."""
-    return logging.getLogger("airdesk")
+    """Get the configured Handsi logger."""
+    return logging.getLogger("handsi")
 
 
 # Error code helper functions

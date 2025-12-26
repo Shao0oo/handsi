@@ -17,14 +17,14 @@ from typing import Optional, Any
 from mediapipe.python.solutions import hands as mp_hands
 from mediapipe.python.solutions.hands import Hands
 
-from airdesk.core.bus import (
+from handsi.core.bus import (
     FeatureQueue,
     FeatureVector,
     FrameQueue,
     RuntimeState,
 )
-from airdesk.core.config import TrackingConfig
-from airdesk.core.logging import log_debug, log_error, log_info, log_warning
+from handsi.core.config import TrackingConfig
+from handsi.core.logging import log_debug, log_error, log_info, log_warning
 
 class MediaPipeTracker:
     """

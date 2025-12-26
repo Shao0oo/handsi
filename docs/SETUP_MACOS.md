@@ -1,6 +1,6 @@
 # macOS Setup Guide
 
-This guide covers macOS-specific setup for AirDesk, including camera permissions.
+This guide covers macOS-specific setup for Handsi, including camera permissions.
 
 ## Prerequisites
 
@@ -19,11 +19,11 @@ This guide covers macOS-specific setup for AirDesk, including camera permissions
 
 2. **Create conda environment**
    ```bash
-   conda create -n airdesk python=3.11
-   conda activate airdesk
+   conda create -n handsi python=3.11
+   conda activate handsi
    ```
 
-3. **Install AirDesk**
+3. **Install Handsi**
    ```bash
    pip install -e .
    ```
@@ -59,17 +59,17 @@ macOS requires explicit permission to access the camera. There are two ways to h
 
 If you've already granted camera access but OpenCV still fails, the environment variable is automatically set in `main.py`. No action needed.
 
-## Running AirDesk
+## Running Handsi
 
 ```bash
 # Activate environment
-conda activate airdesk
+conda activate handsi
 
 # Run with preview (shows camera + hand tracking)
-airdesk --preview
+handsi --preview
 
 # Run with debug logging
-airdesk --preview --debug
+handsi --preview --debug
 ```
 
 ## Troubleshooting
@@ -141,11 +141,11 @@ The `-e` flag installs in "editable" mode, so Python code changes take effect im
 
 ```bash
 # Verify installation
-airdesk --help
+handsi --help
 
 # Check from any directory
 cd /tmp
-airdesk --help  # Should still work
+handsi --help  # Should still work
 ```
 
 ## System Requirements

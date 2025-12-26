@@ -13,9 +13,9 @@ from typing import Optional
 import cv2
 import numpy as np
 
-from airdesk.core.bus import Frame, FrameQueue, RuntimeState
-from airdesk.core.config import CameraConfig
-from airdesk.core.logging import log_debug, log_error, log_info, log_warning
+from handsi.core.bus import Frame, FrameQueue, RuntimeState
+from handsi.core.config import CameraConfig
+from handsi.core.logging import log_debug, log_error, log_info, log_warning
 
 
 class CaptureThread(threading.Thread):

@@ -10,15 +10,15 @@ import threading
 import time
 from typing import Optional
 
-from airdesk.actions.adapters.base import (
+from handsi.actions.adapters.base import (
     ActionAdapter,
     apply_dead_zone,
     smooth_position,
 )
-from airdesk.actions.state_machine import GestureStateMachine
-from airdesk.core.bus import GestureEvent, GestureQueue, RuntimeState
-from airdesk.core.config import ActionConfig, MacOSConfig
-from airdesk.core.logging import log_debug, log_error, log_info, log_warning
+from handsi.actions.state_machine import GestureStateMachine
+from handsi.core.bus import GestureEvent, GestureQueue, RuntimeState
+from handsi.core.config import ActionConfig, MacOSConfig
+from handsi.core.logging import log_debug, log_error, log_info, log_warning
 
 
 class ActionExecutorThread(threading.Thread):
@@ -97,7 +97,7 @@ class ActionExecutorThread(threading.Thread):
 
         if system == "Darwin":
             # macOS
-            from airdesk.actions.adapters.macos import MacOSAdapter
+            from handsi.actions.adapters.macos import MacOSAdapter
             self.adapter = MacOSAdapter()
         elif system == "Linux":
             # Linux (not yet implemented)

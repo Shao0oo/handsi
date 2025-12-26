@@ -7,7 +7,7 @@ Prevents flickering by requiring consistent detection over multiple frames.
 from collections import deque
 from typing import Optional
 
-from airdesk.core.logging import log_debug
+from handsi.core.logging import log_debug
 
 
 class TemporalSmoother:

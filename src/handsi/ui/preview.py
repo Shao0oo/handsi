@@ -15,8 +15,8 @@ import cv2
 import mediapipe as mp
 import numpy as np
 
-from airdesk.core.bus import RuntimeState
-from airdesk.core.logging import log_debug, log_error, log_info
+from handsi.core.bus import RuntimeState
+from handsi.core.logging import log_debug, log_error, log_info
 
 
 class PreviewWindow:
@@ -36,7 +36,7 @@ class PreviewWindow:
         self,
         runtime_state: RuntimeState,
         tracking_thread: Any,  # Reference to TrackingThread for frame access
-        window_name: str = "AirDesk Preview"
+        window_name: str = "Handsi Preview"
     ):
         self.runtime_state = runtime_state
         self.tracking_thread = tracking_thread

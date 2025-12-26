@@ -41,13 +41,13 @@ def print_instructions():
     print("4. Restart this program")
     print("\nAlternatively, run with environment variable:")
     print("  export OPENCV_AVFOUNDATION_SKIP_AUTH=1")
-    print("  airdesk --preview")
+    print("  handsi --preview")
     print("\n" + "="*60 + "\n")
 
 
 def main():
     """Main function."""
-    print("AirDesk Camera Permission Checker")
+    print("Handsi Camera Permission Checker")
     print("-" * 60)
 
     if sys.platform != "darwin":

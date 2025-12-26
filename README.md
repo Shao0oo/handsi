@@ -1,6 +1,6 @@
-# AirDesk (or AirCursor) — Contactless Desktop Control (Hands + Head + Body)
+# Handsi (Alternatives: AirDesk, AirCursor) — Contactless Desktop Control (Hands + Head + Body)
 
-AirDesk is a local, background-running gesture control system that lets you operate your computer without touching the mouse/keyboard. It tracks your hands via a webcam or camera, recognizes gestures, and maps them to OS actions like switching desktops, scrolling, clicking, and window management.
+Handsi is a local, background-running gesture control system that lets you operate your computer without touching the mouse/keyboard. It tracks your hands via a webcam or camera, recognizes gestures, and maps them to OS actions like switching desktops, scrolling, clicking, and window management.
 
 ## Goals
 - **Mobility-first:** control the screen while walking/standing.
@@ -87,42 +87,42 @@ flowchart TD
 ### Modules
 
 #### Capture
-- `airdesk/vision/capture.py` — webcam capture + FPS control
-- `airdesk/audio/capture.py` — microphone capture (optional; for Teaching Mode voice labels)
+- `handsi/vision/capture.py` — webcam capture + FPS control
+- `handsi/audio/capture.py` — microphone capture (optional; for Teaching Mode voice labels)
 
 #### Tracking + Features
-- `airdesk/vision/tracking.py` — MediaPipe trackers (hands/pose/head) → landmarks
-- `airdesk/vision/features.py` — landmarks → normalized feature vectors + time-window assembly
+- `handsi/vision/tracking.py` — MediaPipe trackers (hands/pose/head) → landmarks
+- `handsi/vision/features.py` — landmarks → normalized feature vectors + time-window assembly
 
 #### Gestures
-- `airdesk/gestures/rules.py` — rule-based gesture detection (pinch, fist, swipe, open palm)
-- `airdesk/gestures/infer.py` — unified inference interface:
+- `handsi/gestures/rules.py` — rule-based gesture detection (pinch, fist, swipe, open palm)
+- `handsi/gestures/infer.py` — unified inference interface:
   - `RulesBackend`
   - `CustomModelBackend` (trained gestures)
-- `airdesk/gestures/state.py` — temporal smoothing, latch, combos, debouncing, cooldowns
+- `handsi/gestures/state.py` — temporal smoothing, latch, combos, debouncing, cooldowns
 
 #### Teaching Mode (Phase 3)
-- `airdesk/teach/teacher.py` — orchestrates teach sessions (start/stop, record, commit)
-- `airdesk/teach/labeling.py` — voice label parsing and/or UI label selection
-- `airdesk/teach/dataset.py` — stores labeled examples (feature windows + metadata)
-- `airdesk/teach/train.py` — trains/updates model (kNN/DTW → later small NN)
-- `airdesk/teach/model_store.py` — loads/saves versioned models + schema
+- `handsi/teach/teacher.py` — orchestrates teach sessions (start/stop, record, commit)
+- `handsi/teach/labeling.py` — voice label parsing and/or UI label selection
+- `handsi/teach/dataset.py` — stores labeled examples (feature windows + metadata)
+- `handsi/teach/train.py` — trains/updates model (kNN/DTW → later small NN)
+- `handsi/teach/model_store.py` — loads/saves versioned models + schema
 
 #### Actions
-- `airdesk/actions/executor.py` — executes high-level actions (scroll, zoom, desktop switch)
-- `airdesk/actions/mapping.py` — gesture → action mapping layer (YAML/TOML/JSON)
-- `airdesk/actions/adapters/macos.py` — macOS adapter (Quartz / Accessibility APIs)
-- `airdesk/actions/adapters/linux.py` — Linux adapter (uinput/evdev/xdotool backend)
+- `handsi/actions/executor.py` — executes high-level actions (scroll, zoom, desktop switch)
+- `handsi/actions/mapping.py` — gesture → action mapping layer (YAML/TOML/JSON)
+- `handsi/actions/adapters/macos.py` — macOS adapter (Quartz / Accessibility APIs)
+- `handsi/actions/adapters/linux.py` — Linux adapter (uinput/evdev/xdotool backend)
 
 #### UI (Phase 2)
-- `airdesk/ui/tray.py` — tray app (toggle active mode, status, optional preview)
-- `airdesk/ui/teach_panel.py` — Teaching Mode panel (label, record, save, test)
+- `handsi/ui/tray.py` — tray app (toggle active mode, status, optional preview)
+- `handsi/ui/teach_panel.py` — Teaching Mode panel (label, record, save, test)
 
 #### Core
-- `airdesk/core/bus.py` — queues/events + shared runtime state
-- `airdesk/core/config.py` — config loading + validation
-- `airdesk/main.py` — entrypoint (tray vs headless)
-- `airdesk/logging.py` — structured logging + debug toggles
+- `handsi/core/bus.py` — queues/events + shared runtime state
+- `handsi/core/config.py` — config loading + validation
+- `handsi/main.py` — entrypoint (tray vs headless)
+- `handsi/logging.py` — structured logging + debug toggles
 
 ---
 

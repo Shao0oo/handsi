@@ -197,7 +197,7 @@ class PreviewWidget(QWidget):
 **Settings dialog:**
 ```python
 class SettingsDialog(QDialog):
-    def __init__(self, config: AirDeskConfig):
+    def __init__(self, config: HandsiConfig):
         # Create tabs: Camera, Gestures, Actions, Advanced
         # Bind config values to widgets
         # Save button → write YAML

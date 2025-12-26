@@ -10,7 +10,7 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, Field, field_validator
 
-from airdesk.core.logging import log_error, log_info
+from handsi.core.logging import log_error, log_info
 
 
 class CameraConfig(BaseModel):
@@ -73,7 +73,7 @@ class ActionConfig(BaseModel):
 class SystemConfig(BaseModel):
     """System-level settings."""
     log_level: str = Field(default="INFO")
-    log_file: str = Field(default="logs/airdesk.log")
+    log_file: str = Field(default="logs/handsi.log")
     preview: bool = Field(default=False)
     preview_show_features: bool = Field(default=False)
     debug: bool = Field(default=False)
@@ -96,7 +96,7 @@ class MacOSConfig(BaseModel):
     zoom_step: float = Field(default=0.1, ge=0.01, le=1.0)
 
 
-class AirDeskConfig(BaseModel):
+class HandsiConfig(BaseModel):
     """Root configuration model."""
     camera: CameraConfig = Field(default_factory=CameraConfig)
     tracking: TrackingConfig = Field(default_factory=TrackingConfig)
@@ -106,7 +106,7 @@ class AirDeskConfig(BaseModel):
     macos: MacOSConfig = Field(default_factory=MacOSConfig)
 
 
-def load_config(config_path: str | Path) -> AirDeskConfig:
+def load_config(config_path: str | Path) -> HandsiConfig:
     """
     Load and validate configuration from YAML file.
 
@@ -114,7 +114,7 @@ def load_config(config_path: str | Path) -> AirDeskConfig:
         config_path: Path to YAML config file
 
     Returns:
-        Validated AirDeskConfig instance
+        Validated HandsiConfig instance
 
     Raises:
         FileNotFoundError: If config file doesn't exist
@@ -133,7 +133,7 @@ def load_config(config_path: str | Path) -> AirDeskConfig:
         if raw_config is None:
             raw_config = {}
 
-        config = AirDeskConfig(**raw_config)
+        config = HandsiConfig(**raw_config)
         log_info(f"Config loaded from {config_path}")
         return config
 
@@ -146,6 +146,6 @@ def load_config(config_path: str | Path) -> AirDeskConfig:
         raise ValueError(f"Config validation failed: {e}")
 
 
-def get_default_config() -> AirDeskConfig:
+def get_default_config() -> HandsiConfig:
     """Get default configuration (all defaults)."""
-    return AirDeskConfig()
+    return HandsiConfig()
