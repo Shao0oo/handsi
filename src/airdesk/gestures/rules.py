@@ -102,8 +102,10 @@ class GestureDetector:
 
             two_hand_checks = [
                 self._detect_two_hands_pinch(lm_left, lm_right),
-                self._detect_two_hands_spread(lm_left, lm_right),
-                self._detect_two_hands_close(lm_left, lm_right)
+                self._detect_two_hands_open(lm_left, lm_right),
+                # TODO: Implement spread detection using _detect_swipe
+                # self._detect_two_hands_spread(lm_left, lm_right), 
+                # self._detect_two_hands_close(lm_left, lm_right)
             ]
 
             for result in two_hand_checks:
@@ -161,6 +163,23 @@ class GestureDetector:
         """
         distance = self._euclidean_distance(p1, p2)
         return distance / hand_scale
+    
+    def _normalized_position(self, p: tuple, hand_scale: float) -> tuple:
+        """
+        Normalize a point's position by hand scale.
+
+        Converts absolute coordinates to relative coordinates based on hand size.
+        This allows consistent gesture detection regardless of hand distance from camera.
+
+        Args:
+            p: Point (x, y, z) coordinates
+            hand_scale: Hand size reference (from _get_hand_scale)
+
+        Returns:
+            Normalized position as (x, y, z) tuple
+        """
+        return (p[0] / hand_scale, p[1] / hand_scale, p[2] / hand_scale)
+        
 
     def _is_finger_extended(self, lm: list, finger_tip_idx: int, finger_mcp_idx: int,
                            extension_ratio: float = 1.3) -> bool:
@@ -577,17 +596,42 @@ class GestureDetector:
 
     # === Two Hand Gestures ===
 
+    def _detect_two_hands_open(self, lm_left: list, lm_right: list) -> Optional[tuple[str, float, dict]]:
+        """Detect both hands making index pinch."""
+        left_open = self._detect_open_hand(lm_left)
+        right_open = self._detect_open_hand(lm_right)
+
+        if left_open and right_open:
+            confidence = (left_open[1] + right_open[1]) / 2.0 + 0.1  # Boost confidence slightly
+            return ("two_hands_open", confidence, {
+                "left_conf": left_open[1],
+                "right_conf": right_open[1]
+            })
+        return None
+    
     def _detect_two_hands_pinch(self, lm_left: list, lm_right: list) -> Optional[tuple[str, float, dict]]:
         """Detect both hands making index pinch."""
         left_pinch = self._detect_index_pinch(lm_left)
         right_pinch = self._detect_index_pinch(lm_right)
 
         if left_pinch and right_pinch:
-            confidence = (left_pinch[1] + right_pinch[1]) / 2
+            confidence = (left_pinch[1] + right_pinch[1]) / 2.0 + 0.1  # Boost confidence slightly
             return ("two_hands_pinch", confidence, {
                 "left_conf": left_pinch[1],
                 "right_conf": right_pinch[1]
             })
+        # elif left_pinch:
+        #     print("Left hand pinch detected, right hand not pinching")
+        #     return ("left_hand_pinch", left_pinch[1], {
+        #         "hand": "left",
+        #         "confidence": left_pinch[1]
+        #     })
+        # elif right_pinch:
+        #     print("Right hand pinch detected, left hand not pinching")
+        #     return ("right_hand_pinch", right_pinch[1], {
+        #         "hand": "right",
+        #         "confidence": right_pinch[1]
+        #     })
         return None
 
     def _detect_two_hands_spread(self, lm_left: list, lm_right: list) -> Optional[tuple[str, float, dict]]:
