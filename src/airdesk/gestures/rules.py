@@ -34,7 +34,7 @@ class GestureDetector:
         fist_threshold: float = 0.15,
         open_hand_distance_threshold: float = 0.25,
         open_hand_spread_threshold: float = 0.08,
-        swipe_velocity_threshold: float = 0.3,
+        swipe_velocity_threshold: float = 0.5,
         confidence_threshold: float = 0.7,
         history_length: int = 10
     ):
@@ -82,7 +82,7 @@ class GestureDetector:
                 self._detect_ring_pinch(lm),
                 self._detect_pinky_pinch(lm),
                 self._detect_fist(lm),
-                # self._detect_open_hand(lm),
+                self._detect_open_hand(lm),
                 self._detect_thumbs_up(lm),
                 self._detect_swipe(lm, hand_idx)
             ]
@@ -164,22 +164,25 @@ class GestureDetector:
         distance = self._euclidean_distance(p1, p2)
         return distance / hand_scale
     
-    def _normalized_position(self, p: tuple, hand_scale: float) -> tuple:
+    def _get_hand_center_of_mass(self, lm: list) -> tuple[float, float]:
         """
-        Normalize a point's position by hand scale.
+        Calculate hand center of mass (average of all 21 landmarks).
 
-        Converts absolute coordinates to relative coordinates based on hand size.
-        This allows consistent gesture detection regardless of hand distance from camera.
+        Returns 2D position (x, y) in normalized screen coordinates (0-1 range).
 
         Args:
-            p: Point (x, y, z) coordinates
-            hand_scale: Hand size reference (from _get_hand_scale)
+            lm: List of landmarks [(x, y, z), ...]
 
         Returns:
-            Normalized position as (x, y, z) tuple
+            (x, y) tuple representing center of mass in raw screen coordinates
         """
-        return (p[0] / hand_scale, p[1] / hand_scale, p[2] / hand_scale)
-        
+        x_coords = [p[0] for p in lm]
+        y_coords = [p[1] for p in lm]
+
+        center_x = sum(x_coords) / len(x_coords)
+        center_y = sum(y_coords) / len(y_coords)
+
+        return (center_x, center_y)
 
     def _is_finger_extended(self, lm: list, finger_tip_idx: int, finger_mcp_idx: int,
                            extension_ratio: float = 1.3) -> bool:
@@ -297,9 +300,13 @@ class GestureDetector:
             return None
 
         confidence = 1.0 - distance
+        position = self._get_hand_center_of_mass(lm)
+
         return ("index_pinch", confidence, {
             "distance": distance,
-            "extended_count": extended_count
+            "extended_count": extended_count,
+            "position": position,
+            "hand_scale": hand_scale
         })
 
     def _detect_middle_pinch(self, lm: list) -> Optional[tuple[str, float, dict]]:
@@ -325,9 +332,13 @@ class GestureDetector:
             return None
 
         confidence = 1.0 - distance
+        position = self._get_hand_center_of_mass(lm)
+
         return ("middle_pinch", confidence, {
             "distance": distance,
-            "extended_count": extended_count
+            "extended_count": extended_count,
+            "position": position,
+            "hand_scale": hand_scale
         })
 
     def _detect_ring_pinch(self, lm: list) -> Optional[tuple[str, float, dict]]:
@@ -353,9 +364,13 @@ class GestureDetector:
             return None
 
         confidence = 1.0 - distance
+        position = self._get_hand_center_of_mass(lm)
+
         return ("ring_pinch", confidence, {
             "distance": distance,
-            "extended_count": extended_count
+            "extended_count": extended_count,
+            "position": position,
+            "hand_scale": hand_scale
         })
 
     def _detect_pinky_pinch(self, lm: list) -> Optional[tuple[str, float, dict]]:
@@ -381,9 +396,13 @@ class GestureDetector:
             return None
 
         confidence = 1.0 - distance
+        position = self._get_hand_center_of_mass(lm)
+
         return ("pinky_pinch", confidence, {
             "distance": distance,
-            "extended_count": extended_count
+            "extended_count": extended_count,
+            "position": position,
+            "hand_scale": hand_scale
         })
 
     def _detect_fist(self, lm: list) -> Optional[tuple[str, float, dict]]:
@@ -413,9 +432,12 @@ class GestureDetector:
         # Calculate confidence based on how closed the fingers are
         # Since we already validated with ratio checks, just return high confidence
         confidence = min(closed_count / 5.0, 1.0)
+        position = self._get_hand_center_of_mass(lm)
 
         return ("fist", confidence, {
-            "closed_count": closed_count
+            "closed_count": closed_count,
+            "position": position,
+            "hand_scale": hand_scale
         })
 
     def _detect_open_hand(self, lm: list) -> Optional[tuple[str, float, dict]]:
@@ -441,6 +463,7 @@ class GestureDetector:
 
         # Require all 5 fingers to be extended
         if extended_count < 5:
+            print(f"Open hand: only {extended_count} fingers extended, need 5")
             return None
 
         # Secondary checks: normalized finger spread
@@ -449,20 +472,33 @@ class GestureDetector:
             self._normalized_distance(fingertips[i], fingertips[i + 1], hand_scale)
             for i in range(len(fingertips) - 1)
         ]
+        spreads_thumb = [
+            self._normalized_distance(fingertips[0], fingertips[i+1], hand_scale)
+            for i in range(len(fingertips) - 1)
+        ]
         avg_spread = np.mean(spreads)
+        min_spread = np.min(spreads_thumb)
 
         # Check minimum spread
         if avg_spread < self.open_hand_spread_threshold:
+            print(f"Open hand average spread too small: {avg_spread:.3f} < {self.open_hand_spread_threshold:.3f}")
+            return None
+        if min_spread < self.open_hand_distance_threshold:
+            print(f"Open hand spread too small: {min_spread:.3f} < {self.open_hand_distance_threshold:.3f}")
             return None
 
         # Calculate confidence based on spread
         conf_spread = min(avg_spread / 0.5, 1.0)
+        print(f"Open hand detected with average spread {avg_spread:.3f}, confidence {conf_spread:.2f}")
         confidence = conf_spread
+        position = self._get_hand_center_of_mass(lm)
 
         return ("open_hand", confidence, {
             "extended_count": extended_count,
-            "avg_spread": avg_spread
-        })  # type: ignore
+            "avg_spread": avg_spread,
+            "position": position,
+            "hand_scale": hand_scale
+        }) # type: ignore
 
     def _detect_thumbs_up(self, lm: list) -> Optional[tuple[str, float, dict]]:
         """Detect thumbs up (thumb extended upward, other fingers curled)."""
@@ -497,11 +533,14 @@ class GestureDetector:
         # Calculate normalized vertical distance
         vertical_distance = (wrist[1] - thumb_tip[1]) / hand_scale
         confidence = min(vertical_distance / 0.5, 1.0)
+        position = self._get_hand_center_of_mass(lm)
 
         return ("thumbs_up", confidence, {
             "vertical_distance": vertical_distance,
-            "closed_count": closed_count
-        })  # type: ignore
+            "closed_count": closed_count,
+            "position": position,
+            "hand_scale": hand_scale
+        })
 
     def _detect_swipe(self, lm: list, hand_idx: int) -> Optional[tuple[str, float, dict]]:
         """
@@ -529,14 +568,14 @@ class GestureDetector:
         self.wrist_history[hand_idx].append((wrist[0], wrist[1], current_time, hand_scale))
 
         # Need enough history to detect swipe
-        if len(self.wrist_history[hand_idx]) < 5:
+        if len(self.wrist_history[hand_idx]) < 3:
             print("Not enough history to detect swipe")
             return open_hand_result
 
         history = list(self.wrist_history[hand_idx])
 
-        # Calculate average velocity over last 5 frames
-        n = min(5, len(history))
+        # Calculate average velocity over last 3 frames
+        n = min(3, len(history))
         dx = sum(history[i][0] - history[i-1][0] for i in range(-n+1, 0)) if n > 1 else 0
         dy = sum(history[i][1] - history[i-1][1] for i in range(-n+1, 0)) if n > 1 else 0
         dt = history[-1][2] - history[-n][2]
@@ -561,34 +600,46 @@ class GestureDetector:
             # Return the dominant direction
             if abs_vx > abs_vy:
                 # Horizontal swipe (left/right)
+                position = self._get_hand_center_of_mass(lm)
+                hand_scale = self._get_hand_scale(lm)
                 if velocity_x > 0:
                     confidence = min(abs_vx * 5, 1.0)  # TODO: tune this multiplier
                     return ("swipe_right", confidence, {
                         "velocity_x": velocity_x,
-                        "velocity_y": velocity_y
+                        "velocity_y": velocity_y,
+                        "position": position,
+                        "hand_scale": hand_scale
                     })
                 else:
                     confidence = min(abs_vx * 5, 1.0)  # TODO: tune this multiplier
                     return ("swipe_left", confidence, {
                         "velocity_x": velocity_x,
-                        "velocity_y": velocity_y
+                        "velocity_y": velocity_y,
+                        "position": position,
+                        "hand_scale": hand_scale
                     })
             else:
                 # Vertical swipe (up/down)
                 # Note: in image coordinates, lower y = higher in real space
+                position = self._get_hand_center_of_mass(lm)
+                hand_scale = self._get_hand_scale(lm)
                 if velocity_y < 0:
                     confidence = min(abs_vy * 5, 1.0)
                     print(f"Swipe up detected with confidence {confidence:.2f}")
                     return ("swipe_up", confidence, {
                         "velocity_x": velocity_x,
-                        "velocity_y": velocity_y
+                        "velocity_y": velocity_y,
+                        "position": position,
+                        "hand_scale": hand_scale
                     })
                 else:
                     confidence = min(abs_vy * 5, 1.0)
                     print(f"Swipe down detected with confidence {confidence:.2f}")
                     return ("swipe_down", confidence, {
                         "velocity_x": velocity_x,
-                        "velocity_y": velocity_y
+                        "velocity_y": velocity_y,
+                        "position": position,
+                        "hand_scale": hand_scale
                     })
 
         # No swipe detected, but hand is open - return None so open_hand can fire
@@ -597,15 +648,26 @@ class GestureDetector:
     # === Two Hand Gestures ===
 
     def _detect_two_hands_open(self, lm_left: list, lm_right: list) -> Optional[tuple[str, float, dict]]:
-        """Detect both hands making index pinch."""
+        """Detect both hands making open hand."""
         left_open = self._detect_open_hand(lm_left)
         right_open = self._detect_open_hand(lm_right)
 
         if left_open and right_open:
             confidence = (left_open[1] + right_open[1]) / 2.0 + 0.1  # Boost confidence slightly
+            left_position = self._get_hand_center_of_mass(lm_left)
+            right_position = self._get_hand_center_of_mass(lm_right)
+
+            # Average hand scale for two hands
+            left_scale = self._get_hand_scale(lm_left)
+            right_scale = self._get_hand_scale(lm_right)
+            avg_hand_scale = (left_scale + right_scale) / 2.0
+
             return ("two_hands_open", confidence, {
                 "left_conf": left_open[1],
-                "right_conf": right_open[1]
+                "right_conf": right_open[1],
+                "left_position": left_position,
+                "right_position": right_position,
+                "hand_scale": avg_hand_scale
             })
         return None
     
@@ -616,22 +678,21 @@ class GestureDetector:
 
         if left_pinch and right_pinch:
             confidence = (left_pinch[1] + right_pinch[1]) / 2.0 + 0.1  # Boost confidence slightly
+            left_position = self._get_hand_center_of_mass(lm_left)
+            right_position = self._get_hand_center_of_mass(lm_right)
+
+            # Average hand scale for two hands
+            left_scale = self._get_hand_scale(lm_left)
+            right_scale = self._get_hand_scale(lm_right)
+            avg_hand_scale = (left_scale + right_scale) / 2.0
+
             return ("two_hands_pinch", confidence, {
                 "left_conf": left_pinch[1],
-                "right_conf": right_pinch[1]
+                "right_conf": right_pinch[1],
+                "left_position": left_position,
+                "right_position": right_position,
+                "hand_scale": avg_hand_scale
             })
-        # elif left_pinch:
-        #     print("Left hand pinch detected, right hand not pinching")
-        #     return ("left_hand_pinch", left_pinch[1], {
-        #         "hand": "left",
-        #         "confidence": left_pinch[1]
-        #     })
-        # elif right_pinch:
-        #     print("Right hand pinch detected, left hand not pinching")
-        #     return ("right_hand_pinch", right_pinch[1], {
-        #         "hand": "right",
-        #         "confidence": right_pinch[1]
-        #     })
         return None
 
     def _detect_two_hands_spread(self, lm_left: list, lm_right: list) -> Optional[tuple[str, float, dict]]:
@@ -667,9 +728,15 @@ class GestureDetector:
         spread_threshold = 0.5  # 50% of hand size per second
         if velocity > spread_threshold:
             confidence = min(velocity / 2.0, 1.0)
+            left_position = self._get_hand_center_of_mass(lm_left)
+            right_position = self._get_hand_center_of_mass(lm_right)
+
             return ("two_hands_spread", confidence, {
                 "velocity": velocity,
-                "distance": distance
+                "distance": distance,
+                "left_position": left_position,
+                "right_position": right_position,
+                "hand_scale": avg_hand_scale
             })
 
         return None
@@ -707,9 +774,15 @@ class GestureDetector:
         close_threshold = -0.5  # -50% of hand size per second
         if velocity < close_threshold:
             confidence = min(abs(velocity) / 2.0, 1.0)
+            left_position = self._get_hand_center_of_mass(lm_left)
+            right_position = self._get_hand_center_of_mass(lm_right)
+
             return ("two_hands_close", confidence, {
                 "velocity": velocity,
-                "distance": distance
+                "distance": distance,
+                "left_position": left_position,
+                "right_position": right_position,
+                "hand_scale": avg_hand_scale
             })
 
         return None
