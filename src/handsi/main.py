@@ -1,5 +1,5 @@
 """
-AirDesk main entrypoint.
+Handsi main entrypoint.
 
 Phase 1: Runs capture (Thread 1) and tracking (Thread 2) only.
 Optionally displays preview window (Thread 5).
@@ -12,21 +12,21 @@ import sys
 import time
 from pathlib import Path
 
-from airdesk.actions.executor import ActionExecutorThread
-from airdesk.core.bus import RuntimeState, create_queues
-from airdesk.core.config import load_config
-from airdesk.core.logging import log_info, setup_logging
-from airdesk.core.utils import find_config_path
-from airdesk.gestures.infer import GestureInferenceThread
-from airdesk.ui.preview import PreviewWindow
-from airdesk.vision.capture import CaptureThread
-from airdesk.vision.tracking import TrackingThread
+from handsi.actions.executor import ActionExecutorThread
+from handsi.core.bus import RuntimeState, create_queues
+from handsi.core.config import load_config
+from handsi.core.logging import log_info, setup_logging
+from handsi.core.utils import find_config_path
+from handsi.gestures.infer import GestureInferenceThread
+from handsi.ui.preview import PreviewWindow
+from handsi.vision.capture import CaptureThread
+from handsi.vision.tracking import TrackingThread
 
 
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
-        description="AirDesk - Contactless Desktop Control (Phase 1: Capture + Tracking)"
+        description="Handsi - Contactless Desktop Control (Phase 1: Capture + Tracking)"
     )
 
     parser.add_argument(
@@ -53,7 +53,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     """
-    Main entrypoint for AirDesk Phase 1.
+    Main entrypoint for Handsi Phase 1.
 
     Returns:
         Exit code (0 for success, 1 for error)
@@ -94,7 +94,7 @@ def main() -> int:
     )
 
     log_info("=" * 60)
-    log_info("AirDesk Phase 1 - Capture + Tracking + Gestures + Actions")
+    log_info("Handsi Phase 1 - Capture + Tracking + Gestures + Actions")
     log_info("=" * 60)
     log_info(f"Config: {args.config}")
     log_info(f"Preview: {config.system.preview}")
@@ -208,7 +208,7 @@ def main() -> int:
     gesture_thread.join(timeout=2.0)
     action_thread.join(timeout=2.0)
 
-    log_info("AirDesk stopped")
+    log_info("Handsi stopped")
     return 0
 
 

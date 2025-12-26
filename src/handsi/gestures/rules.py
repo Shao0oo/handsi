@@ -12,7 +12,7 @@ from typing import Any, Optional
 
 import numpy as np
 
-from airdesk.core.logging import log_debug
+from handsi.core.logging import log_debug
 
 
 class GestureDetector:

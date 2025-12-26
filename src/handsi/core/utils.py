@@ -12,7 +12,7 @@ def get_project_root() -> Path:
     Returns:
         Path to project root
     """
-    # Go up from src/airdesk/core/utils.py to project root
+    # Go up from src/handsi/core/utils.py to project root
     return Path(__file__).parent.parent.parent.parent
 
 

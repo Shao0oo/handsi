@@ -8,17 +8,17 @@ and pushes to GestureQueue.
 import threading
 from typing import Optional
 
-from airdesk.core.bus import (
+from handsi.core.bus import (
     FeatureQueue,
     FeatureVector,
     GestureEvent,
     GestureQueue,
     RuntimeState,
 )
-from airdesk.core.config import GestureConfig
-from airdesk.core.logging import log_debug, log_error, log_info, log_warning
-from airdesk.gestures.rules import GestureDetector
-from airdesk.gestures.smoothing import TemporalSmoother
+from handsi.core.config import GestureConfig
+from handsi.core.logging import log_debug, log_error, log_info, log_warning
+from handsi.gestures.rules import GestureDetector
+from handsi.gestures.smoothing import TemporalSmoother
 
 
 class GestureInferenceThread(threading.Thread):

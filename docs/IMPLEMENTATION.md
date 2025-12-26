@@ -1,7 +1,7 @@
 # implementation.md — Phase 1 (CLI MVP)
 
 ## Purpose
-Phase 1 delivers a **command-line** AirDesk that:
+Phase 1 delivers a **command-line** Handsi that:
 - Captures webcam frames
 - Tracks hands (optionally head/pose later)
 - Decodes a small, reliable gesture set
@@ -216,7 +216,7 @@ actions:
 
 system:
   log_level: INFO           # DEBUG | INFO | WARN | ERROR
-  log_file: logs/airdesk.log
+  log_file: logs/handsi.log
   preview: false            # override with --preview
   debug: false              # override with --debug
 
@@ -229,7 +229,7 @@ macos:
 
 ### Config Validation
 
-- Loaded via `airdesk/core/config.py`
+- Loaded via `handsi/core/config.py`
 - Pydantic models for validation (type safety, bounds checking)
 - Errors logged as `CFG-xxx` if invalid
 
@@ -239,43 +239,43 @@ macos:
 
 ### Core Modules
 
-**Capture** (`airdesk/vision/capture.py`)
+**Capture** (`handsi/vision/capture.py`)
 - `CaptureThread(threading.Thread)`: Webcam capture with adaptive FPS
 - `get_frame()`: Non-blocking frame retrieval
 - Error codes: `CAP-xxx`
 
-**Tracking + Features** (`airdesk/vision/tracking.py`)
+**Tracking + Features** (`handsi/vision/tracking.py`)
 - `TrackingThread(threading.Thread)`: MediaPipe processing + feature extraction (inline)
 - `MediaPipeTracker`: Wrapper for MediaPipe Hands
 - `extract_features(landmarks)`: Landmark → normalized feature vector
 - Updates `RuntimeState.activity_level` based on detection
 - Error codes: `TRK-xxx`, `FEA-xxx`
 
-**Gestures** (`airdesk/gestures/`)
+**Gestures** (`handsi/gestures/`)
 - `rules.py`: Rule-based detector (pinch, fist, swipe, open palm)
 - `infer.py`: `GestureInferenceThread` (pops features, detects gestures)
 - `smoothing.py`: Temporal averaging over sliding window
 - Error codes: `GES-xxx`
 
-**Actions** (`airdesk/actions/`)
+**Actions** (`handsi/actions/`)
 - `executor.py`: `ActionExecutorThread` with **state machine** (latch, debounce)
 - `mapping.py`: Loads gesture → action mappings from config
 - `adapters/macos.py`: macOS action implementations (Quartz, Accessibility APIs)
 - `adapters/linux.py`: Linux stub (Phase 2)
 - Error codes: `ACT-xxx`
 
-**Preview** (`airdesk/ui/preview.py`)
+**Preview** (`handsi/ui/preview.py`)
 - `PreviewThread(threading.Thread)`: OpenCV window rendering (optional)
 - Receives frame copies + overlay data (landmarks, gesture labels, FPS)
 - Non-blocking (drops frames if can't keep up)
 - Error codes: `GUI-xxx`
 
-**Core Infrastructure** (`airdesk/core/`)
+**Core Infrastructure** (`handsi/core/`)
 - `bus.py`: Queue definitions + `RuntimeState` class
 - `config.py`: YAML loading + Pydantic validation
 - `logging.py`: Structured logging with error code prefixes
 
-**Entrypoint** (`airdesk/main.py`)
+**Entrypoint** (`handsi/main.py`)
 - CLI argument parsing (`--preview`, `--debug`, `--config`)
 - Thread lifecycle management (start, join, graceful shutdown)
 - Signal handling (Ctrl+C)
@@ -286,5 +286,5 @@ macos:
 You can run:
 
 ```bash
-python -m airdesk.main --preview --debug --config config/default.yaml
+python -m handsi.main --preview --debug --config config/default.yaml
 ```

@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "airdesk"
+name = "handsi"
 version = "0.1.0"
 description = "Contactless desktop control using hand/head/body tracking"
 readme = "README.md"
@@ -61,4 +61,4 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [project.scripts]
-airdesk = "airdesk.main:main"
+handsi = "handsi.main:main"

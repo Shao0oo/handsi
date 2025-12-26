@@ -8,8 +8,8 @@ for mouse/keyboard control and system-level actions.
 import subprocess
 from typing import Literal
 
-from airdesk.actions.adapters.base import ActionAdapter
-from airdesk.core.logging import log_debug, log_error, log_info, log_warning
+from handsi.actions.adapters.base import ActionAdapter
+from handsi.core.logging import log_debug, log_error, log_info, log_warning
 
 try:
     from Quartz import (

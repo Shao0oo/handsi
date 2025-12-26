@@ -59,7 +59,7 @@ actions:
 
 system:
   log_level: INFO           # DEBUG | INFO | WARN | ERROR
-  log_file: logs/airdesk.log
+  log_file: logs/handsi.log
   preview: false            # override with --preview
   preview_show_features: false  # toggle with 'f' key in preview window
   debug: false              # override with --debug

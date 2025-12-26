@@ -1,6 +1,6 @@
 # Coding Guidelines for Claude
 
-This document outlines coding standards and best practices for the AirDesk project to maintain code quality and modularity.
+This document outlines coding standards and best practices for the Handsi project to maintain code quality and modularity.
 
 ## Core Principles
 
@@ -26,7 +26,7 @@ def find_config_path(config_arg):  # ✅ Utility in dedicated module
     # ...implementation...
 
 # main.py
-from airdesk.core.utils import find_config_path
+from handsi.core.utils import find_config_path
 
 def main():
     config_path = find_config_path(args.config)
@@ -96,7 +96,7 @@ Never in:
 
 ### Imports
 - Group imports: stdlib → third-party → local
-- Use absolute imports: `from airdesk.core.utils import ...`
+- Use absolute imports: `from handsi.core.utils import ...`
 - Never use relative imports across packages
 
 ### Docstrings

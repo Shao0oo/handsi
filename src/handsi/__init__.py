@@ -1,5 +1,5 @@
 """
-AirDesk - Contactless Desktop Control
+Handsi - Contactless Desktop Control
 
 Phase 1: Hand tracking with adaptive FPS control.
 """
@@ -8,7 +8,7 @@ __version__ = "0.1.0"
 __author__ = "Alex Shao"
 
 # Expose main components for easier imports
-from airdesk.core.bus import (
+from handsi.core.bus import (
     ActivityLevel,
     Frame,
     FeatureVector,
@@ -16,8 +16,8 @@ from airdesk.core.bus import (
     RuntimeState,
     create_queues,
 )
-from airdesk.core.config import AirDeskConfig, load_config
-from airdesk.core.logging import setup_logging
+from handsi.core.config import HandsiConfig, load_config
+from handsi.core.logging import setup_logging
 
 __all__ = [
     # Version
@@ -31,7 +31,7 @@ __all__ = [
     "RuntimeState",
     "create_queues",
     # Config
-    "AirDeskConfig",
+    "HandsiConfig",
     "load_config",
     # Logging
     "setup_logging",

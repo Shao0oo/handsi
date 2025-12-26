@@ -11,8 +11,8 @@ Handles:
 import time
 from typing import Optional
 
-from airdesk.core.bus import GestureEvent, RuntimeState
-from airdesk.core.logging import log_debug
+from handsi.core.bus import GestureEvent, RuntimeState
+from handsi.core.logging import log_debug
 
 
 class GestureStateMachine:
