@@ -78,7 +78,7 @@ class TemporalSmoother:
             gesture_confidences[name].append(conf)
 
         # Find most common gesture
-        most_common_gesture = max(gesture_counts, key=gesture_counts.get)
+        most_common_gesture = max(gesture_counts, key=gesture_counts.get)  # type: ignore
         occurrence_ratio = gesture_counts[most_common_gesture] / self.window_size
 
         # Check if it meets consistency threshold
@@ -94,7 +94,7 @@ class TemporalSmoother:
                 f"({occurrence_ratio:.1%} consistency, {self.current_confidence:.2f} confidence)"
             )
 
-            return (self.current_gesture, self.current_confidence, gesture_metadata[most_common_gesture])
+            return (self.current_gesture, self.current_confidence, gesture_metadata[most_common_gesture])  # type: ignore
 
         # Not consistent enough - no gesture confirmed
         if occurrence_ratio < self.consistency_threshold:
