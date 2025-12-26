@@ -38,6 +38,16 @@ class ActionAdapter(ABC):
         pass
 
     @abstractmethod
+    def get_mouse_position_normalized(self) -> tuple[float, float]:
+        """
+        Get current mouse cursor position in normalized coordinates.
+
+        Returns:
+            Tuple of (x, y) where x and y are in range [0, 1] (screen percentage)
+        """
+        pass
+
+    @abstractmethod
     def move_mouse(
         self,
         x: float,

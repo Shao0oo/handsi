@@ -489,7 +489,7 @@ class GestureDetector:
 
         # Calculate confidence based on spread
         conf_spread = min(avg_spread / 0.5, 1.0)
-        print(f"Open hand detected with average spread {avg_spread:.3f}, confidence {conf_spread:.2f}")
+        # print(f"Open hand detected with average spread {avg_spread:.3f}, confidence {conf_spread:.2f}")
         confidence = conf_spread
         position = self._get_hand_center_of_mass(lm)
 

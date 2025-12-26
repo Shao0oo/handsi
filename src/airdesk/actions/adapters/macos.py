@@ -93,6 +93,39 @@ class MacOSAdapter(ActionAdapter):
         )
         return True
 
+    def get_mouse_position_normalized(self) -> tuple[float, float]:
+        """
+        Get current mouse cursor position in normalized coordinates.
+
+        Returns:
+            Tuple of (x, y) where x and y are in range [0, 1] (screen percentage)
+        """
+        if not self._initialized:
+            log_error("ACT-001", "Adapter not initialized")
+            return (0.5, 0.5)  # Fallback to center
+
+        try:
+            # Get current mouse position using NSEvent
+            mouse_loc = NSEvent.mouseLocation()
+            # Note: NSEvent.mouseLocation() returns Cocoa coordinates (origin at bottom-left)
+            # Need to convert to Quartz coordinates (origin at top-left)
+            pixel_x = mouse_loc.x
+            pixel_y = self._screen_height - mouse_loc.y
+
+            # Normalize to [0, 1] range
+            normalized_x = pixel_x / self._screen_width
+            normalized_y = pixel_y / self._screen_height
+
+            # Clamp to [0, 1]
+            normalized_x = max(0.0, min(1.0, normalized_x))
+            normalized_y = max(0.0, min(1.0, normalized_y))
+
+            return (normalized_x, normalized_y)
+
+        except Exception as e:
+            log_error("ACT-001", f"Get mouse position failed: {e}")
+            return (0.5, 0.5)  # Fallback to center
+
     def move_mouse(
         self,
         x: float,

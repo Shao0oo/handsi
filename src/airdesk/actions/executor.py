@@ -57,8 +57,9 @@ class ActionExecutorThread(threading.Thread):
             latch_cooldown_ms=500
         )
 
-        # Smoothed cursor position for mouse movement
-        self._smoothed_cursor = (0.5, 0.5)  # Start at screen center
+        # Relative hand tracking for mouse movement
+        self._hand_anchor_pos: Optional[tuple[float, float]] = None  # Where hand was when gesture started
+        self._last_mouse_move_time = 0.0  # Track when mouse_move last executed
 
     def run(self) -> None:
         """Main action executor loop."""
@@ -223,13 +224,16 @@ class ActionExecutorThread(threading.Thread):
 
     def _action_mouse_move(self) -> bool:
         """
-        Execute mouse movement action using hand position.
+        Execute mouse movement action using relative hand tracking.
+
+        Tracks hand movement delta from an anchor point, preventing cursor
+        teleporting when hand reopens at a new position.
 
         Returns:
             True if successful, False otherwise
         """
         with self.runtime_state.lock:
-            target_pos = self.runtime_state.cursor_position
+            hand_pos = self.runtime_state.cursor_position
             hand_scale = self.runtime_state.hand_scale
 
         if hand_scale == 0.0:
@@ -239,46 +243,61 @@ class ActionExecutorThread(threading.Thread):
 
         # Apply X-coordinate mirroring if enabled (for natural camera movement)
         if self.action_config.mouse.mirror_x:
-            target_pos = (1.0 - target_pos[0], target_pos[1])
+            hand_pos = (1.0 - hand_pos[0], hand_pos[1])
 
-        log_debug(f"Hand position: {target_pos}, hand_scale: {hand_scale:.3f}")
+        # Check if gesture restarted after being stopped (staleness check)
+        current_time = time.time()
+        time_since_last_call = current_time - self._last_mouse_move_time
+        staleness_threshold = 0.5  # 500ms - gesture is considered "restarted" if not called recently
 
-        # Store previous smoothed position (for delta calculation)
-        previous_pos = self._smoothed_cursor
+        if time_since_last_call > staleness_threshold or self._hand_anchor_pos is None:
+            # Gesture restarted - set anchor to current hand position
+            # Cursor stays where it is (no movement)
+            self._hand_anchor_pos = hand_pos
+            self._last_mouse_move_time = current_time
+            log_debug(f"Gesture restarted after {time_since_last_call:.2f}s - anchored to hand position {hand_pos}")
+            return True  # Don't move cursor on first frame after restart
 
-        # Apply smoothing
-        self._smoothed_cursor = smooth_position(
-            self._smoothed_cursor,
-            target_pos,
-            self.action_config.mouse.smoothing_factor
-        )
+        self._last_mouse_move_time = current_time
 
-        log_debug(f"Smoothed position: {self._smoothed_cursor}")
+        # Calculate hand movement delta from anchor point
+        hand_dx = hand_pos[0] - self._hand_anchor_pos[0]
+        hand_dy = hand_pos[1] - self._hand_anchor_pos[1]
 
-        # Calculate delta between current and previous smoothed positions
-        # This measures actual cursor movement, not convergence error
-        dx = self._smoothed_cursor[0] - previous_pos[0]
-        dy = self._smoothed_cursor[1] - previous_pos[1]
+        log_debug(f"Hand delta from anchor: ({hand_dx:.4f}, {hand_dy:.4f})")
 
-        print(f"Mouse move delta: ({dx:.4f}, {dy:.4f})")
+        # Apply dead zone to hand movement delta (ignore small jitters)
+        hand_dx, hand_dy = apply_dead_zone(hand_dx, hand_dy, self.action_config.mouse.dead_zone)
 
-        # Apply dead zone (ignore small jitters)
-        dx, dy = apply_dead_zone(dx, dy, self.action_config.mouse.dead_zone)
-
-        if dx == 0.0 and dy == 0.0:
+        if hand_dx == 0.0 and hand_dy == 0.0:
             # Movement within dead zone, skip
-            log_debug(f"Dead zone: skipped (delta magnitude below {self.action_config.mouse.dead_zone:.4f})")
+            log_debug(f"Dead zone: hand movement below {self.action_config.mouse.dead_zone:.4f}")
             return True
 
-        # Move mouse (normalized coordinates)
-        log_debug(f"Moving mouse to normalized ({self._smoothed_cursor[0]:.3f}, {self._smoothed_cursor[1]:.3f})")
-        result = self.adapter.move_mouse( # type: ignore
-            self._smoothed_cursor[0],
-            self._smoothed_cursor[1],
+        # Get current actual mouse cursor position
+        current_mouse_x, current_mouse_y = self.adapter.get_mouse_position_normalized()  # type: ignore
+
+        # Apply hand delta to current mouse position
+        new_mouse_x = current_mouse_x + hand_dx
+        new_mouse_y = current_mouse_y + hand_dy
+
+        # Clamp to screen bounds [0, 1]
+        new_mouse_x = max(0.0, min(1.0, new_mouse_x))
+        new_mouse_y = max(0.0, min(1.0, new_mouse_y))
+
+        log_debug(f"Moving mouse from ({current_mouse_x:.3f}, {current_mouse_y:.3f}) to ({new_mouse_x:.3f}, {new_mouse_y:.3f})")
+
+        # Move mouse to new absolute position
+        result = self.adapter.move_mouse(  # type: ignore
+            new_mouse_x,
+            new_mouse_y,
             normalized=True,
             relative=False
         )
-        log_debug(f"Mouse move result: {result}")
+
+        # Update anchor to current hand position for continuous tracking
+        self._hand_anchor_pos = hand_pos
+
         return result
 
     def _action_click(self, button: str = 'left') -> bool:
