@@ -370,13 +370,13 @@ class PreviewWindow:
 
         h, w, _ = frame.shape
 
-        # Position at bottom center
-        overlay_width = 400
-        overlay_height = 100
+        # Position at bottom center (smaller, more professional)
+        overlay_width = 280
+        overlay_height = 60
         overlay_x = (w - overlay_width) // 2
-        overlay_y = h - overlay_height - 20
+        overlay_y = h - overlay_height - 15
 
-        # Draw background rectangle
+        # Draw background rectangle (semi-transparent black)
         cv2.rectangle(
             frame,
             (overlay_x, overlay_y),
@@ -389,33 +389,33 @@ class PreviewWindow:
             (overlay_x, overlay_y),
             (overlay_x + overlay_width, overlay_y + overlay_height),
             color,
-            3  # Border
+            1  # Thinner border
         )
 
-        # Draw gesture name
-        text_y = overlay_y + 40
+        # Draw gesture name (smaller, cleaner font)
+        text_y = overlay_y + 25
         cv2.putText(
             frame,
             gesture_display,
-            (overlay_x + 20, text_y),
+            (overlay_x + 15, text_y),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.8,
+            0.5,
             color,
-            2
+            1
         )
 
-        # Draw confidence bar
-        bar_x = overlay_x + 20
-        bar_y = overlay_y + 60
-        bar_width = overlay_width - 40
-        bar_height = 20
+        # Draw confidence bar (smaller, cleaner)
+        bar_x = overlay_x + 15
+        bar_y = overlay_y + 35
+        bar_width = overlay_width - 80
+        bar_height = 12
 
         # Background bar
         cv2.rectangle(
             frame,
             (bar_x, bar_y),
             (bar_x + bar_width, bar_y + bar_height),
-            (50, 50, 50),
+            (40, 40, 40),
             -1
         )
 
@@ -435,19 +435,19 @@ class PreviewWindow:
             (bar_x, bar_y),
             (bar_x + bar_width, bar_y + bar_height),
             color,
-            2
+            1
         )
 
-        # Confidence percentage
+        # Confidence percentage (smaller)
         conf_text = f"{int(confidence * 100)}%"
         cv2.putText(
             frame,
             conf_text,
-            (bar_x + bar_width + 10, bar_y + 15),
+            (bar_x + bar_width + 8, bar_y + 10),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.5,
+            0.4,
             color,
-            2
+            1
         )
 
     def cleanup(self) -> None:
