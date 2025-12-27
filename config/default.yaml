@@ -43,7 +43,8 @@ actions:
     # Phase 1: Implemented gestures with actions
     open_hand: mouse_move           # Continuous: hand position controls cursor
     index_pinch: click               # Single: left click
-    middle_pinch: double_click
+    two_finger_pinch: double_click
+    middle_pinch: right_click
 
     # Ready to map (actions implemented, just add gesture mapping here):
     # fist: scroll_down

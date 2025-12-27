@@ -19,4 +19,7 @@
    pip install -e .
    ```
 
-### TODO: Per OS setup for permissions
+## OS Specifics
+
+- [SETUP_MACOS.md](SETUP_MACOS.md)
+<!-- - [SETUP_LINUX.md](SETUP_LINUX.md) -->
