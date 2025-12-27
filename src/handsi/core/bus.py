@@ -94,11 +94,11 @@ class RuntimeState:
             elif time_since_gesture < 1.0:
                 # Active if gesture in last second
                 new_level = ActivityLevel.ACTIVE
-                new_fps = 10
+                new_fps = 30 # TODO: Use yaml for these. This should NOT be hardcoded.
             else:
                 # Hands present but no recent gesture
                 new_level = ActivityLevel.ATTENTIVE
-                new_fps = 5
+                new_fps = 10
 
             # Update if changed
             if new_level != self.activity_level:

@@ -38,7 +38,6 @@ class TrackingConfig(BaseModel):
     idle_timeout: float = Field(default=3.0, ge=0.5, le=10.0)
     attentive_timeout: float = Field(default=2.0, ge=0.5, le=10.0)
 
-
 class GestureConfig(BaseModel):
     """Gesture recognition settings."""
     debounce_ms: int = Field(default=300, ge=0, le=2000)
@@ -62,6 +61,7 @@ class MouseConfig(BaseModel):
     smoothing_factor: float = Field(default=0.3, ge=0.0, le=1.0)
     dead_zone: float = Field(default=0.02, ge=0.0, le=0.1)
     sensitivity: float = Field(default=1.5, ge=0.1, le=5.0)
+    interpolation_rate: float = Field(default=60.0, ge=10.0, le=120.0)
 
 
 class ActionConfig(BaseModel):

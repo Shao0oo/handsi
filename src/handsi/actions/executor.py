@@ -65,6 +65,13 @@ class ActionExecutorThread(threading.Thread):
         self._last_tracked_gesture: Optional[str] = None  # Previous gesture state
         self._held_mouse_button: Optional[str] = None  # Which button is currently held
 
+        # Smooth interpolation state
+        self._interpolation_target_pos: Optional[tuple[float, float]] = None  # Target hand position
+        self._interpolation_last_update_time: float = 0.0  # When target was last updated
+        self._interpolation_rate: float = action_config.mouse.interpolation_rate  # Hz - from config
+        self._interpolation_enabled: bool = False  # Whether interpolation is active
+        self._interpolation_lock = threading.Lock()  # Thread-safe access to interpolation state
+
     def run(self) -> None:
         """Main action executor loop."""
         log_info(f"{self.name} started")
@@ -73,6 +80,14 @@ class ActionExecutorThread(threading.Thread):
         if not self._initialize_adapter():
             log_error("ACT-004", "Failed to initialize action adapter")
             return
+
+        # Start interpolation timer thread
+        interpolation_thread = threading.Thread(
+            target=self._interpolation_loop,
+            name="InterpolationThread",
+            daemon=True
+        )
+        interpolation_thread.start()
 
         try:
             while not self.runtime_state.shutdown_requested:
@@ -85,6 +100,114 @@ class ActionExecutorThread(threading.Thread):
             if self.adapter:
                 self.adapter.cleanup()
             log_info(f"{self.name} stopped")
+
+    def _interpolation_loop(self) -> None:
+        """
+        Background thread that smoothly interpolates cursor position at high frequency (60 Hz).
+
+        Runs independently of gesture detection rate (10 Hz), providing smooth cursor
+        movement by interpolating between gesture updates.
+        """
+        log_info("Interpolation thread started")
+        sleep_time = 1.0 / self._interpolation_rate
+
+        try:
+            while not self.runtime_state.shutdown_requested:
+                # Check if interpolation is enabled
+                with self._interpolation_lock:
+                    enabled = self._interpolation_enabled
+                    target_pos = self._interpolation_target_pos
+                    last_update_time = self._interpolation_last_update_time
+
+                if not enabled or target_pos is None:
+                    # No active mouse_move gesture, sleep and continue
+                    time.sleep(sleep_time)
+                    continue
+
+                # Calculate how stale the target position is
+                current_time = time.time()
+                staleness = current_time - last_update_time
+
+                # If target is too stale (>500ms), stop interpolation
+                # This prevents cursor from moving when hand is no longer detected
+                if staleness > 0.5:
+                    with self._interpolation_lock:
+                        self._interpolation_enabled = False
+                    log_debug("Interpolation disabled due to stale target")
+                    time.sleep(sleep_time)
+                    continue
+
+                # Perform smooth cursor movement
+                self._interpolate_cursor_to_target(target_pos)
+
+                # Sleep to maintain 60 Hz rate
+                time.sleep(sleep_time)
+
+        except Exception as e:
+            log_error("ACT-005", f"Interpolation loop error: {e}")
+        finally:
+            log_info("Interpolation thread stopped")
+
+    def _interpolate_cursor_to_target(self, target_hand_pos: tuple[float, float]) -> None:
+        """
+        Move cursor smoothly toward target hand position.
+
+        Uses exponential smoothing (EMA) to create natural, responsive movement.
+
+        Args:
+            target_hand_pos: Target hand position (normalized, 0-1)
+        """
+        if not self.adapter:
+            return
+
+        # Apply X-coordinate mirroring if enabled
+        if self.action_config.mouse.mirror_x:
+            target_hand_pos = (1.0 - target_hand_pos[0], target_hand_pos[1])
+
+        # Initialize anchor on first call
+        if self._hand_anchor_pos is None:
+            self._hand_anchor_pos = target_hand_pos
+            log_debug(f"Interpolation anchor initialized to {target_hand_pos}")
+            return
+
+        # Calculate hand movement delta from anchor
+        hand_dx = target_hand_pos[0] - self._hand_anchor_pos[0]
+        hand_dy = target_hand_pos[1] - self._hand_anchor_pos[1]
+
+        # Apply dead zone (ignore tiny jitters)
+        from handsi.actions.adapters.base import apply_dead_zone
+        hand_dx, hand_dy = apply_dead_zone(hand_dx, hand_dy, self.action_config.mouse.dead_zone)
+
+        if hand_dx == 0.0 and hand_dy == 0.0:
+            return
+
+        # Get current mouse position
+        current_mouse_x, current_mouse_y = self.adapter.get_mouse_position_normalized()  # type: ignore
+
+        # Calculate target mouse position (anchor + delta)
+        target_mouse_x = current_mouse_x + hand_dx
+        target_mouse_y = current_mouse_y + hand_dy
+
+        # Clamp to screen bounds
+        target_mouse_x = max(0.0, min(1.0, target_mouse_x))
+        target_mouse_y = max(0.0, min(1.0, target_mouse_y))
+
+        # Apply exponential moving average (EMA) for smoothness
+        # Lower alpha = more smoothing (slower), higher alpha = less smoothing (faster)
+        alpha = 1.0 - self.action_config.mouse.smoothing_factor
+        new_mouse_x = current_mouse_x + alpha * (target_mouse_x - current_mouse_x) * self.action_config.mouse.sensitivity
+        new_mouse_y = current_mouse_y + alpha * (target_mouse_y - current_mouse_y) * self.action_config.mouse.sensitivity
+
+        # Move mouse
+        self.adapter.move_mouse(  # type: ignore
+            new_mouse_x,
+            new_mouse_y,
+            normalized=True,
+            relative=False
+        )
+
+        # Update anchor to current hand position for next interpolation
+        self._hand_anchor_pos = target_hand_pos
 
     def _initialize_adapter(self) -> bool:
         """
@@ -130,7 +253,7 @@ class ActionExecutorThread(threading.Thread):
         """
         try:
             # Get gesture event from queue (blocking with timeout)
-            gesture_event: Optional[GestureEvent] = self.gesture_queue.get(timeout=0.1)
+            gesture_event: Optional[GestureEvent] = self.gesture_queue.get(timeout=0.01)
 
             if gesture_event is not None:
                 # Map gesture to action
@@ -199,6 +322,14 @@ class ActionExecutorThread(threading.Thread):
                 self.adapter.mouse_up(self._held_mouse_button)  # type: ignore
                 log_info(f"Released {self._held_mouse_button} button (gesture '{old_gesture}' ended)")
                 self._held_mouse_button = None
+                # Disable interpolation when click gesture ends
+                with self._interpolation_lock:
+                    self._interpolation_enabled = False
+            elif action == "mouse_move":
+                # Disable interpolation when mouse_move gesture ends
+                with self._interpolation_lock:
+                    self._interpolation_enabled = False
+                log_debug("Interpolation disabled (gesture ended)")
 
         # Handle gesture START
         if new_gesture is not None:
@@ -209,25 +340,58 @@ class ActionExecutorThread(threading.Thread):
                 self.adapter.mouse_down('left')  # type: ignore
                 self._held_mouse_button = 'left'
                 log_info(f"Pressed left button (gesture '{new_gesture}' started)")
+                # Enable interpolation for click-and-drag
+                with self._interpolation_lock:
+                    self._interpolation_enabled = True
+                self._hand_anchor_pos = None  # Reset anchor for drag movement
             elif action == "mouse_move":
                 # Reset anchor for mouse movement when starting mouse_move gesture
                 self._hand_anchor_pos = None
+                # Enable interpolation for smooth cursor movement
+                with self._interpolation_lock:
+                    self._interpolation_enabled = True
+                log_debug("Interpolation enabled (mouse_move started)")
 
     def _handle_gesture_continue(self, gesture_name: str) -> None:
         """
         Handle gesture continuation (same gesture still active).
 
-        Enables click-and-drag by moving cursor while button is held.
+        Updates interpolation target for mouse_move or enables click-and-drag.
 
         Args:
             gesture_name: Name of continuing gesture
         """
         action = self._map_gesture_to_action(gesture_name)
 
+        # Update interpolation target for mouse_move gesture
+        if action == "mouse_move":
+            self._update_interpolation_target()
         # If holding button and gesture is click, enable drag by moving cursor
-        if action == "click" and self._held_mouse_button:
-            # Move cursor based on hand position while button is held (drag!)
-            self._action_mouse_move()
+        elif action == "click" and self._held_mouse_button:
+            # Update interpolation target to enable drag while button is held
+            self._update_interpolation_target()
+
+    def _update_interpolation_target(self) -> None:
+        """
+        Update the interpolation target position from RuntimeState.
+
+        Called when mouse_move gesture continues, providing new hand position
+        for the interpolation thread to smoothly move toward.
+        """
+        with self.runtime_state.lock:
+            hand_pos = self.runtime_state.cursor_position
+            hand_scale = self.runtime_state.hand_scale
+
+        if hand_scale == 0.0:
+            # No valid hand detected
+            return
+
+        # Update interpolation target and timestamp
+        with self._interpolation_lock:
+            self._interpolation_target_pos = hand_pos
+            self._interpolation_last_update_time = time.time()
+            # Ensure interpolation is enabled (may have been disabled due to staleness)
+            self._interpolation_enabled = True
 
     def _map_gesture_to_action(self, gesture_name: str) -> Optional[str]:
         """
@@ -258,11 +422,15 @@ class ActionExecutorThread(threading.Thread):
 
         # Route to appropriate action handler
         if action_name == "mouse_move":
-            print(f"Executing mouse move with hand position: {gesture_event.metadata['position']}")
-            return self._action_mouse_move()
+            # For mouse_move, just update the interpolation target
+            # The interpolation thread will handle smooth movement
+            self._update_interpolation_target()
+            return True
         elif action_name == "click":
             print(f"Executing click with button: {gesture_event.metadata.get('button', 'left')}")
             return self._action_click()
+        elif action_name == "double_click":
+            return self._action_double_click()
         elif action_name == "scroll_down":
             return self._action_scroll(direction='down')
         elif action_name == "scroll_up":
@@ -370,6 +538,19 @@ class ActionExecutorThread(threading.Thread):
             True if successful, False otherwise
         """
         return self.adapter.click(button=button)  # type: ignore
+
+
+    def _action_double_click(self, button: str = 'left') -> bool:
+        """
+        Execute mouse click action.
+
+        Args:
+            button: Which button to click
+
+        Returns:
+            True if successful, False otherwise
+        """
+        return self.adapter.double_click(button=button)  # type: ignore
 
     def _action_scroll(self, direction: str) -> bool:
         """

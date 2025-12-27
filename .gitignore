@@ -22,3 +22,6 @@ env/
 
 # Logs (if you don't want them tracked)
 logs/
+
+# Stats
+profile.stats
