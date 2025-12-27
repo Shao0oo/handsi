@@ -2,9 +2,9 @@ camera:
   device_id: 0
   resolution: [640, 480]
   # Adaptive FPS ranges
-  fps_idle: 2         # Hz when no hands detected
-  fps_attentive: 5    # Hz when hands present, no gesture
-  fps_active: 10      # Hz during/after gesture execution
+  fps_idle: 10         # Hz when no hands detected
+  fps_attentive: 24   # Hz when hands present, no gesture
+  fps_active: 60      # Hz during/after gesture execution
 
 tracking:
   max_hands: 2
@@ -13,6 +13,9 @@ tracking:
   # Activity level transitions
   idle_timeout: 3.0        # seconds without hands → IDLE
   attentive_timeout: 2.0   # seconds without gesture → ATTENTIVE
+  fps_idle: 10         # Hz when no hands detected
+  fps_attentive: 24   # Hz when hands present, no gesture
+  fps_active: 60      # Hz during/after gesture execution
 
 gestures:
   # Debouncing: cooldown after gesture fires
@@ -20,7 +23,7 @@ gestures:
   # Latch: cooldown for activation gesture
   latch_cooldown_ms: 500    # prevent rapid latch on/off
   # Temporal smoothing
-  smoothing_window: 3       # frames to average over
+  smoothing_window: 1       # frames to average over
   consistency_threshold: 0.6  # fraction of frames that must agree (0-1)
 
   # Detection thresholds - ALL VALUES ARE NOW HAND-RELATIVE (as fraction of hand size)
@@ -31,7 +34,7 @@ gestures:
   fist_threshold: 0.65            # max fingertip distance from wrist (65% of hand size)
   open_hand_distance_threshold: 0.3   # min distance between thumb and fingers
   open_hand_spread_threshold: 0.1     # min spread between adjacent fingers (25% of hand size)
-  swipe_velocity_threshold: 2.0        # min horizontal velocity (80% of hand size per second)
+  swipe_velocity_threshold: 4.0        # min horizontal velocity (80% of hand size per second)
   confidence_threshold: 0.7            # min confidence to confirm gesture
 
 actions:
@@ -40,6 +43,8 @@ actions:
     # Phase 1: Implemented gestures with actions
     open_hand: mouse_move           # Continuous: hand position controls cursor
     index_pinch: click               # Single: left click
+    two_finger_pinch: double_click
+    middle_pinch: right_click
 
     # Ready to map (actions implemented, just add gesture mapping here):
     # fist: scroll_down
@@ -54,8 +59,9 @@ actions:
   mouse:
     mirror_x: true                  # Mirror X-coordinate (flip horizontally) for natural camera movement
     smoothing_factor: 0.1           # EMA smoothing (0=no smoothing, 1=max smoothing) (alpha = 1 - smoothing factor)
-    dead_zone: 0.005                 # Ignore movements smaller than this (hand jitter)
-    sensitivity: 5.0                # Movement multiplier (higher = faster)
+    dead_zone: 0.0                 # Ignore movements smaller than this (hand jitter)
+    sensitivity: 1.2                # Movement multiplier (higher = faster)
+    interpolation_rate: 60.0        # Hz - cursor interpolation update rate (higher = smoother but more CPU)
 
 system:
   log_level: INFO           # DEBUG | INFO | WARN | ERROR

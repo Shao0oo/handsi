@@ -6,6 +6,7 @@ for mouse/keyboard control and system-level actions.
 """
 
 import subprocess
+import time
 from typing import Literal
 
 from handsi.actions.adapters.base import ActionAdapter
@@ -291,6 +292,30 @@ class MacOSAdapter(ActionAdapter):
         if not self.mouse_down(button):
             return False
         return self.mouse_up(button)
+    
+    def double_click(self, button: Literal['left', 'right', 'middle'] = 'left') -> bool:
+        """
+        Perform a double mouse click.
+
+        Args:
+            button: Which mouse button to click
+
+        Returns:
+            True if click successful, False otherwise
+        """
+        
+        if not self.mouse_down(button):
+            print("Failed on: mouse down first click")
+            return False
+        if not self.mouse_up(button):
+            print("Failed on: mouse up first click")
+            return False
+        time.sleep(0.1)
+        if not self.mouse_down(button):
+            print("Failed on: mouse down second click")
+            return False
+        return self.mouse_up(button)
+    
 
     def scroll(self, dx: int = 0, dy: int = 0) -> bool:
         """

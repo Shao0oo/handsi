@@ -141,4 +141,4 @@ Notes:
 
 ## Installation
 
-See [INSTALLATION.md](INSTALLATION.md) for setup instructions.
+See [INSTALLATION.md](docs/INSTALLATION.md) for setup instructions.

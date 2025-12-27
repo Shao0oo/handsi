@@ -68,7 +68,8 @@ class RuntimeState:
         self,
         hands_detected: bool,
         idle_timeout: float = 3.0,
-        attentive_timeout: float = 2.0
+        attentive_timeout: float = 2.0, 
+        fps: list = [2,10,20]
     ) -> None:
         """
         Update activity level based on hand detection and gesture timing.
@@ -90,15 +91,15 @@ class RuntimeState:
             # Determine new activity level
             if time_since_hands > idle_timeout:
                 new_level = ActivityLevel.IDLE
-                new_fps = 2
+                new_fps = fps[0]
             elif time_since_gesture < 1.0:
                 # Active if gesture in last second
                 new_level = ActivityLevel.ACTIVE
-                new_fps = 10
+                new_fps = fps[2]
             else:
                 # Hands present but no recent gesture
                 new_level = ActivityLevel.ATTENTIVE
-                new_fps = 5
+                new_fps = fps[1]
 
             # Update if changed
             if new_level != self.activity_level:
