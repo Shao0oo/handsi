@@ -431,6 +431,8 @@ class ActionExecutorThread(threading.Thread):
             return self._action_click()
         elif action_name == "double_click":
             return self._action_double_click()
+        elif action_name == "right_click":
+            return self._action_click(button="right")
         elif action_name == "scroll_down":
             return self._action_scroll(direction='down')
         elif action_name == "scroll_up":
