@@ -593,7 +593,7 @@ class GestureDetector:
         abs_vx = abs(velocity_x)
         abs_vy = abs(velocity_y)
 
-        print(f"Hand scale: {avg_hand_scale}, Swipe velocity thresholds {self.swipe_velocity_threshold}, vx={abs_vx:.3f}, vy={abs_vy:.3f},")
+        # print(f"Hand scale: {avg_hand_scale}, Swipe velocity thresholds {self.swipe_velocity_threshold}, vx={abs_vx:.3f}, vy={abs_vy:.3f},")
 
         # Check if velocity exceeds threshold
         if abs_vx > self.swipe_velocity_threshold or abs_vy > self.swipe_velocity_threshold:

@@ -245,7 +245,8 @@ class TrackingThread(threading.Thread):
             self.runtime_state.update_activity_level(
                 hands_detected=hands_detected,
                 idle_timeout=self.config.idle_timeout,
-                attentive_timeout=self.config.attentive_timeout
+                attentive_timeout=self.config.attentive_timeout, 
+                fps=[self.config.fps_idle, self.config.fps_attentive, self.config.fps_active]
             )
 
             # Create FeatureVector

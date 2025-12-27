@@ -2,9 +2,9 @@ camera:
   device_id: 0
   resolution: [640, 480]
   # Adaptive FPS ranges
-  fps_idle: 2         # Hz when no hands detected
-  fps_attentive: 10   # Hz when hands present, no gesture
-  fps_active: 20      # Hz during/after gesture execution
+  fps_idle: 10         # Hz when no hands detected
+  fps_attentive: 24   # Hz when hands present, no gesture
+  fps_active: 60      # Hz during/after gesture execution
 
 tracking:
   max_hands: 2
@@ -13,6 +13,9 @@ tracking:
   # Activity level transitions
   idle_timeout: 3.0        # seconds without hands → IDLE
   attentive_timeout: 2.0   # seconds without gesture → ATTENTIVE
+  fps_idle: 10         # Hz when no hands detected
+  fps_attentive: 24   # Hz when hands present, no gesture
+  fps_active: 60      # Hz during/after gesture execution
 
 gestures:
   # Debouncing: cooldown after gesture fires
