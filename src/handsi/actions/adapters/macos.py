@@ -458,12 +458,15 @@ class MacOSAdapter(ActionAdapter):
             log_error("ACT-001", f"Zoom failed: {e}")
             return False
 
-    def switch_desktop(self, direction: Literal['left', 'right', 'next', 'prev']) -> bool:
+    def switch_desktop(self, direction: Literal['left', 'right', 'up', 'down', 'next', 'prev']) -> bool:
         """
         Switch to adjacent virtual desktop using Mission Control.
 
         Args:
-            direction: Direction to switch ('left'/'prev' or 'right'/'next')
+            direction: Direction to switch ('left'/'prev', 'right'/'next', 'up', or 'down')
+                      - left/right: Switch between desktops
+                      - up: Mission Control (Control+Up)
+                      - down: Application Windows (Control+Down)
 
         Returns:
             True if switch successful, False otherwise
@@ -480,6 +483,12 @@ class MacOSAdapter(ActionAdapter):
             elif direction in ('right', 'next'):
                 # Ctrl+Right Arrow
                 key_code = 124  # Right arrow
+            elif direction == 'up':
+                # Ctrl+Up Arrow (Mission Control)
+                key_code = 126  # Up arrow
+            elif direction == 'down':
+                # Ctrl+Down Arrow (Application Windows)
+                key_code = 125  # Down arrow
             else:
                 log_error("ACT-003", f"Invalid desktop switch direction: {direction}")
                 return False

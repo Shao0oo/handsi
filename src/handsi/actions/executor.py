@@ -446,6 +446,10 @@ class ActionExecutorThread(threading.Thread):
             return self._action_switch_desktop(direction='left')
         elif action_name == "switch_desktop_right":
             return self._action_switch_desktop(direction='right')
+        elif action_name == "switch_desktop_up":
+            return self._action_switch_desktop(direction='up')
+        elif action_name == "switch_desktop_down":
+            return self._action_switch_desktop(direction='down')
         else:
             log_warning("ACT-003", f"Unknown action: {action_name}")
             return False
