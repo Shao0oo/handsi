@@ -262,10 +262,11 @@ class ActionExecutorThread(threading.Thread):
                 if not action_name:
                     log_debug(f"No action mapped for gesture: {gesture_event.gesture_name}")
                 else:
-                    # Update hand state from gesture metadata (for mouse movement)
+                    # Update hand state from gesture metadata (for mouse movement and click-and-drag)
                     self.state_machine.update_hand_state(gesture_event.metadata)
 
                     # Skip queue-based execution for click - it's handled by state transitions
+                    # But still update hand state above to enable cursor movement during drag
                     if action_name != "click" and self.state_machine.should_execute(gesture_event, action_name):
                         # Execute action
                         success = self._execute_action(action_name, gesture_event)
