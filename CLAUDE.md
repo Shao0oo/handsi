@@ -1,6 +1,12 @@
-# Coding Guidelines for Claude
+# Guidelines for Claude
 
-This document outlines coding standards and best practices for the Handsi project to maintain code quality and modularity.
+This document outlines coding standards and general practices for the Handsi project to maintain code quality and modularity.
+
+## **IMPORTANT**
+
+- Use the existing conda environment: ```conda activate handsi```
+- Do not run pip install into base python, always use: ```conda activate handsi```
+- For motion, always normalize relative to hand scale
 
 ## Core Principles
 
@@ -118,22 +124,6 @@ Never in:
 - Integration tests: `tests/integration/`
 - Test naming: `test_<module>_<function>.py`
 - Use pytest fixtures for setup/teardown
-
-## Git Practices
-
-### Commits
-- Keep commits atomic (one logical change)
-- Use conventional commit format:
-  - `feat:` New feature
-  - `fix:` Bug fix
-  - `refactor:` Code refactoring
-  - `docs:` Documentation
-  - `test:` Tests
-
-### Branches
-- `main` - Stable releases
-- `alex_dev` - Development branch
-- `feature/<name>` - Feature branches (if needed)
 
 ## Phase-Specific Guidelines
 

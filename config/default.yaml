@@ -23,7 +23,7 @@ gestures:
   # Latch: cooldown for activation gesture
   latch_cooldown_ms: 500    # prevent rapid latch on/off
   # Temporal smoothing
-  smoothing_window: 1       # frames to average over
+  smoothing_window: 2       # frames to average over
   consistency_threshold: 0.6  # fraction of frames that must agree (0-1)
 
   # Detection thresholds - ALL VALUES ARE NOW HAND-RELATIVE (as fraction of hand size)
@@ -46,12 +46,9 @@ actions:
     index_pinch: click               # Single: left click
     two_finger_pinch: double_click
     middle_pinch: right_click
-    swipe_up: switch_desktop_up
-    swipe_down: switch_desktop_down
-    swipe_left: switch_desktop_left
-    swipe_right: switch_desktop_right
+    swipe: switch_desktop            # Swipe in any direction (direction passed via metadata)
     thumbs_up: enable_latch          # Enable gesture control (latch ON)
-    thumbs_down: disable_latch     # Disable gesture control (latch OFF) - user implementing
+    thumbs_down: disable_latch       # Disable gesture control (latch OFF)
 
     # Ready to map (actions implemented, just add gesture mapping here):
     # fist: scroll_down
@@ -65,9 +62,9 @@ actions:
   # Mouse movement settings
   mouse:
     mirror_x: true                  # Mirror X-coordinate (flip horizontally) for natural camera movement
-    smoothing_factor: 0.1           # EMA smoothing (0=no smoothing, 1=max smoothing) (alpha = 1 - smoothing factor)
-    dead_zone: 0.005                 # Ignore movements smaller than this (hand jitter)
-    sensitivity: 1.2                # Movement multiplier (higher = faster)
+    smoothing_factor: 0.2           # EMA smoothing (0=no smoothing, 1=max smoothing) (alpha = 1 - smoothing factor)
+    dead_zone: 0.003                 # Ignore movements smaller than this (hand jitter)
+    sensitivity: 0.7                # Movement multiplier (higher = faster)
     interpolation_rate: 60.0        # Hz - cursor interpolation update rate (higher = smoother but more CPU)
 
 system:

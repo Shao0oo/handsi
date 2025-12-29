@@ -2,8 +2,8 @@
 Rule-based gesture detection using MediaPipe hand landmarks.
 
 Detects 11 gestures:
-- Single hand: index/middle/ring/pinky pinch, fist, open_hand, thumbs_up, swipe_left/right
-- Two hands: two_hands_pinch, two_hands_spread, two_hands_close
+- Single hand: index/middle/ring/pinky pinch, fist, open_hand, thumbs_up/down, swipe (with direction)
+- Two hands: two_hands_pinch, two_hands_open
 """
 
 import time
@@ -678,50 +678,26 @@ class GestureDetector:
 
         # Check if velocity exceeds threshold
         if abs_vx > self.swipe_velocity_threshold or abs_vy > self.swipe_velocity_threshold:
-            # Return the dominant direction
+            # Determine the dominant direction
+            hand_scale = self._get_hand_scale(lm)
+
             if abs_vx > abs_vy:
                 # Horizontal swipe (left/right)
-                # # position = self._get_hand_center_of_mass(lm)
-                hand_scale = self._get_hand_scale(lm)
-                if velocity_x > 0:
-                    confidence = min(abs_vx * 5, 1.0)  # TODO: tune this multiplier
-                    return ("swipe_right", confidence, {
-                        "velocity_x": velocity_x,
-                        "velocity_y": velocity_y,
-                        "position": lm[0],
-                        "hand_scale": hand_scale
-                    })
-                else:
-                    confidence = min(abs_vx * 5, 1.0)  # TODO: tune this multiplier
-                    return ("swipe_left", confidence, {
-                        "velocity_x": velocity_x,
-                        "velocity_y": velocity_y,
-                        "position": lm[0],
-                        "hand_scale": hand_scale
-                    })
+                direction = "right" if velocity_x > 0 else "left"
+                confidence = min(abs_vx * 5, 1.0)  # TODO: tune this multiplier
             else:
                 # Vertical swipe (up/down)
                 # Note: in image coordinates, lower y = higher in real space
-                # # position = self._get_hand_center_of_mass(lm)
-                hand_scale = self._get_hand_scale(lm)
-                if velocity_y < 0:
-                    confidence = min(abs_vy * 5, 1.0)
-                    # print(f"Swipe up detected with confidence {confidence:.2f}")
-                    return ("swipe_up", confidence, {
-                        "velocity_x": velocity_x,
-                        "velocity_y": velocity_y,
-                        "position": lm[0],
-                        "hand_scale": hand_scale
-                    })
-                else:
-                    confidence = min(abs_vy * 5, 1.0)
-                    # print(f"Swipe down detected with confidence {confidence:.2f}")
-                    return ("swipe_down", confidence, {
-                        "velocity_x": velocity_x,
-                        "velocity_y": velocity_y,
-                        "position": lm[0],
-                        "hand_scale": hand_scale
-                    })
+                direction = "up" if velocity_y < 0 else "down"
+                confidence = min(abs_vy * 5, 1.0)
+
+            return ("swipe", confidence, {
+                "direction": direction,
+                "velocity_x": velocity_x,
+                "velocity_y": velocity_y,
+                "position": lm[0],
+                "hand_scale": hand_scale
+            })
 
         # No swipe detected, but hand is open - return None so open_hand can fire
         return open_hand_result
