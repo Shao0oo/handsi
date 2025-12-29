@@ -56,6 +56,7 @@ class GestureConfig(BaseModel):
     open_hand_distance_threshold: float = Field(default=0.25, ge=0.1, le=0.6)  # DEPRECATED
     open_hand_spread_threshold: float = Field(default=0.3, ge=0.1, le=0.8)
     swipe_velocity_threshold: float = Field(default=0.8, ge=0.3, le=5.0)
+    thumbs_vertical_threshold: float = Field(default=1.3, ge=0.5, le=2.0)
     confidence_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
 
 

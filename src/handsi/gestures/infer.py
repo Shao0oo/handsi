@@ -54,6 +54,7 @@ class GestureInferenceThread(threading.Thread):
             open_hand_distance_threshold=config.open_hand_distance_threshold,
             open_hand_spread_threshold=config.open_hand_spread_threshold,
             swipe_velocity_threshold=config.swipe_velocity_threshold,
+            thumbs_vertical_threshold=config.thumbs_vertical_threshold,
             confidence_threshold=config.confidence_threshold
         )
 

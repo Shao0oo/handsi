@@ -36,6 +36,9 @@ class GestureStateMachine:
         # Debounce tracking
         self._last_gesture_time: dict[str, float] = {}
 
+        # Latch tracking
+        self._last_latch_toggle_time: float = 0.0
+
         # Continuous gesture state
         self._continuous_gestures = {'mouse_move'}  # Actions that execute without debouncing
         self._current_continuous_gesture: Optional[str] = None
@@ -45,6 +48,7 @@ class GestureStateMachine:
         Determine if gesture should trigger action execution.
 
         Applies debouncing for discrete gestures, allows continuous gestures always.
+        Checks latch state - only toggle_latch action allowed when latch is off.
 
         Args:
             gesture_event: The detected gesture
@@ -56,12 +60,13 @@ class GestureStateMachine:
         current_time = time.time()
         gesture_name = gesture_event.gesture_name
 
-        # Check if latch is required and active
-        # For now, we'll always allow actions (latch feature is Phase 2)
+        # Check latch state
+        if not self.is_action_allowed(action_name):
+            return False
 
         # Check if this is a continuous gesture
         if action_name in self._continuous_gestures:
-            # Continuous gestures always execute
+            # Continuous gestures always execute (if latch is active)
             self._current_continuous_gesture = gesture_name
             return True
 
@@ -110,6 +115,28 @@ class GestureStateMachine:
                     f"pos={self.runtime_state.cursor_position}"
                 )
 
+    def is_action_allowed(self, action_name: str) -> bool:
+        """
+        Check if action is allowed based on latch state.
+
+        When latch is OFF: Only enable_latch is allowed
+        When latch is ON: All actions are allowed
+
+        Args:
+            action_name: Name of the action to check
+
+        Returns:
+            True if action should execute, False if blocked by latch
+        """
+        with self.runtime_state.lock:
+            latch_active = self.runtime_state.latch_active
+
+        if not latch_active and action_name != 'enable_latch':
+            log_debug(f"Action {action_name} blocked: latch inactive")
+            return False
+
+        return True
+
     def is_continuous_gesture(self, action_name: str) -> bool:
         """
         Check if action is continuous (vs discrete).
@@ -132,3 +159,68 @@ class GestureStateMachine:
         if gesture_name in self._last_gesture_time:
             del self._last_gesture_time[gesture_name]
             log_debug(f"Debounce reset for gesture: {gesture_name}")
+
+    def enable_latch(self) -> bool:
+        """
+        Enable latch state (turn on gesture control).
+
+        Applies cooldown to prevent rapid toggling.
+
+        Returns:
+            True if enable succeeded, False if in cooldown or already enabled
+        """
+        current_time = time.time()
+        time_since_last = (current_time - self._last_latch_toggle_time) * 1000  # ms
+
+        # Check cooldown
+        if time_since_last < self.latch_cooldown_ms:
+            log_debug(
+                f"Latch enable blocked by cooldown "
+                f"({time_since_last:.0f}ms since last, "
+                f"threshold: {self.latch_cooldown_ms}ms)"
+            )
+            return False
+
+        # Check if already enabled
+        with self.runtime_state.lock:
+            if self.runtime_state.latch_active:
+                log_debug("Latch enable ignored: already active")
+                return True  # Not an error, just already on
+            self.runtime_state.latch_active = True
+
+        self._last_latch_toggle_time = current_time
+        log_debug("Latch ENABLED")
+        return True
+
+    def disable_latch(self) -> bool:
+        """
+        Disable latch state (turn off gesture control).
+
+        Applies cooldown to prevent rapid toggling.
+
+        Returns:
+            True if disable succeeded, False if in cooldown or already disabled
+        """
+        print(f"Executing disable latch action")
+        current_time = time.time()
+        time_since_last = (current_time - self._last_latch_toggle_time) * 1000  # ms
+
+        # Check cooldown
+        if time_since_last < self.latch_cooldown_ms:
+            log_debug(
+                f"Latch disable blocked by cooldown "
+                f"({time_since_last:.0f}ms since last, "
+                f"threshold: {self.latch_cooldown_ms}ms)"
+            )
+            return False
+
+        # Check if already disabled
+        with self.runtime_state.lock:
+            if not self.runtime_state.latch_active:
+                log_debug("Latch disable ignored: already inactive")
+                return True  # Not an error, just already off
+            self.runtime_state.latch_active = False
+
+        self._last_latch_toggle_time = current_time
+        log_debug("Latch DISABLED")
+        return True
