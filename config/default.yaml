@@ -46,12 +46,9 @@ actions:
     index_pinch: click               # Single: left click
     two_finger_pinch: double_click
     middle_pinch: right_click
-    swipe_up: switch_desktop_up
-    swipe_down: switch_desktop_down
-    swipe_left: switch_desktop_left
-    swipe_right: switch_desktop_right
+    swipe: switch_desktop            # Swipe in any direction (direction passed via metadata)
     thumbs_up: enable_latch          # Enable gesture control (latch ON)
-    thumbs_down: disable_latch     # Disable gesture control (latch OFF) - user implementing
+    thumbs_down: disable_latch       # Disable gesture control (latch OFF)
 
     # Ready to map (actions implemented, just add gesture mapping here):
     # fist: scroll_down

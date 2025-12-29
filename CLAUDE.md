@@ -1,6 +1,11 @@
-# Coding Guidelines for Claude
+# Guidelines for Claude
 
-This document outlines coding standards and best practices for the Handsi project to maintain code quality and modularity.
+This document outlines coding standards and general practices for the Handsi project to maintain code quality and modularity.
+
+## **IMPORTANT**
+
+Use the existing conda environment: ```conda activate handsi```
+Do not run pip install into base python, always use: ```conda activate handsi```
 
 ## Core Principles
 

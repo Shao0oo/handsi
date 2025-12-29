@@ -457,14 +457,13 @@ class ActionExecutorThread(threading.Thread):
             return self._action_zoom(direction='in')
         elif action_name == "zoom_out":
             return self._action_zoom(direction='out')
-        elif action_name == "switch_desktop_left":
-            return self._action_switch_desktop(direction='left')
-        elif action_name == "switch_desktop_right":
-            return self._action_switch_desktop(direction='right')
-        elif action_name == "switch_desktop_up":
-            return self._action_switch_desktop(direction='up')
-        elif action_name == "switch_desktop_down":
-            return self._action_switch_desktop(direction='down')
+        elif action_name == "switch_desktop":
+            # Extract direction from gesture metadata
+            direction = gesture_event.metadata.get('direction')
+            if not direction:
+                log_error("ACT-003", "switch_desktop action missing 'direction' in metadata")
+                return False
+            return self._action_switch_desktop(direction=direction)
         elif action_name == "enable_latch":
             return self._action_enable_latch()
         elif action_name == "disable_latch":
