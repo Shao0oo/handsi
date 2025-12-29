@@ -580,6 +580,7 @@ class GestureDetector:
             "position": lm[0],
             "hand_scale": hand_scale
         })
+    
     def _detect_thumbs_down(self, lm: list) -> Optional[tuple[str, float, dict]]:
         """Detect thumbs down (thumb extended downwards, other fingers curled)."""
         # Get hand scale for normalization
