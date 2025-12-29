@@ -162,6 +162,14 @@ class ActionExecutorThread(threading.Thread):
         if not self.adapter:
             return
 
+        # Get hand scale for distance normalization
+        with self.runtime_state.lock:
+            hand_scale = self.runtime_state.hand_scale
+
+        if hand_scale <= 0.0:
+            # No valid hand scale, skip movement
+            return
+
         # Apply X-coordinate mirroring if enabled
         if self.action_config.mouse.mirror_x:
             target_hand_pos = (1.0 - target_hand_pos[0], target_hand_pos[1])
@@ -172,9 +180,16 @@ class ActionExecutorThread(threading.Thread):
             log_debug(f"Interpolation anchor initialized to {target_hand_pos}")
             return
 
-        # Calculate hand movement delta from anchor
+        # Calculate hand movement delta from anchor (in screen coordinates)
         hand_dx = target_hand_pos[0] - self._hand_anchor_pos[0]
         hand_dy = target_hand_pos[1] - self._hand_anchor_pos[1]
+
+        # NORMALIZE by hand scale: divide by hand_scale to make movement distance-invariant
+        # When hand is far (small scale), same screen delta = larger physical movement
+        # When hand is close (large scale), same screen delta = smaller physical movement
+        # Dividing by scale compensates: far hand gets boosted, close hand gets reduced
+        hand_dx = hand_dx / hand_scale
+        hand_dy = hand_dy / hand_scale
 
         # Apply dead zone (ignore tiny jitters)
         from handsi.actions.adapters.base import apply_dead_zone
