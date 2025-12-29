@@ -9,6 +9,8 @@ import subprocess
 import time
 from typing import Literal
 
+from typing import Optional
+
 from handsi.actions.adapters.base import ActionAdapter
 from handsi.core.logging import log_debug, log_error, log_info, log_warning
 
@@ -20,14 +22,18 @@ try:
         CGMainDisplayID,
         CGDisplayBounds,
         CGEventSourceCreate,
+        CGEventSetIntegerValueField,
         kCGEventSourceStateHIDSystemState,
         kCGEventMouseMoved,
         kCGEventLeftMouseDown,
         kCGEventLeftMouseUp,
+        kCGEventLeftMouseDragged,
         kCGEventRightMouseDown,
         kCGEventRightMouseUp,
+        kCGEventRightMouseDragged,
         kCGEventOtherMouseDown,
         kCGEventOtherMouseUp,
+        kCGMouseEventClickState,
         kCGHIDEventTap,
         kCGScrollEventUnitPixel,
     )
@@ -51,6 +57,8 @@ class MacOSAdapter(ActionAdapter):
         self._initialized = False
         self._screen_width = 0
         self._screen_height = 0
+        self._double_click_threshold = 0.5  # Default 500ms, will be queried from system
+        self._held_button: Optional[str] = None  # Track which button is currently held for drag events
 
     def initialize(self) -> bool:
         """
@@ -69,6 +77,22 @@ class MacOSAdapter(ActionAdapter):
             bounds = CGDisplayBounds(main_display)
             self._screen_width = int(bounds.size.width)
             self._screen_height = int(bounds.size.height)
+
+            # Query macOS double-click threshold
+            try:
+                result = subprocess.run(
+                    ['defaults', 'read', '-g', 'com.apple.mouse.doubleClickThreshold'],
+                    capture_output=True,
+                    text=True,
+                    timeout=1.0
+                )
+                if result.returncode == 0:
+                    self._double_click_threshold = float(result.stdout.strip())
+                    log_info(f"macOS double-click threshold: {self._double_click_threshold}s")
+                else:
+                    log_warning("ACT-004", f"Failed to read double-click threshold, using default: {self._double_click_threshold}s")
+            except Exception as e:
+                log_warning("ACT-004", f"Error querying double-click threshold: {e}, using default")
 
             log_info(f"macOS adapter initialized (screen: {self._screen_width}x{self._screen_height})")
             self._initialized = True
@@ -137,6 +161,8 @@ class MacOSAdapter(ActionAdapter):
         """
         Move mouse cursor to specified position.
 
+        Automatically uses drag events when a button is held down.
+
         Args:
             x: X coordinate (0-1 if normalized, pixels if not)
             y: Y coordinate (0-1 if normalized, pixels if not)
@@ -166,16 +192,28 @@ class MacOSAdapter(ActionAdapter):
             # Create event source for proper mouse control
             source = CGEventSourceCreate(kCGEventSourceStateHIDSystemState)
 
-            # Create and post mouse move event
+            # Determine event type based on whether button is held (drag vs move)
+            if self._held_button == 'left':
+                event_type = kCGEventLeftMouseDragged
+                button_num = 0
+            elif self._held_button == 'right':
+                event_type = kCGEventRightMouseDragged
+                button_num = 1
+            else:
+                # No button held, regular move
+                event_type = kCGEventMouseMoved
+                button_num = 0
+
+            # Create and post mouse move/drag event
             event = CGEventCreateMouseEvent(
                 source,
-                kCGEventMouseMoved,
+                event_type,
                 (pixel_x, pixel_y),
-                0  # button number (irrelevant for move)
+                button_num
             )
             CGEventPost(kCGHIDEventTap, event)
 
-            log_debug(f"Mouse moved to ({pixel_x}, {pixel_y})")
+            log_debug(f"Mouse {'dragged' if self._held_button else 'moved'} to ({pixel_x}, {pixel_y})")
             return True
 
         except Exception as e:
@@ -234,6 +272,9 @@ class MacOSAdapter(ActionAdapter):
             )
             CGEventPost(kCGHIDEventTap, down_event)
 
+            # Track held button for drag events
+            self._held_button = button
+
             log_debug(f"Mouse {button} button pressed (held)")
             return True
 
@@ -271,6 +312,9 @@ class MacOSAdapter(ActionAdapter):
             )
             CGEventPost(kCGHIDEventTap, up_event)
 
+            # Clear held button state
+            self._held_button = None
+
             log_debug(f"Mouse {button} button released")
             return True
 
@@ -295,7 +339,7 @@ class MacOSAdapter(ActionAdapter):
     
     def double_click(self, button: Literal['left', 'right', 'middle'] = 'left') -> bool:
         """
-        Perform a double mouse click.
+        Perform a double mouse click with proper macOS click count and timing.
 
         Args:
             button: Which mouse button to click
@@ -303,18 +347,45 @@ class MacOSAdapter(ActionAdapter):
         Returns:
             True if click successful, False otherwise
         """
-        
-        if not self.mouse_down(button):
-            print("Failed on: mouse down first click")
+        if not self._initialized:
+            log_error("ACT-001", "Adapter not initialized")
             return False
-        if not self.mouse_up(button):
-            print("Failed on: mouse up first click")
+
+        try:
+            down_event_type, up_event_type, button_num = self._get_button_event_types(button)
+
+            # Get current mouse position
+            mouse_loc = NSEvent.mouseLocation()
+            pos = (int(mouse_loc.x), int(self._screen_height - mouse_loc.y))
+
+            # First click (clickCount=1)
+            down_event = CGEventCreateMouseEvent(None, down_event_type, pos, button_num)
+            CGEventSetIntegerValueField(down_event, kCGMouseEventClickState, 1)
+            CGEventPost(kCGHIDEventTap, down_event)
+
+            up_event = CGEventCreateMouseEvent(None, up_event_type, pos, button_num)
+            CGEventSetIntegerValueField(up_event, kCGMouseEventClickState, 1)
+            CGEventPost(kCGHIDEventTap, up_event)
+
+            # Wait between clicks (use 50% of system threshold for reliable detection)
+            delay = self._double_click_threshold * 0.25
+            time.sleep(delay)
+
+            # Second click (clickCount=2)
+            down_event = CGEventCreateMouseEvent(None, down_event_type, pos, button_num)
+            CGEventSetIntegerValueField(down_event, kCGMouseEventClickState, 2)
+            CGEventPost(kCGHIDEventTap, down_event)
+
+            up_event = CGEventCreateMouseEvent(None, up_event_type, pos, button_num)
+            CGEventSetIntegerValueField(up_event, kCGMouseEventClickState, 2)
+            CGEventPost(kCGHIDEventTap, up_event)
+
+            log_debug(f"Double-click executed: {button} button (delay: {delay:.3f}s)")
+            return True
+
+        except Exception as e:
+            log_error("ACT-001", f"Double-click failed: {e}")
             return False
-        time.sleep(0.1)
-        if not self.mouse_down(button):
-            print("Failed on: mouse down second click")
-            return False
-        return self.mouse_up(button)
     
 
     def scroll(self, dx: int = 0, dy: int = 0) -> bool:
@@ -387,12 +458,15 @@ class MacOSAdapter(ActionAdapter):
             log_error("ACT-001", f"Zoom failed: {e}")
             return False
 
-    def switch_desktop(self, direction: Literal['left', 'right', 'next', 'prev']) -> bool:
+    def switch_desktop(self, direction: Literal['left', 'right', 'up', 'down', 'next', 'prev']) -> bool:
         """
         Switch to adjacent virtual desktop using Mission Control.
 
         Args:
-            direction: Direction to switch ('left'/'prev' or 'right'/'next')
+            direction: Direction to switch ('left'/'prev', 'right'/'next', 'up', or 'down')
+                      - left/right: Switch between desktops
+                      - up: Mission Control (Control+Up)
+                      - down: Application Windows (Control+Down)
 
         Returns:
             True if switch successful, False otherwise
@@ -409,6 +483,12 @@ class MacOSAdapter(ActionAdapter):
             elif direction in ('right', 'next'):
                 # Ctrl+Right Arrow
                 key_code = 124  # Right arrow
+            elif direction == 'up':
+                # Ctrl+Up Arrow (Mission Control)
+                key_code = 126  # Up arrow
+            elif direction == 'down':
+                # Ctrl+Down Arrow (Application Windows)
+                key_code = 125  # Down arrow
             else:
                 log_error("ACT-003", f"Invalid desktop switch direction: {direction}")
                 return False

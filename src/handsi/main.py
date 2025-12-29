@@ -128,6 +128,7 @@ def main() -> int:
 
     action_thread = ActionExecutorThread(
         action_config=config.actions,
+        gesture_config=config.gestures,
         macos_config=config.macos,
         gesture_queue=gesture_queue,
         runtime_state=runtime_state

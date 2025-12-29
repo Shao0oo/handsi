@@ -17,7 +17,7 @@ from handsi.actions.adapters.base import (
 )
 from handsi.actions.state_machine import GestureStateMachine
 from handsi.core.bus import GestureEvent, GestureQueue, RuntimeState
-from handsi.core.config import ActionConfig, MacOSConfig
+from handsi.core.config import ActionConfig, GestureConfig, MacOSConfig
 from handsi.core.logging import log_debug, log_error, log_info, log_warning
 
 
@@ -36,6 +36,7 @@ class ActionExecutorThread(threading.Thread):
     def __init__(
         self,
         action_config: ActionConfig,
+        gesture_config: GestureConfig,
         macos_config: MacOSConfig,
         gesture_queue: GestureQueue,
         runtime_state: RuntimeState,
@@ -43,6 +44,7 @@ class ActionExecutorThread(threading.Thread):
     ):
         super().__init__(name=name, daemon=True)
         self.action_config = action_config
+        self.gesture_config = gesture_config
         self.macos_config = macos_config
         self.gesture_queue = gesture_queue
         self.runtime_state = runtime_state
@@ -53,8 +55,8 @@ class ActionExecutorThread(threading.Thread):
         # State machine for debouncing and continuous gestures
         self.state_machine = GestureStateMachine(
             runtime_state=runtime_state,
-            debounce_ms=300,  # From config (could parameterize)
-            latch_cooldown_ms=500
+            debounce_ms=gesture_config.debounce_ms,
+            latch_cooldown_ms=gesture_config.latch_cooldown_ms
         )
 
         # Relative hand tracking for mouse movement
@@ -262,10 +264,11 @@ class ActionExecutorThread(threading.Thread):
                 if not action_name:
                     log_debug(f"No action mapped for gesture: {gesture_event.gesture_name}")
                 else:
-                    # Update hand state from gesture metadata (for mouse movement)
+                    # Update hand state from gesture metadata (for mouse movement and click-and-drag)
                     self.state_machine.update_hand_state(gesture_event.metadata)
 
                     # Skip queue-based execution for click - it's handled by state transitions
+                    # But still update hand state above to enable cursor movement during drag
                     if action_name != "click" and self.state_machine.should_execute(gesture_event, action_name):
                         # Execute action
                         success = self._execute_action(action_name, gesture_event)
@@ -299,10 +302,23 @@ class ActionExecutorThread(threading.Thread):
 
         # Detect gesture state transition
         if current_gesture != self._last_tracked_gesture:
+            # Check latch for state transitions (click, mouse_move)
+            if current_gesture is not None:
+                action = self._map_gesture_to_action(current_gesture)
+                if action and not self.state_machine.is_action_allowed(action):
+                    # Latch blocks this action - don't process transition
+                    log_debug(f"Gesture transition blocked by latch: {current_gesture} -> {action}")
+                    return
+
             self._handle_gesture_transition(self._last_tracked_gesture, current_gesture)
             self._last_tracked_gesture = current_gesture
         elif current_gesture is not None:
-            # Same gesture continuing
+            # Same gesture continuing - check latch before continuing
+            action = self._map_gesture_to_action(current_gesture)
+            if action and not self.state_machine.is_action_allowed(action):
+                # Latch blocks this action - don't continue gesture
+                return
+
             self._handle_gesture_continue(current_gesture)
 
     def _handle_gesture_transition(self, old_gesture: Optional[str], new_gesture: Optional[str]) -> None:
@@ -445,6 +461,15 @@ class ActionExecutorThread(threading.Thread):
             return self._action_switch_desktop(direction='left')
         elif action_name == "switch_desktop_right":
             return self._action_switch_desktop(direction='right')
+        elif action_name == "switch_desktop_up":
+            return self._action_switch_desktop(direction='up')
+        elif action_name == "switch_desktop_down":
+            return self._action_switch_desktop(direction='down')
+        elif action_name == "enable_latch":
+            return self._action_enable_latch()
+        elif action_name == "disable_latch":
+            print(f"Executing disable latch action: {action_name}")
+            return self._action_disable_latch()
         else:
             log_warning("ACT-003", f"Unknown action: {action_name}")
             return False
@@ -600,3 +625,21 @@ class ActionExecutorThread(threading.Thread):
             True if successful, False otherwise
         """
         return self.adapter.switch_desktop(direction=direction)  # type: ignore
+
+    def _action_enable_latch(self) -> bool:
+        """
+        Enable latch state (turn on gesture control).
+
+        Returns:
+            True if successful, False if in cooldown
+        """
+        return self.state_machine.enable_latch()
+
+    def _action_disable_latch(self) -> bool:
+        """
+        Disable latch state (turn off gesture control).
+
+        Returns:
+            True if successful, False if in cooldown
+        """
+        return self.state_machine.disable_latch()

@@ -35,6 +35,7 @@ class GestureDetector:
         open_hand_distance_threshold: float = 0.25,
         open_hand_spread_threshold: float = 0.08,
         swipe_velocity_threshold: float = 0.5,
+        thumbs_vertical_threshold: float = 1.3,
         confidence_threshold: float = 0.7,
         history_length: int = 10
     ):
@@ -43,6 +44,7 @@ class GestureDetector:
         self.open_hand_distance_threshold = open_hand_distance_threshold
         self.open_hand_spread_threshold = open_hand_spread_threshold
         self.swipe_velocity_threshold = swipe_velocity_threshold
+        self.thumbs_vertical_threshold = thumbs_vertical_threshold
         self.confidence_threshold = confidence_threshold
 
         # History for temporal gestures (swipe, spread, close)
@@ -85,6 +87,7 @@ class GestureDetector:
                 self._detect_fist(lm),
                 self._detect_open_hand(lm),
                 self._detect_thumbs_up(lm),
+                self._detect_thumbs_down(lm),
                 self._detect_swipe(lm, hand_idx)
             ]
 
@@ -551,7 +554,7 @@ class GestureDetector:
 
         # Check thumb is pointing upward (lower y = higher in image space)
         # Normalize the vertical threshold by hand scale
-        vertical_threshold = 1.5 * hand_scale  # 150% of hand size
+        vertical_threshold = self.thumbs_vertical_threshold * hand_scale
         thumb_vertical = thumb_tip[1] < wrist[1] - vertical_threshold
 
         if not thumb_vertical:
@@ -572,6 +575,48 @@ class GestureDetector:
         # # position = self._get_hand_center_of_mass(lm)
 
         return ("thumbs_up", confidence, {
+            "vertical_distance": vertical_distance,
+            "closed_count": closed_count,
+            "position": lm[0],
+            "hand_scale": hand_scale
+        })
+    
+    def _detect_thumbs_down(self, lm: list) -> Optional[tuple[str, float, dict]]:
+        """Detect thumbs down (thumb extended downwards, other fingers curled)."""
+        # Get hand scale for normalization
+        hand_scale = self._get_hand_scale(lm)
+
+        thumb_tip = lm[4]
+        thumb_base = lm[2]
+        wrist = lm[0]
+
+        # Check thumb is extended
+        if not self._is_finger_extended(lm, 4, 2, extension_ratio=1.5):
+            return None
+
+        # Check thumb is pointing downwards (higher y = lower in image space)
+        # Normalize the vertical threshold by hand scale
+        vertical_threshold = self.thumbs_vertical_threshold * hand_scale
+        thumb_vertical = thumb_tip[1] > wrist[1] + vertical_threshold
+
+        if not thumb_vertical:
+            return None
+
+        # Check other 4 fingers are closed
+        other_fingers = [(8, 5), (12, 9), (16, 13), (20, 17)]  # (tip, mcp)
+        closed_count = sum(1 for tip, mcp in other_fingers
+                          if self._is_finger_closed(lm, tip, mcp))
+
+        # Require at least all four fingers to be closed
+        if closed_count < 4:
+            return None
+
+        # Calculate normalized vertical distance
+        vertical_distance = (wrist[1] + thumb_tip[1]) / hand_scale
+        confidence = min(vertical_distance / 0.5, 1.0)
+        # # position = self._get_hand_center_of_mass(lm)
+
+        return ("thumbs_down", confidence, {
             "vertical_distance": vertical_distance,
             "closed_count": closed_count,
             "position": lm[0],
