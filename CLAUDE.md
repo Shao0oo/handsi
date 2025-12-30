@@ -6,6 +6,9 @@ This document outlines coding standards and general practices for the Handsi pro
 
 - Use the existing conda environment: ```conda activate handsi```
 - Do not run pip install into base python, always use: ```conda activate handsi```
+- Installation should be placed inside of pyproject.toml with specific version
+- For motion, always normalize relative to hand scale
+- default.yaml should NEVER be changed. I hand tuned many parts of it
 - For motion, always normalize relative to hand scale
 
 ## Core Principles

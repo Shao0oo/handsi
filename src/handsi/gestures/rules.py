@@ -84,6 +84,7 @@ class GestureDetector:
                 self._detect_middle_pinch(lm),
                 self._detect_ring_pinch(lm),
                 self._detect_pinky_pinch(lm),
+                self._two_fingers_point(lm),
                 self._detect_fist(lm),
                 self._detect_open_hand(lm),
                 self._detect_thumbs_up(lm),
@@ -399,7 +400,7 @@ class GestureDetector:
                             if self._is_finger_extended(lm, tip, mcp))
 
         # Require at least 2 of 3 other fingers to be extended
-        if extended_count < 2:
+        if extended_count < 3:
             return None
 
         confidence = 1.0 - distance
@@ -431,7 +432,7 @@ class GestureDetector:
                             if self._is_finger_extended(lm, tip, mcp))
 
         # Require at least 2 of 3 other fingers to be extended
-        if extended_count < 2:
+        if extended_count < 3:
             return None
 
         confidence = 1.0 - distance
@@ -441,6 +442,57 @@ class GestureDetector:
             "distance": distance,
             "extended_count": extended_count,
             "position": lm[0],
+            "hand_scale": hand_scale
+        })
+    
+    def _two_fingers_point(self, lm: list) -> Optional[tuple[str, float, dict]]:
+        """Detect two fingers pointed (index + middle extended, others closed)."""
+        # Get hand scale for normalization
+        hand_scale = self._get_hand_scale(lm)
+
+        # Check if thumb, ring, and pinky are closed
+        closed_fingers = [
+            # (4, 1),   # Thumb (tip to CMC, not MCP)
+            (16, 13), # Ring
+            (20, 17)  # Pinky
+        ]
+
+        # Index and middle finger landmarks (tip, mcp)
+        index_tip_idx = 8
+        index_mcp_idx = 5
+        middle_tip_idx = 12
+        middle_mcp_idx = 9
+
+        closed_count = 0
+        for tip_idx, mcp_idx in closed_fingers:
+            if self._is_finger_closed(lm, tip_idx, mcp_idx, curl_ratio=1.5):
+                closed_count += 1
+
+        # Require all 3 fingers closed (thumb, ring, pinky)
+        if closed_count < 2:
+            print(f"Two fingers point: only {closed_count} fingers closed, need 3")
+            return None
+
+        # Check if index and middle fingers are extended
+        if not (self._is_finger_extended(lm, index_tip_idx, index_mcp_idx, extension_ratio=1.6) and
+                self._is_finger_extended(lm, middle_tip_idx, middle_mcp_idx, extension_ratio=1.6)):
+            print("Two fingers point: index or middle finger not extended")
+            return None
+
+        # Check if index and middle fingertips are close together
+        index_tip = lm[index_tip_idx]
+        middle_tip = lm[middle_tip_idx]
+        distance = self._normalized_distance(index_tip, middle_tip, hand_scale)
+
+        if distance >= self.pinch_threshold * 100:  # Allow wider spread for two fingers point
+            print(f"Two fingers point: distance {distance:.3f} exceeds threshold")
+            return None
+
+        # Calculate confidence based on finger proximity
+        confidence = max(0.7, 1.0 - distance / 100)
+
+        return ("two_fingers_point", confidence, {
+            "position": lm[0],  # Wrist position for consistent scrolling
             "hand_scale": hand_scale
         })
 
@@ -461,7 +513,7 @@ class GestureDetector:
         closed_count = 0
         for tip_idx, mcp_idx in fingers:
             # Use slightly looser curl ratio for fist detection (allow 20% extension)
-            if self._is_finger_closed(lm, tip_idx, mcp_idx, curl_ratio=1.2):
+            if self._is_finger_closed(lm, tip_idx, mcp_idx, curl_ratio=self.fist_threshold):
                 closed_count += 1
 
         # Require at least 4 of 5 fingers to be closed
