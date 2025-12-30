@@ -8,6 +8,7 @@ and executes actions using OS-specific adapter.
 import platform
 import threading
 import time
+from collections import deque
 from typing import Optional
 
 from handsi.actions.adapters.base import (
@@ -63,6 +64,15 @@ class ActionExecutorThread(threading.Thread):
         self._hand_anchor_pos: Optional[tuple[float, float]] = None  # Where hand was when gesture started
         self._last_mouse_move_time = 0.0  # Track when mouse_move last executed
 
+        # Scroll tracking state
+        self._scroll_anchor_pos: Optional[tuple[float, float]] = None  # Where hand was when scroll started
+
+        # Scroll momentum state (for kinetic scrolling)
+        self._scroll_velocity_history: deque = deque(maxlen=3)  # Track last 3 scroll velocities (dx, dy tuples)
+        self._momentum_velocity: tuple[float, float] = (0.0, 0.0)  # Current momentum velocity (dx, dy)
+        self._momentum_active: bool = False  # Whether momentum is running
+        self._momentum_lock = threading.Lock()  # Thread-safe access to momentum state
+
         # Gesture state tracking for click-and-hold
         self._last_tracked_gesture: Optional[str] = None  # Previous gesture state
         self._held_mouse_button: Optional[str] = None  # Which button is currently held
@@ -90,6 +100,14 @@ class ActionExecutorThread(threading.Thread):
             daemon=True
         )
         interpolation_thread.start()
+
+        # Start momentum thread (for kinetic scrolling)
+        momentum_thread = threading.Thread(
+            target=self._momentum_loop,
+            name="MomentumThread",
+            daemon=True
+        )
+        momentum_thread.start()
 
         try:
             while not self.runtime_state.shutdown_requested:
@@ -149,6 +167,85 @@ class ActionExecutorThread(threading.Thread):
             log_error("ACT-005", f"Interpolation loop error: {e}")
         finally:
             log_info("Interpolation thread stopped")
+
+    def _momentum_loop(self) -> None:
+        """
+        Background thread for scroll momentum (kinetic scrolling).
+
+        Runs at 60 Hz, applying decaying scroll velocity after gesture ends with movement.
+        Provides natural momentum like trackpad scrolling.
+        """
+        log_info("Momentum thread started")
+        sleep_time = 1.0 / 60.0  # 60 Hz
+
+        try:
+            while not self.runtime_state.shutdown_requested:
+                # Check if momentum is enabled in config
+                if not self.action_config.scroll.momentum_enabled:
+                    time.sleep(sleep_time)
+                    continue
+
+                # Check if momentum is active
+                with self._momentum_lock:
+                    active = self._momentum_active
+                    velocity = self._momentum_velocity
+
+                if not active:
+                    # No momentum, just sleep
+                    time.sleep(sleep_time)
+                    continue
+
+                # Apply current momentum velocity as scroll
+                velocity_dx, velocity_dy = velocity
+                velocity_magnitude = (velocity_dx**2 + velocity_dy**2) ** 0.5
+
+                if self.adapter and velocity_magnitude > self.action_config.scroll.momentum_stop_threshold:
+                    # Determine dominant direction (match active scrolling behavior)
+                    abs_vx = abs(velocity_dx)
+                    abs_vy = abs(velocity_dy)
+
+                    if abs_vy > abs_vx:
+                        # Vertical momentum dominant
+                        scroll_dx = 0
+                        scroll_dy = velocity_dy
+                    else:
+                        # Horizontal momentum dominant
+                        scroll_dx = velocity_dx
+                        scroll_dy = 0
+
+                    # Apply invert if enabled (consistent with active scrolling)
+                    if self.action_config.scroll.invert:
+                        scroll_dx = -scroll_dx
+                        scroll_dy = -scroll_dy
+
+                    self.adapter.scroll(dx=int(scroll_dx), dy=int(scroll_dy))  # type: ignore
+                    log_debug(f"Momentum scroll: dx={scroll_dx:.1f}, dy={scroll_dy:.1f}")
+                    print(f"Momentum scroll: dx={scroll_dx:.1f}, dy={scroll_dy:.1f}")
+                    # Decay velocity (both components)
+                    with self._momentum_lock:
+                        self._momentum_velocity = (
+                            velocity_dx * self.action_config.scroll.momentum_decay,
+                            velocity_dy * self.action_config.scroll.momentum_decay
+                        )
+
+                        # Stop if velocity magnitude drops below threshold
+                        new_magnitude = (self._momentum_velocity[0]**2 + self._momentum_velocity[1]**2) ** 0.5
+                        if new_magnitude < self.action_config.scroll.momentum_stop_threshold:
+                            self._momentum_active = False
+                            log_debug("Momentum stopped (velocity below threshold)")
+                else:
+                    # Velocity too low, stop momentum
+                    with self._momentum_lock:
+                        self._momentum_active = False
+                    log_debug("Momentum stopped")
+
+                # Sleep to maintain 60 Hz rate
+                time.sleep(sleep_time)
+
+        except Exception as e:
+            log_error("ACT-006", f"Momentum loop error: {e}")
+        finally:
+            log_info("Momentum thread stopped")
 
     def _interpolate_cursor_to_target(self, target_hand_pos: tuple[float, float]) -> None:
         """
@@ -361,6 +458,27 @@ class ActionExecutorThread(threading.Thread):
                 with self._interpolation_lock:
                     self._interpolation_enabled = False
                 log_debug("Interpolation disabled (gesture ended)")
+            elif action == "continuous_scroll":
+                # Calculate average velocity from recent scroll history (2D: dx, dy)
+                if len(self._scroll_velocity_history) > 0:
+                    # Average each component separately
+                    avg_dx = sum(v[0] for v in self._scroll_velocity_history) / len(self._scroll_velocity_history)
+                    avg_dy = sum(v[1] for v in self._scroll_velocity_history) / len(self._scroll_velocity_history)
+                    avg_velocity_magnitude = (avg_dx**2 + avg_dy**2) ** 0.5
+
+                    # Only apply momentum if velocity magnitude is significant (user was moving)
+                    if avg_velocity_magnitude > self.action_config.scroll.momentum_min_velocity:
+                        with self._momentum_lock:
+                            self._momentum_velocity = (avg_dx, avg_dy)
+                            self._momentum_active = True
+                        log_debug(f"Scroll momentum started: dx={avg_dx:.1f}, dy={avg_dy:.1f}, magnitude={avg_velocity_magnitude:.1f}")
+                    else:
+                        log_debug("No momentum: hand stopped before gesture ended")
+
+                # Reset tracking
+                self._scroll_anchor_pos = None
+                self._scroll_velocity_history.clear()
+                log_debug("Scroll tracking stopped")
 
         # Handle gesture START
         if new_gesture is not None:
@@ -382,6 +500,13 @@ class ActionExecutorThread(threading.Thread):
                 with self._interpolation_lock:
                     self._interpolation_enabled = True
                 log_debug("Interpolation enabled (mouse_move started)")
+            elif action == "continuous_scroll":
+                # Cancel any active momentum (user taking control)
+                with self._momentum_lock:
+                    self._momentum_active = False
+                # Reset anchor for scroll tracking when starting scroll gesture
+                self._scroll_anchor_pos = None
+                log_debug("Scroll tracking started")
 
     def _handle_gesture_continue(self, gesture_name: str) -> None:
         """
@@ -401,6 +526,9 @@ class ActionExecutorThread(threading.Thread):
         elif action == "click" and self._held_mouse_button:
             # Update interpolation target to enable drag while button is held
             self._update_interpolation_target()
+        # Execute continuous scroll based on hand vertical movement
+        elif action == "continuous_scroll":
+            self._action_continuous_scroll()
 
     def _update_interpolation_target(self) -> None:
         """
@@ -464,6 +592,8 @@ class ActionExecutorThread(threading.Thread):
             return self._action_double_click()
         elif action_name == "right_click":
             return self._action_click(button="right")
+        elif action_name == "continuous_scroll":
+            return self._action_continuous_scroll()
         elif action_name == "scroll_down":
             return self._action_scroll(direction='down')
         elif action_name == "scroll_up":
@@ -657,3 +787,79 @@ class ActionExecutorThread(threading.Thread):
             True if successful, False if in cooldown
         """
         return self.state_machine.disable_latch()
+
+    def _action_continuous_scroll(self) -> bool:
+        """
+        Execute continuous scroll action using vertical hand movement.
+
+        Tracks hand vertical movement delta from an anchor point and converts
+        to scroll amount. Movement is normalized by hand scale for distance-invariance.
+
+        Returns:
+            True if successful, False otherwise
+        """
+        with self.runtime_state.lock:
+            hand_pos = self.runtime_state.cursor_position
+            hand_scale = self.runtime_state.hand_scale
+
+        if hand_scale == 0.0:
+            # No hand detected or invalid scale
+            log_debug("Scroll skipped: hand_scale=0.0")
+            return False
+
+        # Initialize anchor on first call
+        if self._scroll_anchor_pos is None:
+            self._scroll_anchor_pos = hand_pos
+            log_debug(f"Scroll anchor initialized to {hand_pos}")
+            return True  # Don't scroll on first frame
+
+        # Calculate hand movement delta from anchor (both X and Y)
+        hand_dx = hand_pos[0] - self._scroll_anchor_pos[0]
+        hand_dy = hand_pos[1] - self._scroll_anchor_pos[1]
+
+        # NORMALIZE by hand scale: divide by hand_scale to make movement distance-invariant
+        hand_dx = hand_dx / hand_scale
+        hand_dy = hand_dy / hand_scale
+
+        # Apply dead zone to hand movement magnitude (ignore small jitters)
+        movement_magnitude = (hand_dx**2 + hand_dy**2) ** 0.5
+        if movement_magnitude < self.action_config.scroll.dead_zone:
+            log_debug(f"Dead zone: hand movement below {self.action_config.scroll.dead_zone:.4f}")
+            return True
+
+        # Determine dominant scroll direction (vertical or horizontal)
+        abs_dx = abs(hand_dx)
+        abs_dy = abs(hand_dy)
+
+        if abs_dy > abs_dx:
+            # Vertical scrolling dominant
+            scroll_amount_x = 0.0
+            scroll_amount_y = hand_dy * self.action_config.scroll.sensitivity * 1000
+        else:
+            # Horizontal scrolling dominant
+            scroll_amount_x = hand_dx * self.action_config.scroll.sensitivity * 1000
+            scroll_amount_y = 0.0
+
+        # Track velocity for momentum (before inversion and clamping)
+        # Store the "unclamped" velocity for smooth momentum calculation
+        self._scroll_velocity_history.append((scroll_amount_x, scroll_amount_y))
+
+        # Apply invert if enabled (natural scrolling)
+        if self.action_config.scroll.invert:
+            # scroll_amount_x = -scroll_amount_x # Horizontal inversion not needed
+            scroll_amount_y = -scroll_amount_y
+
+        # Clamp to max scroll per frame
+        max_scroll = self.action_config.scroll.max_scroll_per_frame
+        scroll_amount_x = max(-max_scroll, min(max_scroll, scroll_amount_x))
+        scroll_amount_y = max(-max_scroll, min(max_scroll, scroll_amount_y))
+
+        log_debug(f"Scroll: dx={scroll_amount_x:.1f}px, dy={scroll_amount_y:.1f}px")
+
+        # Execute scroll via adapter
+        result = self.adapter.scroll(dx=int(scroll_amount_x), dy=int(scroll_amount_y))  # type: ignore
+
+        # Update anchor to current hand position for continuous tracking
+        self._scroll_anchor_pos = hand_pos
+
+        return result

@@ -443,6 +443,41 @@ class GestureDetector:
             "position": lm[0],
             "hand_scale": hand_scale
         })
+    
+    def _two_fingers_horizontal_point(self, lm: list) -> Optional[tuple[str, float, dict]]:
+        """Detect two fingers pointed (all fingers curled/closed)."""
+        # Get hand scale for normalization
+        hand_scale = self._get_hand_scale(lm)
+
+        # Check if ALL fingers are closed (using correct joints)
+        fingers = [
+            (4, 1),   # Thumb (tip to CMC, not MCP)
+            (8, 5),   # Index
+            (12, 9),  # Middle
+            (16, 13), # Ring
+            (20, 17)  # Pinky
+        ]
+
+        closed_count = 0
+        for tip_idx, mcp_idx in fingers:
+            # Use slightly looser curl ratio for fist detection (allow 20% extension)
+            if self._is_finger_closed(lm, tip_idx, mcp_idx, curl_ratio=self.fist_threshold):
+                closed_count += 1
+
+        # Require at least 4 of 5 fingers to be closed
+        if closed_count < 5:
+            return None
+
+        # Calculate confidence based on how closed the fingers are
+        # Since we already validated with ratio checks, just return high confidence
+        confidence = min(closed_count / 5.0, 1.0)
+        # # position = self._get_hand_center_of_mass(lm)
+
+        return ("fist", confidence, {
+            "closed_count": closed_count,
+            "position": lm[0],
+            "hand_scale": hand_scale
+        })
 
     def _detect_fist(self, lm: list) -> Optional[tuple[str, float, dict]]:
         """Detect closed fist (all fingers curled/closed)."""
@@ -461,7 +496,7 @@ class GestureDetector:
         closed_count = 0
         for tip_idx, mcp_idx in fingers:
             # Use slightly looser curl ratio for fist detection (allow 20% extension)
-            if self._is_finger_closed(lm, tip_idx, mcp_idx, curl_ratio=1.2):
+            if self._is_finger_closed(lm, tip_idx, mcp_idx, curl_ratio=self.fist_threshold):
                 closed_count += 1
 
         # Require at least 4 of 5 fingers to be closed

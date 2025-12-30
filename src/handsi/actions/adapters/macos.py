@@ -390,10 +390,10 @@ class MacOSAdapter(ActionAdapter):
 
     def scroll(self, dx: int = 0, dy: int = 0) -> bool:
         """
-        Scroll the mouse wheel.
+        Scroll the mouse wheel (both horizontal and vertical).
 
         Args:
-            dx: Horizontal scroll amount (pixels)
+            dx: Horizontal scroll amount (pixels, positive = right)
             dy: Vertical scroll amount (pixels, positive = down)
 
         Returns:
@@ -406,22 +406,48 @@ class MacOSAdapter(ActionAdapter):
         try:
             # CGEventCreateScrollWheelEvent uses scroll lines, not pixels
             # We'll convert pixels to lines (rough approximation)
-            scroll_lines = dy // 10  # Approximate: 10 pixels = 1 line
+            scroll_lines_y = dy // 10  # Approximate: 10 pixels = 1 line
+            scroll_lines_x = dx // 10
 
-            if scroll_lines == 0 and dy != 0:
-                scroll_lines = 1 if dy > 0 else -1
+            # Handle small movements (less than 10 pixels)
+            if scroll_lines_y == 0 and dy != 0:
+                scroll_lines_y = 1 if dy > 0 else -1
+            if scroll_lines_x == 0 and dx != 0:
+                scroll_lines_x = 1 if dx > 0 else -1
 
-            # Create and post scroll event
-            # Note: macOS scroll is inverted (negative = down)
-            event = CGEventCreateScrollWheelEvent(
-                None,
-                kCGScrollEventUnitPixel,
-                1,  # Number of wheels (1 for vertical)
-                -scroll_lines  # Invert for natural scrolling
-            )
+            # Determine if we need 1D or 2D scrolling
+            if dx != 0 and dy != 0:
+                # 2D scrolling: both horizontal and vertical
+                # Note: macOS scroll is inverted (negative = down/right for natural scrolling)
+                event = CGEventCreateScrollWheelEvent(
+                    None,
+                    kCGScrollEventUnitPixel,
+                    2,  # Number of wheels (2 for both axes)
+                    -scroll_lines_y,  # Vertical (wheel 1)
+                    -scroll_lines_x   # Horizontal (wheel 2)
+                )
+                log_debug(f"Scroll executed: dx={dx}, dy={dy} (lines: x={scroll_lines_x}, y={scroll_lines_y})")
+            elif dx != 0:
+                # Horizontal scrolling only
+                event = CGEventCreateScrollWheelEvent(
+                    None,
+                    kCGScrollEventUnitPixel,
+                    2,  # Need 2 wheels for horizontal
+                    0,              # Vertical = 0
+                    -scroll_lines_x # Horizontal (wheel 2)
+                )
+                log_debug(f"Scroll executed: dx={dx} (lines={scroll_lines_x})")
+            else:
+                # Vertical scrolling only (dy != 0 or both zero)
+                event = CGEventCreateScrollWheelEvent(
+                    None,
+                    kCGScrollEventUnitPixel,
+                    1,  # Number of wheels (1 for vertical only)
+                    -scroll_lines_y  # Vertical
+                )
+                log_debug(f"Scroll executed: dy={dy} (lines={scroll_lines_y})")
+
             CGEventPost(kCGHIDEventTap, event)
-
-            log_debug(f"Scroll executed: dy={dy} (lines={scroll_lines})")
             return True
 
         except Exception as e:
