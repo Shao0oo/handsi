@@ -49,8 +49,8 @@ actions:
     swipe: switch_desktop            # Swipe in any direction (direction passed via metadata)
     thumbs_up: enable_latch          # Enable gesture control (latch ON)
     thumbs_down: disable_latch       # Disable gesture control (latch OFF)
-    fist: continuous_scroll          # Continuous: hand vertical movement controls scrolling
-    # _two_fingers_horizontal_point: continuous_scroll
+    # fist: continuous_scroll          # Continuous: hand vertical movement controls scrolling
+    two_fingers_point: continuous_scroll
     # Ready to map (actions implemented, just add gesture mapping here):
     # middle_pinch: scroll_up
     # ring_pinch: zoom_in
@@ -70,13 +70,13 @@ actions:
   # Continuous scroll settings (fist gesture)
   scroll:
     sensitivity: 5.0                # Scroll speed multiplier (higher = faster scroll)
-    dead_zone: 0.03                 # Ignore hand movements smaller than 1% of screen height
+    dead_zone: 0.02                 # Ignore hand movements smaller than 1% of screen height
     max_scroll_per_frame: 500       # Clamp maximum scroll amount per frame (pixels)
     invert: true                    # Invert scroll (only for vertical scroll)
     momentum_enabled: true          # Enable kinetic scrolling (momentum continues after gesture ends)
-    momentum_decay: 0.9            # Velocity decay per frame (0.95 = 5% reduction, higher = longer momentum)
-    momentum_min_velocity: 100.0      # Min velocity to trigger momentum (pixels/frame)
-    momentum_stop_threshold: 1.0    # Stop momentum when velocity drops below this
+    momentum_decay: 0.8            # Velocity decay per frame (0.95 = 5% reduction, higher = longer momentum)
+    momentum_min_velocity: 150.0      # Min velocity to trigger momentum (pixels/frame)
+    momentum_stop_threshold: 100.0    # Stop momentum when velocity drops below this
 
 system:
   log_level: INFO           # DEBUG | INFO | WARN | ERROR
