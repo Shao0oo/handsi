@@ -31,6 +31,11 @@ ui = [
   # System tray UI (Phase 2)
   "PySide6>=6.5.0,<7.0.0",
 ]
+web = [
+  # Native app control panel (Qt WebEngine)
+  # Note: PySide6 includes QtWebEngine in the main package for newer versions
+  "PySide6>=6.6.0",
+]
 teach = [
   # Teaching mode (Phase 3)
   "pyaudio>=0.2.13,<1.0.0",

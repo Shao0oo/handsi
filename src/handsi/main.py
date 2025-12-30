@@ -48,6 +48,12 @@ def parse_args() -> argparse.Namespace:
         help="Enable debug logging"
     )
 
+    parser.add_argument(
+        "--app",
+        action="store_true",
+        help="Launch native app control panel (Qt WebEngine) instead of CLI mode"
+    )
+
     return parser.parse_args()
 
 
@@ -72,6 +78,24 @@ def main() -> int:
     except FileNotFoundError as e:
         print(f"Error: {e}")
         return 1
+
+    # App mode: Launch Qt native app instead of CLI
+    if args.app:
+        from handsi.ui.qt_app import run_app
+        try:
+            exit_code = run_app(
+                config_path=config_path,
+                debug=args.debug
+            )
+            return exit_code
+        except KeyboardInterrupt:
+            log_info("App stopped by user")
+            return 0
+        except Exception as e:
+            print(f"Failed to start app: {e}")
+            import traceback
+            traceback.print_exc()
+            return 1
 
     # Load config
     try:
