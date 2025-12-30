@@ -219,6 +219,56 @@ def apply_dead_zone(
     return dx, dy
 
 
+def apply_smooth_dead_zone(
+    dx: float,
+    dy: float,
+    dead_zone: float,
+    curve_power: float = 2.0,
+    min_damping: float = 0.1
+) -> tuple[float, float]:
+    """
+    Apply smooth non-linear dead zone using power curve.
+
+    Creates continuous response from heavy damping to full response:
+    - Below dead_zone: Heavily damped (min_damping factor)
+    - At 3x dead_zone: Full response (1.0x)
+    - Smooth power curve in between
+
+    This eliminates discontinuous jumps at the dead zone threshold,
+    preventing perceivable twitches during small movements.
+
+    Args:
+        dx: Delta x movement
+        dy: Delta y movement
+        dead_zone: Threshold for damping region
+        curve_power: Power curve exponent (1.0-3.0, higher = steeper)
+        min_damping: Minimum damping factor (0.0-0.5)
+
+    Returns:
+        Smoothly damped (dx, dy) tuple
+    """
+    magnitude = (dx**2 + dy**2) ** 0.5
+
+    if magnitude < 0.001:  # Avoid division by zero
+        return 0.0, 0.0
+
+    # Normalize magnitude to 0-1 range (1.0 = 3x dead_zone = full response)
+    full_response_threshold = dead_zone * 3.0
+    t = min(1.0, magnitude / full_response_threshold)
+
+    # Apply power curve: t^power
+    # - power=1.0: linear ramp
+    # - power=2.0: quadratic (smooth, recommended)
+    # - power=3.0: cubic (aggressive damping)
+    damping = t ** curve_power
+
+    # Ensure minimum damping (so small movements aren't completely killed)
+    damping = max(min_damping, damping)
+
+    # Apply damping while preserving direction
+    return dx * damping, dy * damping
+
+
 def smooth_position(
     current: tuple[float, float],
     target: tuple[float, float],

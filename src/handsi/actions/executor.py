@@ -288,11 +288,16 @@ class ActionExecutorThread(threading.Thread):
         hand_dx = hand_dx / hand_scale
         hand_dy = hand_dy / hand_scale
 
-        # Apply dead zone (ignore tiny jitters)
-        from handsi.actions.adapters.base import apply_dead_zone
-        hand_dx, hand_dy = apply_dead_zone(hand_dx, hand_dy, self.action_config.mouse.dead_zone)
+        # Apply smooth dead zone (eliminates discontinuous jumps)
+        from handsi.actions.adapters.base import apply_smooth_dead_zone
+        hand_dx, hand_dy = apply_smooth_dead_zone(
+            hand_dx, hand_dy,
+            self.action_config.mouse.dead_zone,
+            self.action_config.mouse.dead_zone_curve,
+            self.action_config.mouse.dead_zone_min_damping
+        )
 
-        if hand_dx == 0.0 and hand_dy == 0.0:
+        if abs(hand_dx) < 0.0001 and abs(hand_dy) < 0.0001:
             return
 
         # Get current mouse position
@@ -821,10 +826,17 @@ class ActionExecutorThread(threading.Thread):
         hand_dx = hand_dx / hand_scale
         hand_dy = hand_dy / hand_scale
 
-        # Apply dead zone to hand movement magnitude (ignore small jitters)
-        movement_magnitude = (hand_dx**2 + hand_dy**2) ** 0.5
-        if movement_magnitude < self.action_config.scroll.dead_zone:
-            log_debug(f"Dead zone: hand movement below {self.action_config.scroll.dead_zone:.4f}")
+        # Apply smooth dead zone (eliminates discontinuous jumps)
+        from handsi.actions.adapters.base import apply_smooth_dead_zone
+        hand_dx, hand_dy = apply_smooth_dead_zone(
+            hand_dx, hand_dy,
+            self.action_config.scroll.dead_zone,
+            self.action_config.scroll.dead_zone_curve,
+            self.action_config.scroll.dead_zone_min_damping
+        )
+
+        # Check if movement is effectively zero after damping
+        if abs(hand_dx) < 0.0001 and abs(hand_dy) < 0.0001:
             return True
 
         # Determine dominant scroll direction (vertical or horizontal)
