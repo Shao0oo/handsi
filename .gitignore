@@ -25,3 +25,6 @@ logs/
 
 # Stats
 profile.stats
+
+# User configuration (settings saved from app UI)
+config/user_config/

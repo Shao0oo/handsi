@@ -11,7 +11,7 @@ from typing import Optional
 
 from handsi.actions.executor import ActionExecutorThread
 from handsi.core.bus import RuntimeState, create_queues
-from handsi.core.config import HandsiConfig, load_config
+from handsi.core.config import HandsiConfig, load_config, save_user_config, get_user_config_path
 from handsi.core.logging import log_info, setup_logging
 from handsi.gestures.infer import GestureInferenceThread
 from handsi.vision.capture import CaptureThread
@@ -253,7 +253,15 @@ class HandsiController:
             if "mirror_x" in settings:
                 self.config.actions.mouse.mirror_x = bool(settings["mirror_x"])
 
-            log_info(f"Controller: Settings updated")
+            log_info(f"Controller: Settings updated in memory")
+
+            # Save to user config file for persistence
+            try:
+                save_user_config(self.config)
+                log_info(f"Controller: Settings saved to {get_user_config_path()}")
+            except Exception as save_error:
+                log_info(f"Controller: Warning - failed to save settings: {save_error}")
+                # Continue anyway - settings are updated in memory
 
             # Note: Settings will take effect on next start
             # To apply immediately, would need to restart
@@ -261,10 +269,44 @@ class HandsiController:
 
             return {
                 "success": True,
-                "message": "Settings updated",
+                "message": "Settings saved successfully",
                 "restart_needed": restart_needed
             }
 
         except Exception as e:
             log_info(f"Controller: Failed to update settings - {e}")
+            return {"success": False, "error": str(e)}
+
+    def reset_to_defaults(self) -> dict:
+        """
+        Reset settings to defaults by deleting user config and reloading.
+
+        Returns:
+            dict: Status response with success/error
+        """
+        try:
+            user_config_path = get_user_config_path()
+
+            # Delete user config if it exists
+            if user_config_path.exists():
+                user_config_path.unlink()
+                log_info(f"Controller: Deleted user config at {user_config_path}")
+            else:
+                log_info("Controller: No user config to delete")
+
+            # Reload config from defaults
+            self._load_config()
+            log_info("Controller: Reloaded default config")
+
+            # Note if restart is needed
+            restart_needed = self.is_running()
+
+            return {
+                "success": True,
+                "message": "Settings reset to defaults",
+                "restart_needed": restart_needed
+            }
+
+        except Exception as e:
+            log_info(f"Controller: Failed to reset to defaults - {e}")
             return {"success": False, "error": str(e)}

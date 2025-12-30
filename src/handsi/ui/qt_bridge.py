@@ -108,6 +108,18 @@ class HandsiBridge(QObject):
             log_info(f"Bridge: updateSettings() failed - {e}")
             return json.dumps({"success": False, "error": str(e)})
 
+    @Slot(result=str)
+    def resetToDefaults(self) -> str:
+        """
+        Reset settings to defaults.
+
+        Returns:
+            JSON string with result
+        """
+        result = self.controller.reset_to_defaults()
+        log_info(f"Bridge: resetToDefaults() called - {result}")
+        return json.dumps(result)
+
     def _emit_status(self) -> None:
         """Emit status change signal."""
         status = self.controller.get_status()
