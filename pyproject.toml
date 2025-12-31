@@ -29,10 +29,6 @@ phase2 = [
   "pynput>=1.7.6,<2.0.0",
   "PyAutoGUI>=0.9.54,<1.0.0",
 ]
-ui = [
-  # System tray UI (Phase 2)
-  "PySide6>=6.5.0,<7.0.0",
-]
 teach = [
   # Teaching mode (Phase 3)
   "pyaudio>=0.2.13,<1.0.0",
@@ -50,11 +46,15 @@ linux = [
 ]
 dev = [
   # Development tools
-  "pytest>=7.0.0",
-  "black>=23.0.0",
-  "mypy>=1.0.0",
-  "ruff>=0.1.0",
+
   "pyinstaller>=6.0.0",
+
+  # Currently commented out to avoid unnecessary dependencies
+  # "pytest>=7.0.0",
+  # "black>=23.0.0",
+  # "mypy>=1.0.0",
+  # "ruff>=0.1.0",
+  
 ]
 
 [tool.setuptools]

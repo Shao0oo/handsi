@@ -1,4 +1,4 @@
-# Handsi (Alternatives: AirDesk, AirCursor) — Contactless Desktop Control (Hands + Head + Body)
+# Handsi — Contactless Desktop Control
 
 Handsi is a local, background-running gesture control system that lets you operate your computer without touching the mouse/keyboard. It tracks your hands via a webcam or camera, recognizes gestures, and maps them to OS actions like switching desktops, scrolling, clicking, and window management.
 
@@ -15,7 +15,7 @@ Handsi is a local, background-running gesture control system that lets you opera
 - Gesture → action mapping (YAML config or alternative suggestion)
 - Actions:
   - zoom in and out (for text)
-  - mouse move (general area vs specific point depending on system stability)
+  - mouse move
     - click, drag (optional)
   - scroll
   - next/previous desktop (workspace)

@@ -1,5 +1,7 @@
 convos/
 
+# Ignore certain .md files
+CLAUDE.md
 docs/NOTES.md
 
 __pycache__/
