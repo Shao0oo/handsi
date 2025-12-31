@@ -132,31 +132,41 @@ def load_config(config_path: str | Path) -> HandsiConfig:
     """
     Load and validate configuration from YAML file.
 
+    Checks for user config first (~/.handsi/config.yaml), then falls back
+    to the provided path (usually config/default.yaml).
+
     Args:
-        config_path: Path to YAML config file
+        config_path: Path to YAML config file (fallback if no user config)
 
     Returns:
         Validated HandsiConfig instance
 
     Raises:
-        FileNotFoundError: If config file doesn't exist
+        FileNotFoundError: If neither user config nor default config exists
         ValueError: If config is invalid
     """
-    config_path = Path(config_path)
+    # Check for user config first
+    user_config_path = get_user_config_path()
+    if user_config_path.exists():
+        config_to_load = user_config_path
+        log_info(f"Loading user config from {user_config_path}")
+    else:
+        config_to_load = Path(config_path)
+        log_info(f"No user config found, loading defaults from {config_path}")
 
-    if not config_path.exists():
-        log_error("CFG-001", f"Config file not found: {config_path}")
-        raise FileNotFoundError(f"Config file not found: {config_path}")
+    if not config_to_load.exists():
+        log_error("CFG-001", f"Config file not found: {config_to_load}")
+        raise FileNotFoundError(f"Config file not found: {config_to_load}")
 
     try:
-        with open(config_path, "r") as f:
+        with open(config_to_load, "r") as f:
             raw_config = yaml.safe_load(f)
 
         if raw_config is None:
             raw_config = {}
 
         config = HandsiConfig(**raw_config)
-        log_info(f"Config loaded from {config_path}")
+        log_info(f"Config loaded from {config_to_load}")
         return config
 
     except yaml.YAMLError as e:
@@ -171,3 +181,62 @@ def load_config(config_path: str | Path) -> HandsiConfig:
 def get_default_config() -> HandsiConfig:
     """Get default configuration (all defaults)."""
     return HandsiConfig()
+
+
+def get_user_config_path() -> Path:
+    """
+    Get path to user configuration file.
+
+    Returns:
+        Path to config/user_config/config.yaml (in project root)
+    """
+    # Get project root (assumes this file is in src/handsi/core/)
+    project_root = Path(__file__).parent.parent.parent.parent
+    return project_root / "config" / "user_config" / "config.yaml"
+
+
+def save_user_config(config: HandsiConfig) -> None:
+    """
+    Save configuration to user config file.
+
+    Creates ~/.handsi/ directory if it doesn't exist.
+
+    Args:
+        config: Configuration to save
+
+    Raises:
+        IOError: If unable to write config file
+    """
+    user_config_path = get_user_config_path()
+
+    # Create directory if it doesn't exist
+    user_config_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        # Convert config to dict
+        config_dict = config.model_dump()
+
+        # Convert tuples to lists for YAML serialization
+        # yaml.safe_load() cannot handle Python-specific tuple tags
+        def convert_tuples_to_lists(obj):
+            """Recursively convert tuples to lists for YAML compatibility."""
+            if isinstance(obj, dict):
+                return {k: convert_tuples_to_lists(v) for k, v in obj.items()}
+            elif isinstance(obj, tuple):
+                return list(obj)
+            elif isinstance(obj, list):
+                return [convert_tuples_to_lists(item) for item in obj]
+            else:
+                return obj
+
+        config_dict = convert_tuples_to_lists(config_dict)
+
+        # Write to YAML
+        with open(user_config_path, "w") as f:
+            yaml.dump(config_dict, f, default_flow_style=False, sort_keys=False)
+
+        log_info(f"User config saved to {user_config_path}")
+
+    except Exception as e:
+        log_error("CFG-004", f"Failed to save user config: {e}")
+        raise IOError(f"Failed to save user config: {e}")

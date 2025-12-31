@@ -2,6 +2,7 @@
 Utility functions for path resolution and common helpers.
 """
 
+import sys
 from pathlib import Path
 
 
@@ -9,10 +10,18 @@ def get_project_root() -> Path:
     """
     Get the project root directory (where pyproject.toml is located).
 
+    When running from PyInstaller bundle, returns the Resources directory.
+    When running normally, returns the project root.
+
     Returns:
-        Path to project root
+        Path to project root or bundle resources
     """
-    # Go up from src/handsi/core/utils.py to project root
+    # Check if running from PyInstaller bundle
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        # PyInstaller extracts to _MEIPASS (Contents/Resources/)
+        return Path(sys._MEIPASS)
+
+    # Normal execution: go up from src/handsi/core/utils.py to project root
     return Path(__file__).parent.parent.parent.parent
 
 

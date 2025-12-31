@@ -177,6 +177,23 @@ function updateSettings(settings) {
     });
 }
 
+function resetToDefaults() {
+    if (!bridgeReady) return Promise.resolve({ success: false, error: 'Bridge not ready' });
+
+    return new Promise((resolve) => {
+        try {
+            bridge.resetToDefaults((resultJson) => {
+                console.log('resetToDefaults() response:', resultJson);
+                const result = JSON.parse(resultJson);
+                resolve({ success: result.success, data: result });
+            });
+        } catch (error) {
+            console.error('resetToDefaults() failed:', error);
+            resolve({ success: false, error: error.message });
+        }
+    });
+}
+
 // === UI Update Functions ===
 
 function updateStatusUI(status) {
@@ -335,11 +352,27 @@ async function handleSaveSettings() {
 }
 
 async function handleResetSettings() {
-    // Reload settings from server (which has defaults)
-    const result = await getSettings();
+    // Confirm with user
+    if (!confirm('Reset all settings to defaults? This will delete your custom configuration.')) {
+        return;
+    }
+
+    // Call reset API
+    const result = await resetToDefaults();
     if (result.success) {
-        updateSettingsUI(result.data);
-        showMessage(elements.settingsMessage, 'info', 'Settings reset to current config values');
+        // Reload settings from server (now defaults)
+        const settingsResult = await getSettings();
+        if (settingsResult.success) {
+            updateSettingsUI(settingsResult.data);
+
+            let message = 'Settings reset to defaults';
+            if (result.data.restart_needed) {
+                message += ' - Restart detection to apply changes';
+            }
+            showMessage(elements.settingsMessage, 'success', message, 5000);
+        }
+    } else {
+        showMessage(elements.settingsMessage, 'error', `Failed to reset: ${result.error || result.data?.error}`);
     }
 }
 

@@ -1,5 +1,7 @@
 convos/
 
+# Ignore certain .md files
+CLAUDE.md
 docs/NOTES.md
 
 __pycache__/
@@ -25,3 +27,6 @@ logs/
 
 # Stats
 profile.stats
+
+# User configuration (settings saved from app UI)
+config/user_config/

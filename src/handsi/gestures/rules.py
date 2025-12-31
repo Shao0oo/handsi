@@ -470,13 +470,13 @@ class GestureDetector:
 
         # Require all 3 fingers closed (thumb, ring, pinky)
         if closed_count < 2:
-            print(f"Two fingers point: only {closed_count} fingers closed, need 3")
+            # print(f"Two fingers point: only {closed_count} fingers closed, need 3")
             return None
 
         # Check if index and middle fingers are extended
         if not (self._is_finger_extended(lm, index_tip_idx, index_mcp_idx, extension_ratio=1.6) and
                 self._is_finger_extended(lm, middle_tip_idx, middle_mcp_idx, extension_ratio=1.6)):
-            print("Two fingers point: index or middle finger not extended")
+            # print("Two fingers point: index or middle finger not extended")
             return None
 
         # Check if index and middle fingertips are close together
@@ -485,7 +485,7 @@ class GestureDetector:
         distance = self._normalized_distance(index_tip, middle_tip, hand_scale)
 
         if distance >= self.pinch_threshold * 100:  # Allow wider spread for two fingers point
-            print(f"Two fingers point: distance {distance:.3f} exceeds threshold")
+            # print(f"Two fingers point: distance {distance:.3f} exceeds threshold")
             return None
 
         # Calculate confidence based on finger proximity

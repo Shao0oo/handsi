@@ -36,10 +36,11 @@ class HandsiWindow(QMainWindow):
         self.config_path = config_path
         self.debug = debug
 
-        # Setup logging
+        # Setup logging - use user's home directory for logs when running as app bundle
+        log_file = Path.home() / ".handsi" / "logs" / "handsi_app.log"
         setup_logging(
             log_level="DEBUG" if debug else "INFO",
-            log_file="logs/handsi_app.log",
+            log_file=str(log_file),
             debug=debug
         )
 

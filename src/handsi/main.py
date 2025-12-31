@@ -49,9 +49,9 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
-        "--app",
+        "--cli",
         action="store_true",
-        help="Launch native app control panel (Qt WebEngine) instead of CLI mode"
+        help="Run in CLI mode (background service) instead of launching GUI"
     )
 
     return parser.parse_args()
@@ -64,13 +64,13 @@ def main() -> int:
     Returns:
         Exit code (0 for success, 1 for error)
     """
-    # Set OpenCV camera access workaround for macOS
-    # This allows camera authorization to happen in the main thread
-    if sys.platform == "darwin":
-        os.environ.setdefault("OPENCV_AVFOUNDATION_SKIP_AUTH", "1")
-
     # Parse arguments
     args = parse_args()
+
+    # Set OpenCV camera access workaround for macOS (only in CLI mode)
+    # In GUI mode, we want the normal permission prompt to appear
+    if sys.platform == "darwin" and args.cli:
+        os.environ.setdefault("OPENCV_AVFOUNDATION_SKIP_AUTH", "1")
 
     # Find config file
     try:
@@ -79,8 +79,9 @@ def main() -> int:
         print(f"Error: {e}")
         return 1
 
-    # App mode: Launch Qt native app instead of CLI
-    if args.app:
+    # Default mode: Launch Qt native app GUI
+    # CLI mode: Run as background service (use --cli flag)
+    if not args.cli:
         from handsi.ui.qt_app import run_app
         try:
             exit_code = run_app(
