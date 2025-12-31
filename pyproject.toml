@@ -19,6 +19,8 @@ dependencies = [
   "mediapipe==0.10.21",
   # macOS Action Execution (Phase 1)
   "pyobjc-framework-Quartz>=9.0; sys_platform == 'darwin'",
+  # Web GUI
+  "PySide6>=6.6.0",
 ]
 
 [project.optional-dependencies]
@@ -30,11 +32,6 @@ phase2 = [
 ui = [
   # System tray UI (Phase 2)
   "PySide6>=6.5.0,<7.0.0",
-]
-web = [
-  # Native app control panel (Qt WebEngine)
-  # Note: PySide6 includes QtWebEngine in the main package for newer versions
-  "PySide6>=6.6.0",
 ]
 teach = [
   # Teaching mode (Phase 3)
