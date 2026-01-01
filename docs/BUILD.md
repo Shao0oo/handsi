@@ -2,25 +2,6 @@
 
 This guide explains how to build standalone executables for macOS, Windows, and Linux.
 
-## Running the App (Development Mode)
-
-```bash
-# Activate conda environment
-conda activate handsi
-
-# Launch native app
-handsi --app
-
-# Launch with debug mode (shows console and detailed logs)
-handsi --app --debug
-```
-
-**Settings Persistence:**
-- Settings are automatically saved to `config/user_config/config.yaml`
-- Changes persist across app restarts
-- User config is gitignored (won't be committed)
-- Use "Reset to Defaults" button in UI to restore defaults
-
 ## Building Standalone Executables
 
 ### Prerequisites
@@ -82,6 +63,69 @@ create-dmg \
   --app-drop-link 425 120 \
   "Handsi-1.0.0.dmg" \
   "dist/"
+```
+
+**Permissions on First Launch:**
+The app will request three permissions on first launch:
+1. **Camera** - For hand tracking (required)
+2. **Accessibility** - For mouse/keyboard control (required)
+3. **System Events** - For desktop switching (triggered on first swipe gesture)
+
+#### Rebuilding
+
+## ⚠️ Permission Reset Warning (macOS)
+
+**IMPORTANT:** Every time you rebuild the app with `pyinstaller handsi.spec`, macOS treats it as a **completely new app** with a different code signature. All permissions are reset and must be re-granted.
+
+### Symptoms of Stale Permissions
+
+After rebuilding, you may experience:
+- ✅ Thumbs up/down work (internal state changes only)
+- ❌ Mouse movement doesn't work (cursor doesn't move)
+- ❌ Click/scroll/swipe don't work (no system control)
+- ⚠️ Logs show "Action executed" but nothing happens on screen
+
+This means macOS is **silently blocking** the app because it has stale/missing permissions.
+
+### How to Fix
+
+**Step 1: Remove old permissions**
+1. Open: **System Settings → Privacy & Security → Accessibility**
+2. Find "Handsi" or "Handsi.app" in the list
+3. Click the **(-) button** to remove it
+4. This clears the stale permission entry
+
+**Step 2: Re-grant permissions**
+1. Launch the rebuilt app: `open dist/Handsi.app`
+2. macOS will automatically prompt for:
+   - **Accessibility** permission (for mouse/keyboard control)
+   - **Camera** permission (for hand tracking)
+3. Click **"Allow"** or **"OK"** for each prompt
+4. Try a **swipe gesture** to trigger the System Events prompt:
+   - macOS will ask: "Handsi.app would like to control System Events"
+   - Click **"OK"** to grant
+
+**Step 3: Verify**
+Check these settings are enabled:
+- **System Settings → Privacy & Security → Accessibility**: Handsi.app ✓
+- **System Settings → Privacy & Security → Automation → System Events**: Handsi.app ✓
+- **System Settings → Privacy & Security → Camera**: Handsi.app ✓
+
+### When This Matters
+
+- ✅ After rebuilding with `pyinstaller handsi.spec`
+- ✅ After cleaning and rebuilding (`pyinstaller --clean handsi.spec`)
+- ❌ NOT needed for development mode (`handsi --app` via Terminal)
+
+**Development Tip:** Use `handsi --app` during development to avoid permission resets across code changes.
+
+### Windows
+
+**Output:** `dist/Handsi/Handsi.exe` (directory)
+
+**To run:**
+```cmd
+dist\Handsi\Handsi.exe
 ```
 
 **To create installer:**
