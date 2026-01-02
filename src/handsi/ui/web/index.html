@@ -18,144 +18,300 @@
             </div>
         </header>
 
-        <!-- Status Card -->
-        <section class="card">
-            <h2 class="card-title">Status</h2>
-            <div class="status-grid">
-                <div class="status-item">
-                    <span class="status-label">Detection:</span>
-                    <span class="status-value" id="runningStatus">Stopped</span>
+        <!-- Tab Navigation -->
+        <nav class="tab-nav">
+            <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+            <button class="tab-btn" data-tab="settings">Settings</button>
+            <button class="tab-btn" data-tab="mappings">Mappings</button>
+            <button class="tab-btn" data-tab="info">Info</button>
+        </nav>
+
+        <!-- Dashboard Tab -->
+        <div id="dashboard" class="tab-content active">
+            <!-- Status Card -->
+            <section class="card">
+                <h2 class="card-title">Status</h2>
+                <div class="status-grid">
+                    <div class="status-item">
+                        <span class="status-label">Detection:</span>
+                        <span class="status-value" id="runningStatus">Stopped</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">FPS:</span>
+                        <span class="status-value" id="fpsValue">0</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Activity:</span>
+                        <span class="status-value" id="activityValue">IDLE</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Gesture Control:</span>
+                        <span class="status-value" id="latchStatus">Disabled</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Frames Captured:</span>
+                        <span class="status-value" id="framesCaptured">0</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Frames Processed:</span>
+                        <span class="status-value" id="framesProcessed">0</span>
+                    </div>
                 </div>
-                <div class="status-item">
-                    <span class="status-label">FPS:</span>
-                    <span class="status-value" id="fpsValue">0</span>
+            </section>
+
+            <!-- Controls Card -->
+            <section class="card">
+                <h2 class="card-title">Controls</h2>
+                <div class="controls">
+                    <button id="startBtn" class="btn btn-primary">Start Detection</button>
+                    <button id="stopBtn" class="btn btn-secondary" disabled>Stop Detection</button>
                 </div>
-                <div class="status-item">
-                    <span class="status-label">Activity:</span>
-                    <span class="status-value" id="activityValue">IDLE</span>
+                <div id="controlMessage" class="message"></div>
+            </section>
+        </div>
+
+        <!-- Settings Tab -->
+        <div id="settings" class="tab-content">
+            <section class="card">
+                <h2 class="card-title">Settings</h2>
+
+                <!-- General Settings (Always Visible) -->
+                <div class="settings-section">
+                    <h3 class="settings-subtitle">General</h3>
+                    <div class="setting-item">
+                        <label for="sensitivity">
+                            Mouse Sensitivity: <span id="sensitivityValue">0.7</span>
+                        </label>
+                        <input type="range" id="sensitivity" min="0.1" max="5.0" step="0.1" value="0.7">
+                    </div>
+                    <div class="setting-item checkbox-item">
+                        <label for="mirrorX">
+                            <input type="checkbox" id="mirrorX" checked>
+                            Mirror X-axis (natural camera movement)
+                        </label>
+                    </div>
                 </div>
-                <div class="status-item">
-                    <span class="status-label">Gesture Control:</span>
-                    <span class="status-value" id="latchStatus">Disabled</span>
+
+                <!-- Advanced Settings (Collapsible) -->
+                <div class="collapsible-section">
+                    <button class="collapsible-header">
+                        <span>Advanced Settings</span>
+                        <span class="arrow">▼</span>
+                    </button>
+                    <div class="collapsible-content">
+                        <!-- Mouse Advanced -->
+                        <div class="settings-section">
+                            <h3 class="settings-subtitle">Mouse Control</h3>
+                            <div class="setting-item">
+                                <label for="smoothing">
+                                    Smoothing: <span id="smoothingValue">0.3</span>
+                                </label>
+                                <input type="range" id="smoothing" min="0.0" max="1.0" step="0.05" value="0.3">
+                            </div>
+                            <div class="setting-item">
+                                <label for="deadZone">
+                                    Dead Zone: <span id="deadZoneValue">0.003</span>
+                                </label>
+                                <input type="range" id="deadZone" min="0.0" max="0.1" step="0.001" value="0.003">
+                            </div>
+                        </div>
+
+                        <!-- Scroll Advanced -->
+                        <div class="settings-section">
+                            <h3 class="settings-subtitle">Scroll Control</h3>
+                            <div class="setting-item checkbox-item">
+                                <label for="invertScroll">
+                                    <input type="checkbox" id="invertScroll" checked>
+                                    Invert Scroll Direction
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Gesture Thresholds -->
+                        <div class="settings-section">
+                            <h3 class="settings-subtitle">Gesture Detection</h3>
+                            <div class="setting-item">
+                                <label for="pinchThreshold">
+                                    Pinch Threshold: <span id="pinchThresholdValue">0.2</span>
+                                </label>
+                                <input type="range" id="pinchThreshold" min="0.05" max="0.5" step="0.05" value="0.2">
+                            </div>
+                            <div class="setting-item">
+                                <label for="fistThreshold">
+                                    Fist Threshold: <span id="fistThresholdValue">0.65</span>
+                                </label>
+                                <input type="range" id="fistThreshold" min="0.3" max="1.0" step="0.05" value="0.65">
+                            </div>
+                            <div class="setting-item">
+                                <label for="swipeVelocity">
+                                    Swipe Velocity: <span id="swipeVelocityValue">5.0</span>
+                                </label>
+                                <input type="range" id="swipeVelocity" min="0.3" max="10.0" step="0.1" value="5.0">
+                            </div>
+                            <div class="setting-item">
+                                <label for="openHandSpread">
+                                    Open Hand Spread: <span id="openHandSpreadValue">0.1</span>
+                                </label>
+                                <input type="range" id="openHandSpread" min="0.1" max="0.8" step="0.05" value="0.1">
+                            </div>
+                            <div class="setting-item">
+                                <label for="thumbsVertical">
+                                    Thumbs Vertical Distance: <span id="thumbsVerticalValue">1.3</span>
+                                </label>
+                                <input type="range" id="thumbsVertical" min="0.5" max="2.0" step="0.1" value="1.3">
+                            </div>
+                        </div>
+
+                        <!-- Timing Settings -->
+                        <div class="settings-section">
+                            <h3 class="settings-subtitle">Timing</h3>
+                            <div class="setting-item">
+                                <label for="debounceMs">
+                                    Debounce (ms): <span id="debounceMsValue">500</span>
+                                </label>
+                                <input type="range" id="debounceMs" min="0" max="2000" step="50" value="500">
+                            </div>
+                            <div class="setting-item">
+                                <label for="latchCooldownMs">
+                                    Latch Cooldown (ms): <span id="latchCooldownMsValue">500</span>
+                                </label>
+                                <input type="range" id="latchCooldownMs" min="0" max="2000" step="50" value="500">
+                            </div>
+                            <div class="setting-item">
+                                <label for="smoothingWindow">
+                                    Smoothing Window: <span id="smoothingWindowValue">3</span>
+                                </label>
+                                <input type="range" id="smoothingWindow" min="1" max="10" step="1" value="3">
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div class="status-item">
-                    <span class="status-label">Frames Captured:</span>
-                    <span class="status-value" id="framesCaptured">0</span>
+
+                <div class="controls">
+                    <button id="saveSettingsBtn" class="btn btn-primary">Save Settings</button>
+                    <button id="resetSettingsBtn" class="btn btn-secondary">Reset to Defaults</button>
                 </div>
-                <div class="status-item">
-                    <span class="status-label">Frames Processed:</span>
-                    <span class="status-value" id="framesProcessed">0</span>
+                <div id="settingsMessage" class="message"></div>
+            </section>
+        </div>
+
+        <!-- Mappings Tab -->
+        <div id="mappings" class="tab-content">
+            <section class="card">
+                <h2 class="card-title">Gesture Mappings</h2>
+                <p class="section-description">Control which gestures are active and what actions they perform.</p>
+
+                <div id="mappingsList" class="mappings-list">
+                    <!-- Mappings will be loaded dynamically -->
+                    <div class="loading">Loading mappings...</div>
+                </div>
+
+                <div id="mappingsMessage" class="message"></div>
+            </section>
+        </div>
+
+        <!-- Info Tab -->
+        <div id="info" class="tab-content">
+            <section class="card">
+                <h2 class="card-title">System Information</h2>
+
+                <div class="info-section">
+                    <h3 class="settings-subtitle">Camera</h3>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <span class="info-label">Device ID:</span>
+                            <span class="info-value" id="infoCameraDevice">-</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Resolution:</span>
+                            <span class="info-value" id="infoCameraResolution">-</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">FPS Range:</span>
+                            <span class="info-value" id="infoCameraFPS">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="info-section">
+                    <h3 class="settings-subtitle">System</h3>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <span class="info-label">Platform:</span>
+                            <span class="info-value" id="infoSystemPlatform">-</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Version:</span>
+                            <span class="info-value" id="infoSystemVersion">-</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Python:</span>
+                            <span class="info-value" id="infoSystemPython">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="info-section">
+                    <h3 class="settings-subtitle">Permissions</h3>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <span class="info-label">Accessibility:</span>
+                            <span class="info-value" id="infoPermissions">-</span>
+                        </div>
+                    </div>
+                    <p class="info-note">
+                        Note: Accessibility permissions are required for gesture control on macOS.
+                        If denied, grant them in System Settings → Privacy & Security → Accessibility.
+                    </p>
+                </div>
+
+                <div class="info-section">
+                    <h3 class="settings-subtitle">About</h3>
+                    <p class="info-text">
+                        Handsi is a contactless desktop control system using computer vision and gesture recognition.
+                        Control your mouse, scroll, and perform actions using hand gestures captured by your camera.
+                    </p>
+                </div>
+            </section>
+        </div>
+
+        <!-- First Run Walkthrough Modal -->
+        <div id="firstRunModal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Welcome to Handsi!</h2>
+                </div>
+                <div class="modal-body">
+                    <p>It looks like this is your first time using Handsi. Let's get you set up!</p>
+
+                    <div class="walkthrough-step">
+                        <h3>1. Permissions</h3>
+                        <p>Handsi requires <strong>Accessibility permissions</strong> on macOS to control your mouse and keyboard.</p>
+                        <p>When you start detection for the first time, you'll be prompted to grant permissions in System Settings.</p>
+                    </div>
+
+                    <div class="walkthrough-step">
+                        <h3>2. Camera</h3>
+                        <p>Make sure your camera is connected and positioned to capture your hand movements.</p>
+                        <p>The camera should have a clear view of your hands with good lighting.</p>
+                    </div>
+
+                    <div class="walkthrough-step">
+                        <h3>3. Gesture Control</h3>
+                        <p>Use the <strong>Thumbs Up</strong> gesture to enable control, and <strong>Thumbs Down</strong> to disable it.</p>
+                        <p>Check the <strong>Mappings</strong> tab to see all available gestures and their actions.</p>
+                    </div>
+
+                    <div class="walkthrough-step">
+                        <h3>4. Settings</h3>
+                        <p>Customize sensitivity, smoothing, and other parameters in the <strong>Settings</strong> tab.</p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button id="closeFirstRunModal" class="btn btn-primary">Get Started</button>
                 </div>
             </div>
-        </section>
-
-        <!-- Controls Card -->
-        <section class="card">
-            <h2 class="card-title">Controls</h2>
-            <div class="controls">
-                <button id="startBtn" class="btn btn-primary">Start Detection</button>
-                <button id="stopBtn" class="btn btn-secondary" disabled>Stop Detection</button>
-            </div>
-            <div id="controlMessage" class="message"></div>
-        </section>
-
-        <!-- Settings Card -->
-        <section class="card">
-            <h2 class="card-title">Settings</h2>
-
-            <!-- Mouse Settings -->
-            <div class="settings-section">
-                <h3 class="settings-subtitle">Mouse Control</h3>
-                <div class="setting-item">
-                    <label for="sensitivity">
-                        Sensitivity: <span id="sensitivityValue">0.7</span>
-                    </label>
-                    <input type="range" id="sensitivity" min="0.1" max="5.0" step="0.1" value="0.7">
-                </div>
-                <div class="setting-item">
-                    <label for="smoothing">
-                        Smoothing: <span id="smoothingValue">0.3</span>
-                    </label>
-                    <input type="range" id="smoothing" min="0.0" max="1.0" step="0.05" value="0.3">
-                </div>
-                <div class="setting-item">
-                    <label for="deadZone">
-                        Dead Zone: <span id="deadZoneValue">0.003</span>
-                    </label>
-                    <input type="range" id="deadZone" min="0.0" max="0.1" step="0.001" value="0.003">
-                </div>
-                <div class="setting-item checkbox-item">
-                    <label for="mirrorX">
-                        <input type="checkbox" id="mirrorX" checked>
-                        Mirror X-axis (natural camera movement)
-                    </label>
-                </div>
-            </div>
-
-            <!-- Gesture Thresholds -->
-            <div class="settings-section">
-                <h3 class="settings-subtitle">Gesture Detection</h3>
-                <div class="setting-item">
-                    <label for="pinchThreshold">
-                        Pinch Threshold: <span id="pinchThresholdValue">0.2</span>
-                    </label>
-                    <input type="range" id="pinchThreshold" min="0.05" max="0.5" step="0.05" value="0.2">
-                </div>
-                <div class="setting-item">
-                    <label for="fistThreshold">
-                        Fist Threshold: <span id="fistThresholdValue">0.65</span>
-                    </label>
-                    <input type="range" id="fistThreshold" min="0.3" max="1.0" step="0.05" value="0.65">
-                </div>
-                <div class="setting-item">
-                    <label for="swipeVelocity">
-                        Swipe Velocity: <span id="swipeVelocityValue">5.0</span>
-                    </label>
-                    <input type="range" id="swipeVelocity" min="0.3" max="10.0" step="0.1" value="5.0">
-                </div>
-                <div class="setting-item">
-                    <label for="openHandSpread">
-                        Open Hand Spread: <span id="openHandSpreadValue">0.1</span>
-                    </label>
-                    <input type="range" id="openHandSpread" min="0.1" max="0.8" step="0.05" value="0.1">
-                </div>
-                <div class="setting-item">
-                    <label for="thumbsVertical">
-                        Thumbs Vertical Distance: <span id="thumbsVerticalValue">1.3</span>
-                    </label>
-                    <input type="range" id="thumbsVertical" min="0.5" max="2.0" step="0.1" value="1.3">
-                </div>
-            </div>
-
-            <!-- Timing Settings -->
-            <div class="settings-section">
-                <h3 class="settings-subtitle">Timing</h3>
-                <div class="setting-item">
-                    <label for="debounceMs">
-                        Debounce (ms): <span id="debounceMsValue">500</span>
-                    </label>
-                    <input type="range" id="debounceMs" min="0" max="2000" step="50" value="500">
-                </div>
-                <div class="setting-item">
-                    <label for="latchCooldownMs">
-                        Latch Cooldown (ms): <span id="latchCooldownMsValue">500</span>
-                    </label>
-                    <input type="range" id="latchCooldownMs" min="0" max="2000" step="50" value="500">
-                </div>
-                <div class="setting-item">
-                    <label for="smoothingWindow">
-                        Smoothing Window: <span id="smoothingWindowValue">3</span>
-                    </label>
-                    <input type="range" id="smoothingWindow" min="1" max="10" step="1" value="3">
-                </div>
-            </div>
-
-            <div class="controls">
-                <button id="saveSettingsBtn" class="btn btn-primary">Save Settings</button>
-                <button id="resetSettingsBtn" class="btn btn-secondary">Reset to Defaults</button>
-            </div>
-            <div id="settingsMessage" class="message"></div>
-        </section>
+        </div>
 
         <!-- Footer -->
         <footer class="footer">

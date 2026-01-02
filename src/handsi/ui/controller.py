@@ -211,7 +211,8 @@ class HandsiController:
             "debounce_ms": self.config.gestures.debounce_ms,
             "latch_cooldown_ms": self.config.gestures.latch_cooldown_ms,
             "smoothing_window": self.config.gestures.smoothing_window,
-            "mirror_x": self.config.actions.mouse.mirror_x
+            "mirror_x": self.config.actions.mouse.mirror_x,
+            "invert_scroll": self.config.actions.scroll.invert
         }
 
     def update_settings(self, settings: dict) -> dict:
@@ -252,6 +253,8 @@ class HandsiController:
                 self.config.gestures.smoothing_window = int(settings["smoothing_window"])
             if "mirror_x" in settings:
                 self.config.actions.mouse.mirror_x = bool(settings["mirror_x"])
+            if "invert_scroll" in settings:
+                self.config.actions.scroll.invert = bool(settings["invert_scroll"])
 
             log_info(f"Controller: Settings updated in memory")
 
@@ -310,3 +313,161 @@ class HandsiController:
         except Exception as e:
             log_info(f"Controller: Failed to reset to defaults - {e}")
             return {"success": False, "error": str(e)}
+
+    def restart(self) -> dict:
+        """
+        Restart Handsi by stopping and starting.
+
+        Returns:
+            dict: Status response with success/error
+        """
+        try:
+            # Stop if running
+            if self.is_running():
+                stop_result = self.stop()
+                if not stop_result["success"]:
+                    return {
+                        "success": False,
+                        "error": f"Failed to stop during restart: {stop_result.get('error')}"
+                    }
+
+            # Start
+            start_result = self.start()
+            if not start_result["success"]:
+                return {
+                    "success": False,
+                    "error": f"Failed to start during restart: {start_result.get('error')}"
+                }
+
+            log_info("Controller: Handsi restarted successfully")
+            return {"success": True, "message": "Handsi restarted successfully"}
+
+        except Exception as e:
+            log_info(f"Controller: Failed to restart - {e}")
+            return {"success": False, "error": str(e)}
+
+    def get_mappings(self) -> dict:
+        """
+        Get current gesture → action mappings.
+
+        Returns:
+            dict: Mappings with enabled status for each
+        """
+        mappings = []
+        for gesture, action in self.config.actions.mappings.items():
+            mappings.append({
+                "gesture": gesture,
+                "action": action,
+                "enabled": True  # All mappings in config are enabled
+            })
+
+        return {"success": True, "mappings": mappings}
+
+    def update_mappings(self, mappings: dict) -> dict:
+        """
+        Update gesture → action mappings.
+
+        Args:
+            mappings: Dictionary where keys are gestures and values are:
+                     - action name (string) if enabled
+                     - None/empty if disabled
+
+        Returns:
+            dict: Status response with success/error
+        """
+        try:
+            # Update config - remove disabled mappings
+            new_mappings = {}
+            for gesture, action in mappings.items():
+                if action and action.strip():  # Only include enabled mappings
+                    new_mappings[gesture] = action
+
+            self.config.actions.mappings = new_mappings
+            log_info(f"Controller: Mappings updated - {len(new_mappings)} enabled")
+
+            # Save to user config
+            try:
+                save_user_config(self.config)
+                log_info(f"Controller: Mappings saved to {get_user_config_path()}")
+            except Exception as save_error:
+                log_info(f"Controller: Warning - failed to save mappings: {save_error}")
+
+            restart_needed = self.is_running()
+
+            return {
+                "success": True,
+                "message": "Mappings updated successfully",
+                "restart_needed": restart_needed
+            }
+
+        except Exception as e:
+            log_info(f"Controller: Failed to update mappings - {e}")
+            return {"success": False, "error": str(e)}
+
+    def get_system_info(self) -> dict:
+        """
+        Get system information.
+
+        Returns:
+            dict: System information including version, camera, permissions
+        """
+        try:
+            import platform
+            import sys
+
+            # Get camera info
+            camera_info = {
+                "device_id": self.config.camera.device_id,
+                "resolution": list(self.config.camera.resolution),
+                "fps_idle": self.config.camera.fps_idle,
+                "fps_attentive": self.config.camera.fps_attentive,
+                "fps_active": self.config.camera.fps_active
+            }
+
+            # Get system info
+            system_info = {
+                "platform": platform.system(),
+                "version": platform.version(),
+                "python_version": sys.version.split()[0]
+            }
+
+            # Check accessibility permissions (macOS only)
+            permissions_status = "unknown"
+            if platform.system() == "Darwin":
+                try:
+                    from handsi.actions.adapters.macos import MacOSAdapter
+                    adapter = MacOSAdapter()
+                    if adapter.initialize():
+                        permissions_status = "granted"
+                        adapter.cleanup()
+                    else:
+                        permissions_status = "denied"
+                except Exception:
+                    permissions_status = "unknown"
+
+            return {
+                "success": True,
+                "camera": camera_info,
+                "system": system_info,
+                "permissions_status": permissions_status
+            }
+
+        except Exception as e:
+            log_info(f"Controller: Failed to get system info - {e}")
+            return {"success": False, "error": str(e)}
+
+    def check_first_run(self) -> dict:
+        """
+        Check if this is the first run (user config doesn't exist).
+
+        Returns:
+            dict: Status with is_first_run boolean
+        """
+        user_config_path = get_user_config_path()
+        is_first_run = not user_config_path.exists()
+
+        return {
+            "success": True,
+            "is_first_run": is_first_run,
+            "user_config_path": str(user_config_path)
+        }

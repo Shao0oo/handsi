@@ -15,6 +15,10 @@ let bridgeReady = false;
 
 // === DOM Elements ===
 const elements = {
+    // Tabs
+    tabButtons: document.querySelectorAll('.tab-btn'),
+    tabContents: document.querySelectorAll('.tab-content'),
+
     // Status
     connectionStatus: document.getElementById('connectionStatus'),
     runningStatus: document.getElementById('runningStatus'),
@@ -37,6 +41,7 @@ const elements = {
     deadZone: document.getElementById('deadZone'),
     deadZoneValue: document.getElementById('deadZoneValue'),
     mirrorX: document.getElementById('mirrorX'),
+    invertScroll: document.getElementById('invertScroll'),
 
     // Settings - Gestures
     pinchThreshold: document.getElementById('pinchThreshold'),
@@ -61,7 +66,24 @@ const elements = {
     // Settings controls
     saveSettingsBtn: document.getElementById('saveSettingsBtn'),
     resetSettingsBtn: document.getElementById('resetSettingsBtn'),
-    settingsMessage: document.getElementById('settingsMessage')
+    settingsMessage: document.getElementById('settingsMessage'),
+
+    // Mappings
+    mappingsList: document.getElementById('mappingsList'),
+    mappingsMessage: document.getElementById('mappingsMessage'),
+
+    // Info
+    infoCameraDevice: document.getElementById('infoCameraDevice'),
+    infoCameraResolution: document.getElementById('infoCameraResolution'),
+    infoCameraFPS: document.getElementById('infoCameraFPS'),
+    infoSystemPlatform: document.getElementById('infoSystemPlatform'),
+    infoSystemVersion: document.getElementById('infoSystemVersion'),
+    infoSystemPython: document.getElementById('infoSystemPython'),
+    infoPermissions: document.getElementById('infoPermissions'),
+
+    // First run modal
+    firstRunModal: document.getElementById('firstRunModal'),
+    closeFirstRunModal: document.getElementById('closeFirstRunModal')
 };
 
 // === QWebChannel Initialization ===
@@ -194,6 +216,89 @@ function resetToDefaults() {
     });
 }
 
+function restart() {
+    if (!bridgeReady) return Promise.resolve({ success: false, error: 'Bridge not ready' });
+
+    return new Promise((resolve) => {
+        try {
+            bridge.restart((resultJson) => {
+                console.log('restart() response:', resultJson);
+                const result = JSON.parse(resultJson);
+                resolve({ success: result.success, data: result });
+            });
+        } catch (error) {
+            console.error('restart() failed:', error);
+            resolve({ success: false, error: error.message });
+        }
+    });
+}
+
+function getMappings() {
+    if (!bridgeReady) return Promise.resolve({ success: false, error: 'Bridge not ready' });
+
+    return new Promise((resolve) => {
+        try {
+            bridge.getMappings((resultJson) => {
+                const result = JSON.parse(resultJson);
+                resolve({ success: result.success, data: result });
+            });
+        } catch (error) {
+            console.error('getMappings() failed:', error);
+            resolve({ success: false, error: error.message });
+        }
+    });
+}
+
+function updateMappings(mappings) {
+    if (!bridgeReady) return Promise.resolve({ success: false, error: 'Bridge not ready' });
+
+    return new Promise((resolve) => {
+        try {
+            const mappingsJson = JSON.stringify(mappings);
+            bridge.updateMappings(mappingsJson, (resultJson) => {
+                console.log('updateMappings() response:', resultJson);
+                const result = JSON.parse(resultJson);
+                resolve({ success: result.success, data: result });
+            });
+        } catch (error) {
+            console.error('updateMappings() failed:', error);
+            resolve({ success: false, error: error.message });
+        }
+    });
+}
+
+function getSystemInfo() {
+    if (!bridgeReady) return Promise.resolve({ success: false, error: 'Bridge not ready' });
+
+    return new Promise((resolve) => {
+        try {
+            bridge.getSystemInfo((resultJson) => {
+                const result = JSON.parse(resultJson);
+                resolve({ success: result.success, data: result });
+            });
+        } catch (error) {
+            console.error('getSystemInfo() failed:', error);
+            resolve({ success: false, error: error.message });
+        }
+    });
+}
+
+function checkFirstRun() {
+    if (!bridgeReady) return Promise.resolve({ success: false, error: 'Bridge not ready' });
+
+    return new Promise((resolve) => {
+        try {
+            bridge.checkFirstRun((resultJson) => {
+                const result = JSON.parse(resultJson);
+                resolve({ success: result.success, data: result });
+            });
+        } catch (error) {
+            console.error('checkFirstRun() failed:', error);
+            resolve({ success: false, error: error.message });
+        }
+    });
+}
+
 // === UI Update Functions ===
 
 function updateStatusUI(status) {
@@ -235,6 +340,9 @@ function updateSettingsUI(settings) {
     elements.deadZoneValue.textContent = settings.dead_zone;
 
     elements.mirrorX.checked = settings.mirror_x;
+
+    // Scroll settings
+    elements.invertScroll.checked = settings.invert_scroll;
 
     // Gesture settings
     elements.pinchThreshold.value = settings.pinch_threshold;
@@ -328,6 +436,7 @@ async function handleSaveSettings() {
         smoothing: parseFloat(elements.smoothing.value),
         dead_zone: parseFloat(elements.deadZone.value),
         mirror_x: elements.mirrorX.checked,
+        invert_scroll: elements.invertScroll.checked,
         pinch_threshold: parseFloat(elements.pinchThreshold.value),
         fist_threshold: parseFloat(elements.fistThreshold.value),
         swipe_velocity: parseFloat(elements.swipeVelocity.value),
@@ -341,11 +450,12 @@ async function handleSaveSettings() {
     const result = await updateSettings(settings);
 
     if (result.success) {
-        let message = 'Settings saved successfully';
+        showMessage(elements.settingsMessage, 'success', 'Settings saved successfully');
+
+        // Auto-restart if needed
         if (result.data.restart_needed) {
-            message += ' - Restart detection to apply changes';
+            await handleAutoRestart();
         }
-        showMessage(elements.settingsMessage, result.data.restart_needed ? 'info' : 'success', message, 5000);
     } else {
         showMessage(elements.settingsMessage, 'error', `Failed to save settings: ${result.data.error || result.error}`);
     }
@@ -373,6 +483,215 @@ async function handleResetSettings() {
         }
     } else {
         showMessage(elements.settingsMessage, 'error', `Failed to reset: ${result.error || result.data?.error}`);
+    }
+}
+
+// === Tab Switching ===
+
+function switchTab(tabName) {
+    // Hide all tabs
+    elements.tabContents.forEach(tab => {
+        tab.classList.remove('active');
+    });
+
+    // Remove active class from all buttons
+    elements.tabButtons.forEach(btn => {
+        btn.classList.remove('active');
+    });
+
+    // Show selected tab
+    const selectedTab = document.getElementById(tabName);
+    if (selectedTab) {
+        selectedTab.classList.add('active');
+    }
+
+    // Add active class to clicked button
+    const selectedBtn = document.querySelector(`[data-tab="${tabName}"]`);
+    if (selectedBtn) {
+        selectedBtn.classList.add('active');
+    }
+
+    // Load tab-specific data
+    if (tabName === 'mappings') {
+        loadMappings();
+    } else if (tabName === 'info') {
+        loadSystemInfo();
+    }
+}
+
+function setupTabListeners() {
+    elements.tabButtons.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const tabName = e.target.getAttribute('data-tab');
+            switchTab(tabName);
+        });
+    });
+}
+
+// === Collapsible Sections ===
+
+function setupCollapsibleSections() {
+    const collapsibleHeaders = document.querySelectorAll('.collapsible-header');
+    collapsibleHeaders.forEach(header => {
+        header.addEventListener('click', () => {
+            const section = header.parentElement;
+            const content = section.querySelector('.collapsible-content');
+            const arrow = header.querySelector('.arrow');
+
+            if (content.style.maxHeight) {
+                // Collapse
+                content.style.maxHeight = null;
+                section.classList.remove('active');
+                arrow.textContent = '▼';
+            } else {
+                // Expand
+                content.style.maxHeight = content.scrollHeight + 'px';
+                section.classList.add('active');
+                arrow.textContent = '▲';
+            }
+        });
+    });
+}
+
+// === Mappings Tab ===
+
+async function loadMappings() {
+    const result = await getMappings();
+
+    if (!result.success) {
+        elements.mappingsList.innerHTML = '<div class="error">Failed to load mappings</div>';
+        return;
+    }
+
+    const mappings = result.data.mappings;
+
+    if (mappings.length === 0) {
+        elements.mappingsList.innerHTML = '<div class="no-data">No mappings configured</div>';
+        return;
+    }
+
+    // Render mappings
+    let html = '';
+    mappings.forEach(mapping => {
+        const gestureDisplay = mapping.gesture.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        const actionDisplay = mapping.action.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+
+        html += `
+            <div class="mapping-item">
+                <div class="mapping-info">
+                    <span class="gesture-name">${gestureDisplay}</span>
+                    <span class="mapping-arrow">→</span>
+                    <span class="action-name">${actionDisplay}</span>
+                </div>
+                <label class="toggle-switch">
+                    <input type="checkbox" data-gesture="${mapping.gesture}" data-action="${mapping.action}" ${mapping.enabled ? 'checked' : ''}>
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+        `;
+    });
+
+    elements.mappingsList.innerHTML = html;
+
+    // Add event listeners for toggles
+    const toggles = elements.mappingsList.querySelectorAll('input[type="checkbox"]');
+    toggles.forEach(toggle => {
+        toggle.addEventListener('change', handleMappingToggle);
+    });
+}
+
+async function handleMappingToggle(event) {
+    const gesture = event.target.getAttribute('data-gesture');
+    const action = event.target.getAttribute('data-action');
+    const enabled = event.target.checked;
+
+    // Collect all current mappings
+    const toggles = elements.mappingsList.querySelectorAll('input[type="checkbox"]');
+    const mappings = {};
+
+    toggles.forEach(toggle => {
+        const g = toggle.getAttribute('data-gesture');
+        const a = toggle.getAttribute('data-action');
+        if (toggle.checked) {
+            mappings[g] = a;
+        }
+    });
+
+    // Update mappings
+    const result = await updateMappings(mappings);
+
+    if (result.success) {
+        const message = enabled ? `${gesture} enabled` : `${gesture} disabled`;
+        showMessage(elements.mappingsMessage, 'success', message);
+
+        // Auto-restart if needed
+        if (result.data.restart_needed) {
+            await handleAutoRestart();
+        }
+    } else {
+        showMessage(elements.mappingsMessage, 'error', `Failed to update: ${result.error}`);
+        // Revert toggle
+        event.target.checked = !enabled;
+    }
+}
+
+// === Info Tab ===
+
+async function loadSystemInfo() {
+    const result = await getSystemInfo();
+
+    if (!result.success) {
+        elements.infoSystemPlatform.textContent = 'Error loading info';
+        return;
+    }
+
+    const info = result.data;
+
+    // Camera info
+    elements.infoCameraDevice.textContent = info.camera.device_id;
+    elements.infoCameraResolution.textContent = `${info.camera.resolution[0]}x${info.camera.resolution[1]}`;
+    elements.infoCameraFPS.textContent = `${info.camera.fps_idle}-${info.camera.fps_active} Hz`;
+
+    // System info
+    elements.infoSystemPlatform.textContent = info.system.platform;
+    elements.infoSystemVersion.textContent = info.system.version;
+    elements.infoSystemPython.textContent = info.system.python_version;
+
+    // Permissions
+    const permStatus = info.permissions_status;
+    let permDisplay = permStatus.charAt(0).toUpperCase() + permStatus.slice(1);
+    let permClass = permStatus === 'granted' ? 'status-value running' : 'status-value stopped';
+    elements.infoPermissions.textContent = permDisplay;
+    elements.infoPermissions.className = `info-value ${permClass}`;
+}
+
+// === First Run Modal ===
+
+async function checkAndShowFirstRun() {
+    const result = await checkFirstRun();
+
+    if (result.success && result.data.is_first_run) {
+        elements.firstRunModal.classList.remove('hidden');
+    }
+}
+
+function setupFirstRunModal() {
+    elements.closeFirstRunModal.addEventListener('click', () => {
+        elements.firstRunModal.classList.add('hidden');
+    });
+}
+
+// === Auto-Restart ===
+
+async function handleAutoRestart() {
+    if (confirm('Settings changed. Restart Handsi to apply changes?')) {
+        const result = await restart();
+        if (result.success) {
+            showMessage(elements.controlMessage, 'success', 'Handsi restarted successfully');
+            startStatusPolling();
+        } else {
+            showMessage(elements.controlMessage, 'error', `Failed to restart: ${result.error}`);
+        }
     }
 }
 
@@ -466,13 +785,21 @@ async function init() {
         return;
     }
 
-    // Setup event listeners
+    // Setup UI event listeners
+    setupTabListeners();
+    setupCollapsibleSections();
+    setupFirstRunModal();
+
+    // Setup control event listeners
     elements.startBtn.addEventListener('click', handleStart);
     elements.stopBtn.addEventListener('click', handleStop);
     elements.saveSettingsBtn.addEventListener('click', handleSaveSettings);
     elements.resetSettingsBtn.addEventListener('click', handleResetSettings);
 
     setupSliderListeners();
+
+    // Check for first run
+    await checkAndShowFirstRun();
 
     // Load initial data
     const statusResult = await getStatus();
