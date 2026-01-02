@@ -405,10 +405,29 @@ body {
     max-height: 0;
     overflow: hidden;
     transition: max-height 0.3s ease-out;
+    /* DO NOT USE display: none - it breaks nested inputs */
 }
 
 .collapsible-section.active .collapsible-content {
     padding-top: 1rem;
+    /* max-height will be set via JS */
+}
+
+/* Nested collapsible sections */
+.collapsible-section.nested {
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+}
+
+.collapsible-section.nested .collapsible-header {
+    background: white;
+    border: 1px solid #d1d5db;
+    font-size: 0.95rem;
+    padding: 0.75rem 1rem;
+}
+
+.collapsible-section.nested .collapsible-header:hover {
+    background: #f9fafb;
 }
 
 /* === Mappings === */
@@ -424,82 +443,66 @@ body {
     gap: 1rem;
 }
 
+/* Mappings Item with Dropdown */
 .mapping-item {
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: 200px 40px 1fr;
     align-items: center;
     padding: 1rem;
     background: #f9fafb;
     border-radius: 8px;
-    border: 1px solid #e5e7eb;
-}
-
-.mapping-info {
-    display: flex;
-    align-items: center;
+    border: 2px solid #e5e7eb;
     gap: 1rem;
+    transition: all 0.2s;
 }
 
-.gesture-name {
+.mapping-item.unmapped {
+    background: #fafafa;
+    border-color: #f0f0f0;
+    opacity: 0.7;
+}
+
+.mapping-item:hover {
+    border-color: #667eea;
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1);
+}
+
+.gesture-label {
     font-weight: 600;
     color: #374151;
-    min-width: 150px;
 }
 
 .mapping-arrow {
     color: #667eea;
     font-size: 1.2rem;
+    text-align: center;
 }
 
-.action-name {
-    color: #6b7280;
-    min-width: 150px;
-}
-
-/* Toggle Switch */
-.toggle-switch {
-    position: relative;
-    display: inline-block;
-    width: 50px;
-    height: 24px;
-}
-
-.toggle-switch input {
-    opacity: 0;
-    width: 0;
-    height: 0;
-}
-
-.toggle-slider {
-    position: absolute;
+.action-dropdown {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: 2px solid #e5e7eb;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    color: #374151;
+    background: white;
     cursor: pointer;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: #ccc;
-    transition: 0.3s;
-    border-radius: 24px;
+    transition: all 0.2s;
+    font-family: inherit;
 }
 
-.toggle-slider:before {
-    position: absolute;
-    content: "";
-    height: 18px;
-    width: 18px;
-    left: 3px;
-    bottom: 3px;
-    background-color: white;
-    transition: 0.3s;
-    border-radius: 50%;
+.action-dropdown:hover {
+    border-color: #667eea;
 }
 
-input:checked + .toggle-slider {
-    background-color: #667eea;
+.action-dropdown:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
-input:checked + .toggle-slider:before {
-    transform: translateX(26px);
+.action-dropdown option {
+    padding: 0.5rem;
 }
 
 .loading,

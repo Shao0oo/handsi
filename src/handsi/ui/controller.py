@@ -13,6 +13,7 @@ from handsi.actions.executor import ActionExecutorThread
 from handsi.core.bus import RuntimeState, create_queues
 from handsi.core.config import HandsiConfig, load_config, save_user_config, get_user_config_path
 from handsi.core.logging import log_info, setup_logging
+from handsi.core.registry import AVAILABLE_GESTURES, AVAILABLE_ACTIONS
 from handsi.gestures.infer import GestureInferenceThread
 from handsi.vision.capture import CaptureThread
 from handsi.vision.tracking import TrackingThread
@@ -348,17 +349,18 @@ class HandsiController:
 
     def get_mappings(self) -> dict:
         """
-        Get current gesture → action mappings.
+        Get all gesture mappings, including unmapped gestures.
 
         Returns:
-            dict: Mappings with enabled status for each
+            dict: All gestures with their actions (or empty string if unmapped)
         """
         mappings = []
-        for gesture, action in self.config.actions.mappings.items():
+        for gesture in AVAILABLE_GESTURES:
+            action = self.config.actions.mappings.get(gesture, None)
             mappings.append({
                 "gesture": gesture,
-                "action": action,
-                "enabled": True  # All mappings in config are enabled
+                "action": action if action else "",  # Empty string if unmapped
+                "enabled": action is not None
             })
 
         return {"success": True, "mappings": mappings}
@@ -470,4 +472,17 @@ class HandsiController:
             "success": True,
             "is_first_run": is_first_run,
             "user_config_path": str(user_config_path)
+        }
+
+    def get_available_gestures_and_actions(self) -> dict:
+        """
+        Get lists of all available gestures and actions.
+
+        Returns:
+            dict: Lists of gestures and actions from registry
+        """
+        return {
+            "success": True,
+            "gestures": AVAILABLE_GESTURES,
+            "actions": AVAILABLE_ACTIONS
         }

@@ -189,6 +189,17 @@ class HandsiBridge(QObject):
         result = self.controller.check_first_run()
         return json.dumps(result)
 
+    @Slot(result=str)
+    def getAvailableGesturesAndActions(self) -> str:
+        """
+        Get available gestures and actions.
+
+        Returns:
+            JSON string with gestures and actions lists
+        """
+        result = self.controller.get_available_gestures_and_actions()
+        return json.dumps(result)
+
     def _emit_status(self) -> None:
         """Emit status change signal."""
         status = self.controller.get_status()

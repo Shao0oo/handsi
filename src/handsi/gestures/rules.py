@@ -795,12 +795,16 @@ class GestureDetector:
             right_scale = self._get_hand_scale(lm_right)
             avg_hand_scale = (left_scale + right_scale) / 2.0
 
+            position = self._normalized_distance(left_position, right_position, avg_hand_scale)
+
+
             return ("two_hands_pinch", confidence, {
                 "left_conf": left_pinch[1],
                 "right_conf": right_pinch[1],
                 "left_position": left_position,
                 "right_position": right_position,
-                "hand_scale": avg_hand_scale
+                "hand_scale": avg_hand_scale,
+                "position": position
             })
         return None
 

@@ -299,6 +299,22 @@ function checkFirstRun() {
     });
 }
 
+function getAvailableGesturesAndActions() {
+    if (!bridgeReady) return Promise.resolve({ success: false, error: 'Bridge not ready' });
+
+    return new Promise((resolve) => {
+        try {
+            bridge.getAvailableGesturesAndActions((resultJson) => {
+                const result = JSON.parse(resultJson);
+                resolve({ success: result.success, data: result });
+            });
+        } catch (error) {
+            console.error('getAvailableGesturesAndActions() failed:', error);
+            resolve({ success: false, error: error.message });
+        }
+    });
+}
+
 // === UI Update Functions ===
 
 function updateStatusUI(status) {
@@ -533,7 +549,9 @@ function setupTabListeners() {
 function setupCollapsibleSections() {
     const collapsibleHeaders = document.querySelectorAll('.collapsible-header');
     collapsibleHeaders.forEach(header => {
-        header.addEventListener('click', () => {
+        header.addEventListener('click', (e) => {
+            e.stopPropagation();  // Prevent bubbling to parent collapsibles
+
             const section = header.parentElement;
             const content = section.querySelector('.collapsible-content');
             const arrow = header.querySelector('.arrow');
@@ -545,7 +563,9 @@ function setupCollapsibleSections() {
                 arrow.textContent = '▼';
             } else {
                 // Expand
-                content.style.maxHeight = content.scrollHeight + 'px';
+                // Calculate full height including nested expanded sections
+                const fullHeight = content.scrollHeight;
+                content.style.maxHeight = fullHeight + 'px';
                 section.classList.add('active');
                 arrow.textContent = '▲';
             }
@@ -556,63 +576,74 @@ function setupCollapsibleSections() {
 // === Mappings Tab ===
 
 async function loadMappings() {
-    const result = await getMappings();
+    // Load available options
+    const availableResult = await getAvailableGesturesAndActions();
+    if (!availableResult.success) {
+        elements.mappingsList.innerHTML = '<div class="error">Failed to load options</div>';
+        return;
+    }
 
-    if (!result.success) {
+    const availableActions = availableResult.data.actions;
+
+    // Load current mappings
+    const mappingsResult = await getMappings();
+    if (!mappingsResult.success) {
         elements.mappingsList.innerHTML = '<div class="error">Failed to load mappings</div>';
         return;
     }
 
-    const mappings = result.data.mappings;
+    const mappings = mappingsResult.data.mappings;
 
     if (mappings.length === 0) {
-        elements.mappingsList.innerHTML = '<div class="no-data">No mappings configured</div>';
+        elements.mappingsList.innerHTML = '<div class="no-data">No gestures available</div>';
         return;
     }
 
-    // Render mappings
+    // Sort: mapped first, then unmapped
+    mappings.sort((a, b) => {
+        if (a.enabled && !b.enabled) return -1;
+        if (!a.enabled && b.enabled) return 1;
+        return 0;
+    });
+
+    // Render each gesture with dropdown
     let html = '';
     mappings.forEach(mapping => {
         const gestureDisplay = mapping.gesture.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-        const actionDisplay = mapping.action.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 
         html += `
-            <div class="mapping-item">
-                <div class="mapping-info">
-                    <span class="gesture-name">${gestureDisplay}</span>
-                    <span class="mapping-arrow">→</span>
-                    <span class="action-name">${actionDisplay}</span>
-                </div>
-                <label class="toggle-switch">
-                    <input type="checkbox" data-gesture="${mapping.gesture}" data-action="${mapping.action}" ${mapping.enabled ? 'checked' : ''}>
-                    <span class="toggle-slider"></span>
-                </label>
+            <div class="mapping-item ${!mapping.enabled ? 'unmapped' : ''}">
+                <div class="gesture-label">${gestureDisplay}</div>
+                <div class="mapping-arrow">→</div>
+                <select class="action-dropdown" data-gesture="${mapping.gesture}">
+                    <option value="">-- None --</option>
+                    ${availableActions.map(action => {
+                        const actionDisplay = action.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                        return `<option value="${action}" ${mapping.action === action ? 'selected' : ''}>${actionDisplay}</option>`;
+                    }).join('')}
+                </select>
             </div>
         `;
     });
 
     elements.mappingsList.innerHTML = html;
 
-    // Add event listeners for toggles
-    const toggles = elements.mappingsList.querySelectorAll('input[type="checkbox"]');
-    toggles.forEach(toggle => {
-        toggle.addEventListener('change', handleMappingToggle);
+    // Add change listeners
+    document.querySelectorAll('.action-dropdown').forEach(dropdown => {
+        dropdown.addEventListener('change', handleMappingChange);
     });
 }
 
-async function handleMappingToggle(event) {
+async function handleMappingChange(event) {
     const gesture = event.target.getAttribute('data-gesture');
-    const action = event.target.getAttribute('data-action');
-    const enabled = event.target.checked;
+    const newAction = event.target.value;  // Empty string if "-- None --"
 
-    // Collect all current mappings
-    const toggles = elements.mappingsList.querySelectorAll('input[type="checkbox"]');
+    // Collect all current mappings from dropdowns
     const mappings = {};
-
-    toggles.forEach(toggle => {
-        const g = toggle.getAttribute('data-gesture');
-        const a = toggle.getAttribute('data-action');
-        if (toggle.checked) {
+    document.querySelectorAll('.action-dropdown').forEach(dropdown => {
+        const g = dropdown.getAttribute('data-gesture');
+        const a = dropdown.value;
+        if (a) {  // Only include non-empty selections
             mappings[g] = a;
         }
     });
@@ -621,17 +652,23 @@ async function handleMappingToggle(event) {
     const result = await updateMappings(mappings);
 
     if (result.success) {
-        const message = enabled ? `${gesture} enabled` : `${gesture} disabled`;
+        const gestureDisplay = gesture.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        const message = newAction
+            ? `${gestureDisplay} → ${newAction.replace(/_/g, ' ')}`
+            : `${gestureDisplay} unmapped`;
         showMessage(elements.mappingsMessage, 'success', message);
+
+        // Reload to update styling (mapped vs unmapped)
+        await loadMappings();
 
         // Auto-restart if needed
         if (result.data.restart_needed) {
             await handleAutoRestart();
         }
     } else {
-        showMessage(elements.mappingsMessage, 'error', `Failed to update: ${result.error}`);
-        // Revert toggle
-        event.target.checked = !enabled;
+        showMessage(elements.mappingsMessage, 'error', `Failed: ${result.error}`);
+        // Revert dropdown
+        await loadMappings();
     }
 }
 

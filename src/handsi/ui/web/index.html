@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Handsi Control Panel</title>
+    <title>Handsi</title>
     <link rel="stylesheet" href="styles.css">
     <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
 </head>
@@ -11,7 +11,7 @@
     <div class="container">
         <!-- Header -->
         <header class="header">
-            <h1>Handsi Control Panel</h1>
+            <h1>Handsi</h1>
             <div class="status-indicator" id="connectionStatus">
                 <span class="dot"></span>
                 <span class="label">Connected</span>
@@ -99,91 +99,121 @@
                         <span class="arrow">▼</span>
                     </button>
                     <div class="collapsible-content">
-                        <!-- Mouse Advanced -->
-                        <div class="settings-section">
-                            <h3 class="settings-subtitle">Mouse Control</h3>
-                            <div class="setting-item">
-                                <label for="smoothing">
-                                    Smoothing: <span id="smoothingValue">0.3</span>
-                                </label>
-                                <input type="range" id="smoothing" min="0.0" max="1.0" step="0.05" value="0.3">
-                            </div>
-                            <div class="setting-item">
-                                <label for="deadZone">
-                                    Dead Zone: <span id="deadZoneValue">0.003</span>
-                                </label>
-                                <input type="range" id="deadZone" min="0.0" max="0.1" step="0.001" value="0.003">
+
+                        <!-- Mouse Control Subsection -->
+                        <div class="collapsible-section nested">
+                            <button class="collapsible-header">
+                                <span>Mouse Control</span>
+                                <span class="arrow">▼</span>
+                            </button>
+                            <div class="collapsible-content">
+                                <div class="settings-section">
+                                    <div class="setting-item">
+                                        <label for="smoothing">
+                                            Smoothing: <span id="smoothingValue">0.3</span>
+                                        </label>
+                                        <input type="range" id="smoothing" min="0.0" max="1.0" step="0.05" value="0.3">
+                                    </div>
+                                    <div class="setting-item">
+                                        <label for="deadZone">
+                                            Dead Zone: <span id="deadZoneValue">0.003</span>
+                                        </label>
+                                        <input type="range" id="deadZone" min="0.0" max="0.1" step="0.001" value="0.003">
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
-                        <!-- Scroll Advanced -->
-                        <div class="settings-section">
-                            <h3 class="settings-subtitle">Scroll Control</h3>
-                            <div class="setting-item checkbox-item">
-                                <label for="invertScroll">
-                                    <input type="checkbox" id="invertScroll" checked>
-                                    Invert Scroll Direction
-                                </label>
+                        <!-- Scroll Control Subsection -->
+                        <div class="collapsible-section nested">
+                            <button class="collapsible-header">
+                                <span>Scroll Control</span>
+                                <span class="arrow">▼</span>
+                            </button>
+                            <div class="collapsible-content">
+                                <div class="settings-section">
+                                    <div class="setting-item checkbox-item">
+                                        <label for="invertScroll">
+                                            <input type="checkbox" id="invertScroll" checked>
+                                            Invert Scroll Direction
+                                        </label>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
-                        <!-- Gesture Thresholds -->
-                        <div class="settings-section">
-                            <h3 class="settings-subtitle">Gesture Detection</h3>
-                            <div class="setting-item">
-                                <label for="pinchThreshold">
-                                    Pinch Threshold: <span id="pinchThresholdValue">0.2</span>
-                                </label>
-                                <input type="range" id="pinchThreshold" min="0.05" max="0.5" step="0.05" value="0.2">
-                            </div>
-                            <div class="setting-item">
-                                <label for="fistThreshold">
-                                    Fist Threshold: <span id="fistThresholdValue">0.65</span>
-                                </label>
-                                <input type="range" id="fistThreshold" min="0.3" max="1.0" step="0.05" value="0.65">
-                            </div>
-                            <div class="setting-item">
-                                <label for="swipeVelocity">
-                                    Swipe Velocity: <span id="swipeVelocityValue">5.0</span>
-                                </label>
-                                <input type="range" id="swipeVelocity" min="0.3" max="10.0" step="0.1" value="5.0">
-                            </div>
-                            <div class="setting-item">
-                                <label for="openHandSpread">
-                                    Open Hand Spread: <span id="openHandSpreadValue">0.1</span>
-                                </label>
-                                <input type="range" id="openHandSpread" min="0.1" max="0.8" step="0.05" value="0.1">
-                            </div>
-                            <div class="setting-item">
-                                <label for="thumbsVertical">
-                                    Thumbs Vertical Distance: <span id="thumbsVerticalValue">1.3</span>
-                                </label>
-                                <input type="range" id="thumbsVertical" min="0.5" max="2.0" step="0.1" value="1.3">
+                        <!-- Gesture Thresholds Subsection -->
+                        <div class="collapsible-section nested">
+                            <button class="collapsible-header">
+                                <span>Gesture Detection</span>
+                                <span class="arrow">▼</span>
+                            </button>
+                            <div class="collapsible-content">
+                                <div class="settings-section">
+                                    <div class="setting-item">
+                                        <label for="pinchThreshold">
+                                            Pinch Threshold: <span id="pinchThresholdValue">0.2</span>
+                                        </label>
+                                        <input type="range" id="pinchThreshold" min="0.05" max="0.5" step="0.05" value="0.2">
+                                    </div>
+                                    <div class="setting-item">
+                                        <label for="fistThreshold">
+                                            Fist Threshold: <span id="fistThresholdValue">0.65</span>
+                                        </label>
+                                        <input type="range" id="fistThreshold" min="0.3" max="1.0" step="0.05" value="0.65">
+                                    </div>
+                                    <div class="setting-item">
+                                        <label for="swipeVelocity">
+                                            Swipe Velocity: <span id="swipeVelocityValue">5.0</span>
+                                        </label>
+                                        <input type="range" id="swipeVelocity" min="0.3" max="10.0" step="0.1" value="5.0">
+                                    </div>
+                                    <div class="setting-item">
+                                        <label for="openHandSpread">
+                                            Open Hand Spread: <span id="openHandSpreadValue">0.1</span>
+                                        </label>
+                                        <input type="range" id="openHandSpread" min="0.1" max="0.8" step="0.05" value="0.1">
+                                    </div>
+                                    <div class="setting-item">
+                                        <label for="thumbsVertical">
+                                            Thumbs Vertical Distance: <span id="thumbsVerticalValue">1.3</span>
+                                        </label>
+                                        <input type="range" id="thumbsVertical" min="0.5" max="2.0" step="0.1" value="1.3">
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
-                        <!-- Timing Settings -->
-                        <div class="settings-section">
-                            <h3 class="settings-subtitle">Timing</h3>
-                            <div class="setting-item">
-                                <label for="debounceMs">
-                                    Debounce (ms): <span id="debounceMsValue">500</span>
-                                </label>
-                                <input type="range" id="debounceMs" min="0" max="2000" step="50" value="500">
-                            </div>
-                            <div class="setting-item">
-                                <label for="latchCooldownMs">
-                                    Latch Cooldown (ms): <span id="latchCooldownMsValue">500</span>
-                                </label>
-                                <input type="range" id="latchCooldownMs" min="0" max="2000" step="50" value="500">
-                            </div>
-                            <div class="setting-item">
-                                <label for="smoothingWindow">
-                                    Smoothing Window: <span id="smoothingWindowValue">3</span>
-                                </label>
-                                <input type="range" id="smoothingWindow" min="1" max="10" step="1" value="3">
+                        <!-- Timing Subsection -->
+                        <div class="collapsible-section nested">
+                            <button class="collapsible-header">
+                                <span>Timing</span>
+                                <span class="arrow">▼</span>
+                            </button>
+                            <div class="collapsible-content">
+                                <div class="settings-section">
+                                    <div class="setting-item">
+                                        <label for="debounceMs">
+                                            Debounce (ms): <span id="debounceMsValue">500</span>
+                                        </label>
+                                        <input type="range" id="debounceMs" min="0" max="2000" step="50" value="500">
+                                    </div>
+                                    <div class="setting-item">
+                                        <label for="latchCooldownMs">
+                                            Latch Cooldown (ms): <span id="latchCooldownMsValue">500</span>
+                                        </label>
+                                        <input type="range" id="latchCooldownMs" min="0" max="2000" step="50" value="500">
+                                    </div>
+                                    <div class="setting-item">
+                                        <label for="smoothingWindow">
+                                            Smoothing Window: <span id="smoothingWindowValue">3</span>
+                                        </label>
+                                        <input type="range" id="smoothingWindow" min="1" max="10" step="1" value="3">
+                                    </div>
+                                </div>
                             </div>
                         </div>
+
                     </div>
                 </div>
 
