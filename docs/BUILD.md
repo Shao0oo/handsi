@@ -18,6 +18,9 @@ pip install -e ".[dev]"
 # Build executable for current platform
 pyinstaller handsi.spec
 
+# Or with --noconfirm to rebuild without prompting user
+pyinstaller handsi.spec --noconfirm
+
 # Output will be in dist/ directory:
 # - macOS: dist/Handsi.app
 # - Windows: dist/Handsi.exe (folder with dependencies)
@@ -66,12 +69,11 @@ create-dmg \
 ```
 
 **Permissions on First Launch:**
-The app will request three permissions on first launch:
+The app will request two permissions on first launch:
 1. **Camera** - For hand tracking (required)
-2. **Accessibility** - For mouse/keyboard control (required)
-3. **System Events** - For desktop switching (triggered on first swipe gesture)
+2. **Accessibility** - For mouse/keyboard/desktop switching (required)
 
-#### Rebuilding
+**Note:** If you rebuild the app, see the "Permission Reset Warning" section below.
 
 ## ⚠️ Permission Reset Warning (macOS)
 
@@ -98,18 +100,16 @@ This means macOS is **silently blocking** the app because it has stale/missing p
 **Step 2: Re-grant permissions**
 1. Launch the rebuilt app: `open dist/Handsi.app`
 2. macOS will automatically prompt for:
-   - **Accessibility** permission (for mouse/keyboard control)
+   - **Accessibility** permission (for mouse/keyboard/desktop switching)
    - **Camera** permission (for hand tracking)
 3. Click **"Allow"** or **"OK"** for each prompt
-4. Try a **swipe gesture** to trigger the System Events prompt:
-   - macOS will ask: "Handsi.app would like to control System Events"
-   - Click **"OK"** to grant
 
 **Step 3: Verify**
 Check these settings are enabled:
 - **System Settings → Privacy & Security → Accessibility**: Handsi.app ✓
-- **System Settings → Privacy & Security → Automation → System Events**: Handsi.app ✓
 - **System Settings → Privacy & Security → Camera**: Handsi.app ✓
+
+**Note:** Desktop switching (swipe gestures) now uses the same Accessibility permission as mouse/keyboard control, so no separate System Events permission is needed.
 
 ### When This Matters
 
