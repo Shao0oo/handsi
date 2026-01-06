@@ -120,7 +120,6 @@ if sys.platform == 'darwin':
         info_plist={
             'NSCameraUsageDescription': 'Handsi needs camera access for hand tracking',
             'NSMicrophoneUsageDescription': 'Handsi needs microphone access for voice commands (optional)',
-            'NSAppleEventsUsageDescription': 'Handsi uses AppleScript to switch desktops and control system functions',
         },
     )
 

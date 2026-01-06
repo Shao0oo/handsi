@@ -120,6 +120,86 @@ class HandsiBridge(QObject):
         log_info(f"Bridge: resetToDefaults() called - {result}")
         return json.dumps(result)
 
+    @Slot(result=str)
+    def restart(self) -> str:
+        """
+        Restart Handsi (stop then start).
+
+        Returns:
+            JSON string with result
+        """
+        result = self.controller.restart()
+        log_info(f"Bridge: restart() called - {result}")
+
+        # Emit status change
+        self._emit_status()
+
+        return json.dumps(result)
+
+    @Slot(result=str)
+    def getMappings(self) -> str:
+        """
+        Get gesture → action mappings.
+
+        Returns:
+            JSON string with mappings
+        """
+        result = self.controller.get_mappings()
+        return json.dumps(result)
+
+    @Slot(str, result=str)
+    def updateMappings(self, mappings_json: str) -> str:
+        """
+        Update gesture → action mappings.
+
+        Args:
+            mappings_json: JSON string with mappings to update
+
+        Returns:
+            JSON string with result
+        """
+        try:
+            mappings = json.loads(mappings_json)
+            result = self.controller.update_mappings(mappings)
+            log_info(f"Bridge: updateMappings() called - {result}")
+            return json.dumps(result)
+        except Exception as e:
+            log_info(f"Bridge: updateMappings() failed - {e}")
+            return json.dumps({"success": False, "error": str(e)})
+
+    @Slot(result=str)
+    def getSystemInfo(self) -> str:
+        """
+        Get system information.
+
+        Returns:
+            JSON string with system info
+        """
+        result = self.controller.get_system_info()
+        return json.dumps(result)
+
+    @Slot(result=str)
+    def checkFirstRun(self) -> str:
+        """
+        Check if this is the first run.
+
+        Returns:
+            JSON string with first run status
+        """
+        result = self.controller.check_first_run()
+        return json.dumps(result)
+
+    @Slot(result=str)
+    def getAvailableGesturesAndActions(self) -> str:
+        """
+        Get available gestures and actions.
+
+        Returns:
+            JSON string with gestures and actions lists
+        """
+        result = self.controller.get_available_gestures_and_actions()
+        return json.dumps(result)
+
     def _emit_status(self) -> None:
         """Emit status change signal."""
         status = self.controller.get_status()

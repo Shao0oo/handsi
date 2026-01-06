@@ -47,7 +47,7 @@ linux = [
 dev = [
   # Development tools
 
-  "pyinstaller>=6.0.0",
+  "pyinstaller==6.17.0", # >=6.0.0", # Build using 6.17.0
 
   # Currently commented out to avoid unnecessary dependencies
   # "pytest>=7.0.0",

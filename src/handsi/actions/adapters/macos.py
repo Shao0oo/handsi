@@ -38,6 +38,7 @@ try:
         kCGScrollEventUnitPixel,
     )
     from AppKit import NSEvent
+    from Foundation import NSAppleScript
     QUARTZ_AVAILABLE = True
 except ImportError:
     QUARTZ_AVAILABLE = False
@@ -488,6 +489,9 @@ class MacOSAdapter(ActionAdapter):
         """
         Switch to adjacent virtual desktop using Mission Control.
 
+        Uses CGEvent keyboard API to send Control+Arrow key combinations.
+        This only requires Accessibility permission (no AppleScript/System Events permission needed).
+
         Args:
             direction: Direction to switch ('left'/'prev', 'right'/'next', 'up', or 'down')
                       - left/right: Switch between desktops
@@ -502,44 +506,40 @@ class MacOSAdapter(ActionAdapter):
             return False
 
         try:
-            # Map direction
+            # Map direction to arrow key code
             if direction in ('left', 'prev'):
-                # Ctrl+Left Arrow
                 key_code = 123  # Left arrow
             elif direction in ('right', 'next'):
-                # Ctrl+Right Arrow
                 key_code = 124  # Right arrow
             elif direction == 'up':
-                # Ctrl+Up Arrow (Mission Control)
-                key_code = 126  # Up arrow
+                key_code = 126  # Up arrow (Mission Control)
             elif direction == 'down':
-                # Ctrl+Down Arrow (Application Windows)
-                key_code = 125  # Down arrow
+                key_code = 125  # Down arrow (Application Windows)
             else:
                 log_error("ACT-003", f"Invalid desktop switch direction: {direction}")
                 return False
 
-            # Use AppleScript to simulate keyboard shortcut
-            # This is more reliable than CGEventCreateKeyboardEvent
-            script = f'''
+            # Use NSAppleScript to send keyboard shortcut to System Events
+            # This runs in-process (not as subprocess) so it inherits Handsi.app's permissions
+            # and can send system-level keyboard shortcuts (unlike CGEventPost which targets foreground app)
+
+            script_source = f'''
             tell application "System Events"
                 key code {key_code} using control down
             end tell
             '''
 
-            result = subprocess.run(
-                ['osascript', '-e', script],
-                capture_output=True,
-                text=True,
-                timeout=2.0
-            )
+            # Create and execute AppleScript in-process
+            script = NSAppleScript.alloc().initWithSource_(script_source)
+            result, error = script.executeAndReturnError_(None)
 
-            if result.returncode == 0:
-                log_debug(f"Desktop switched: {direction}")
-                return True
-            else:
-                log_warning("ACT-001", f"Desktop switch failed: {result.stderr}")
+            if error:
+                error_desc = error.get('NSAppleScriptErrorMessage', str(error))
+                log_error("ACT-001", f"Desktop switch failed: {error_desc}")
                 return False
+
+            log_info(f"Desktop switch executed via NSAppleScript: Control+{direction} (key_code={key_code})")
+            return True
 
         except Exception as e:
             log_error("ACT-001", f"Desktop switch failed: {e}")
