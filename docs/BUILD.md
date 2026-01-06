@@ -1,42 +1,34 @@
 # Building and Distributing Handsi Native App
 
-This guide explains how to build standalone executables for macOS, Windows, and Linux.
+**⚠️ IMPORTANT: Handsi now uses Tauri instead of PyInstaller!**
 
-## Building Standalone Executables
+This guide covers the **new Tauri build system**. For the old PyInstaller method (deprecated), see the end of this document.
+
+---
+
+## Building with Tauri (Recommended)
 
 ### Prerequisites
 
-Install development dependencies (includes PyInstaller):
+See [SETUP_TAURI.md](SETUP_TAURI.md) for full setup instructions.
+
+**Quick setup:**
 ```bash
 conda activate handsi
-pip install -e ".[dev]"
+chmod +x scripts/*.sh
+./scripts/setup-tauri.sh
 ```
 
 ### Build for Your Platform
 
 ```bash
-# Build executable for current platform
-pyinstaller handsi.spec
-
-# Or with --noconfirm to rebuild without prompting user
-pyinstaller handsi.spec --noconfirm
+# Build Tauri app for current platform
+./scripts/build-tauri.sh
 
 # Output will be in dist/ directory:
-# - macOS: dist/Handsi.app
-# - Windows: dist/Handsi.exe (folder with dependencies)
-# - Linux: dist/handsi (folder with dependencies)
-```
-
-### Build Options
-
-**One-directory (faster startup, recommended):**
-```bash
-pyinstaller handsi.spec  # Default
-```
-
-**One-file executable (slower startup, but single file):**
-```bash
-pyinstaller --onefile handsi.spec
+# - macOS: dist/Handsi.app + dist/Handsi.dmg
+# - Windows: dist/Handsi.exe (if built on Windows)
+# - Linux: dist/handsi (if built on Linux)
 ```
 
 ## Platform-Specific Notes
@@ -195,21 +187,3 @@ The UI files are located in `src/handsi/ui/web/`:
 - `app.js` - Logic
 
 After modifying, rebuild with PyInstaller to bundle the changes.
-
-## Next Steps
-
-1. **Add Icon:** Create icon files and update `handsi.spec`
-   - macOS: `.icns` file
-   - Windows: `.ico` file
-   - Linux: `.png` file
-
-2. **Code Signing:** Sign executables for distribution
-   - macOS: `codesign` with Apple Developer certificate
-   - Windows: SignTool with code signing certificate
-
-3. **Auto-Updates:** Implement update checker
-   - Check GitHub releases API
-   - Download and install updates
-
-4. **Crash Reporting:** Add error tracking
-   - Sentry, Rollbar, etc.

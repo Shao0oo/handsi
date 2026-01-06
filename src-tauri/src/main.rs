@@ -146,6 +146,15 @@ impl PythonProcess {
 
             eprintln!("[Rust] Python response: {}", response_line.trim());
 
+            // Skip empty lines (shouldn't happen but be defensive)
+            if response_line.trim().is_empty() {
+                eprintln!("[Rust] Warning: Got empty line from Python, retrying...");
+                response_line.clear();
+                stdout.read_line(&mut response_line)
+                    .map_err(|e| format!("Failed to read from Python stdout on retry: {}", e))?;
+                eprintln!("[Rust] Python response (retry): {}", response_line.trim());
+            }
+
             let response: IpcResponse = serde_json::from_str(&response_line)
                 .map_err(|e| format!("Failed to parse Python response: {}", e))?;
 
@@ -242,13 +251,13 @@ fn main() {
         .setup(move |app| {
             eprintln!("[Rust] Running Tauri setup...");
 
-            // Open DevTools automatically in dev mode
-            #[cfg(debug_assertions)]
-            {
-                eprintln!("[Rust] Dev mode: Opening DevTools");
-                let window = app.get_webview_window("main").unwrap();
-                window.open_devtools();
-            }
+            // // Open DevTools automatically in dev mode
+            // #[cfg(debug_assertions)]
+            // {
+            //     eprintln!("[Rust] Dev mode: Opening DevTools");
+            //     let window = app.get_webview_window("main").unwrap();
+            //     window.open_devtools();
+            // }
 
             // Start Python process
             eprintln!("[Rust] Starting Python IPC process...");
