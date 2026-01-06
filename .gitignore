@@ -1,5 +1,8 @@
 convos/
 
+# Claude Files
+.claude
+
 # Ignore certain .md files
 CLAUDE.md
 docs/NOTES.md
@@ -30,3 +33,15 @@ profile.stats
 
 # User configuration (settings saved from app UI)
 config/user_config/
+
+# Tauri / Rust
+src-tauri/target/
+src-tauri/Cargo.lock
+
+# Node.js dependencies
+node_modules/ 
+package-lock.json
+
+# Build outputs
+dist/
+build/

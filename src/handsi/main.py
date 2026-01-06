@@ -54,6 +54,13 @@ def parse_args() -> argparse.Namespace:
         help="Run in CLI mode (background service) instead of launching GUI"
     )
 
+    parser.add_argument(
+        "--ipc",
+        type=str,
+        choices=["stdio"],
+        help="Run in IPC mode for Tauri (stdio)"
+    )
+
     return parser.parse_args()
 
 
@@ -79,24 +86,33 @@ def main() -> int:
         print(f"Error: {e}")
         return 1
 
-    # Default mode: Launch Qt native app GUI
-    # CLI mode: Run as background service (use --cli flag)
-    if not args.cli:
-        from handsi.ui.qt_app import run_app
+    # IPC mode: Run as subprocess for Tauri
+    if args.ipc:
+        from handsi.ui.ipc_server import run_ipc_server
         try:
-            exit_code = run_app(
-                config_path=config_path,
-                debug=args.debug
-            )
-            return exit_code
-        except KeyboardInterrupt:
-            log_info("App stopped by user")
+            run_ipc_server(config_path)
             return 0
         except Exception as e:
-            print(f"Failed to start app: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"IPC server error: {e}", file=sys.stderr)
             return 1
+
+    # Default mode is now CLI (background service)
+    # GUI mode: Use Tauri app (see scripts/dev-tauri.sh)
+    if not args.cli:
+        print("=" * 60)
+        print("Handsi GUI Mode")
+        print("=" * 60)
+        print("Qt GUI has been replaced with Tauri.")
+        print("")
+        print("To run the GUI:")
+        print("  ./scripts/dev-tauri.sh")
+        print("")
+        print("To run in CLI mode (background service):")
+        print("  handsi --cli")
+        print("")
+        print("See docs/TAURI_MIGRATION.md for more info.")
+        print("=" * 60)
+        return 1
 
     # Load config
     try:

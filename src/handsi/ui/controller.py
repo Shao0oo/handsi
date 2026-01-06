@@ -169,28 +169,34 @@ class HandsiController:
         Get current Handsi status.
 
         Returns:
-            dict: Status information
+            dict: Status information wrapped in IPC response format
         """
         with self._lock:
             if not self._running or not self.runtime_state:
                 return {
-                    "running": False,
-                    "fps": 0,
-                    "activity": "IDLE",
-                    "frames_captured": 0,
-                    "frames_processed": 0,
-                    "latch_enabled": False
+                    "success": True,
+                    "data": {
+                        "running": False,
+                        "fps": 0,
+                        "activity": "IDLE",
+                        "frames_captured": 0,
+                        "frames_processed": 0,
+                        "latch_enabled": False
+                    }
                 }
 
             # Read from runtime state
             with self.runtime_state.lock:
                 return {
-                    "running": True,
-                    "fps": self.runtime_state.current_fps,
-                    "activity": self.runtime_state.activity_level.value,
-                    "frames_captured": self.runtime_state.frames_captured,
-                    "frames_processed": self.runtime_state.frames_processed,
-                    "latch_enabled": self.runtime_state.latch_active
+                    "success": True,
+                    "data": {
+                        "running": True,
+                        "fps": self.runtime_state.current_fps,
+                        "activity": self.runtime_state.activity_level.value,
+                        "frames_captured": self.runtime_state.frames_captured,
+                        "frames_processed": self.runtime_state.frames_processed,
+                        "latch_enabled": self.runtime_state.latch_active
+                    }
                 }
 
     def get_settings(self) -> dict:
@@ -198,22 +204,25 @@ class HandsiController:
         Get current configuration settings.
 
         Returns:
-            dict: Current settings
+            dict: Current settings wrapped in IPC response format
         """
         return {
-            "sensitivity": self.config.actions.mouse.sensitivity,
-            "smoothing": self.config.actions.mouse.smoothing_factor,
-            "dead_zone": self.config.actions.mouse.dead_zone,
-            "pinch_threshold": self.config.gestures.pinch_threshold,
-            "fist_threshold": self.config.gestures.fist_threshold,
-            "swipe_velocity": self.config.gestures.swipe_velocity_threshold,
-            "open_hand_spread": self.config.gestures.open_hand_spread_threshold,
-            "thumbs_vertical": self.config.gestures.thumbs_vertical_threshold,
-            "debounce_ms": self.config.gestures.debounce_ms,
-            "latch_cooldown_ms": self.config.gestures.latch_cooldown_ms,
-            "smoothing_window": self.config.gestures.smoothing_window,
-            "mirror_x": self.config.actions.mouse.mirror_x,
-            "invert_scroll": self.config.actions.scroll.invert
+            "success": True,
+            "data": {
+                "sensitivity": self.config.actions.mouse.sensitivity,
+                "smoothing": self.config.actions.mouse.smoothing_factor,
+                "dead_zone": self.config.actions.mouse.dead_zone,
+                "pinch_threshold": self.config.gestures.pinch_threshold,
+                "fist_threshold": self.config.gestures.fist_threshold,
+                "swipe_velocity": self.config.gestures.swipe_velocity_threshold,
+                "open_hand_spread": self.config.gestures.open_hand_spread_threshold,
+                "thumbs_vertical": self.config.gestures.thumbs_vertical_threshold,
+                "debounce_ms": self.config.gestures.debounce_ms,
+                "latch_cooldown_ms": self.config.gestures.latch_cooldown_ms,
+                "smoothing_window": self.config.gestures.smoothing_window,
+                "mirror_x": self.config.actions.mouse.mirror_x,
+                "invert_scroll": self.config.actions.scroll.invert
+            }
         }
 
     def update_settings(self, settings: dict) -> dict:
@@ -365,6 +374,55 @@ class HandsiController:
 
         return {"success": True, "mappings": mappings}
 
+    def update_mapping(self, gesture: str, enabled: bool) -> dict:
+        """
+        Update a single gesture mapping (enable/disable).
+
+        Args:
+            gesture: Gesture name
+            enabled: Whether to enable (True) or disable (False) this gesture
+
+        Returns:
+            dict: Status response with success/error
+        """
+        try:
+            if enabled:
+                # For now, we can't add new mappings without knowing the action
+                # This would require the frontend to pass the action as well
+                return {
+                    "success": False,
+                    "error": "Enabling gestures not yet supported. Use update_mappings instead."
+                }
+            else:
+                # Disable by removing from mappings
+                if gesture in self.config.actions.mappings:
+                    del self.config.actions.mappings[gesture]
+                    log_info(f"Controller: Mapping disabled for gesture: {gesture}")
+
+                    # Save to user config
+                    try:
+                        save_user_config(self.config)
+                        log_info(f"Controller: Mappings saved to {get_user_config_path()}")
+                    except Exception as save_error:
+                        log_info(f"Controller: Warning - failed to save mappings: {save_error}")
+
+                    restart_needed = self.is_running()
+
+                    return {
+                        "success": True,
+                        "message": f"Mapping disabled for {gesture}",
+                        "restart_needed": restart_needed
+                    }
+                else:
+                    return {
+                        "success": True,
+                        "message": f"Gesture {gesture} was already disabled"
+                    }
+
+        except Exception as e:
+            log_info(f"Controller: Failed to update mapping - {e}")
+            return {"success": False, "error": str(e)}
+
     def update_mappings(self, mappings: dict) -> dict:
         """
         Update gesture → action mappings.
@@ -405,6 +463,15 @@ class HandsiController:
         except Exception as e:
             log_info(f"Controller: Failed to update mappings - {e}")
             return {"success": False, "error": str(e)}
+
+    def get_info(self) -> dict:
+        """
+        Alias for get_system_info() for IPC compatibility.
+
+        Returns:
+            dict: System information including version, camera, permissions
+        """
+        return self.get_system_info()
 
     def get_system_info(self) -> dict:
         """
@@ -449,9 +516,11 @@ class HandsiController:
 
             return {
                 "success": True,
-                "camera": camera_info,
-                "system": system_info,
-                "permissions_status": permissions_status
+                "data": {
+                    "camera": camera_info,
+                    "system": system_info,
+                    "permissions_status": permissions_status
+                }
             }
 
         except Exception as e:

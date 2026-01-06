@@ -1,8 +1,41 @@
 /**
  * Handsi Control Panel - Frontend Logic
  *
- * Handles UI interactions and API communication via QWebChannel.
+ * Handles UI interactions and API communication via Tauri IPC.
  */
+
+console.log('📱 app.js loading...');
+
+// Tauri invoke function - will be set once API loads
+let invoke = null;
+
+// Wait for Tauri API to load
+function waitForTauriAPI() {
+    return new Promise((resolve, reject) => {
+        let attempts = 0;
+        const maxAttempts = 100; // 5 seconds max
+
+        const checkAPI = () => {
+            attempts++;
+
+            if (window.__TAURI_INVOKE__) {
+                invoke = window.__TAURI_INVOKE__;
+                console.log('✓ Tauri invoke function ready');
+                resolve();
+            } else if (attempts >= maxAttempts) {
+                console.error('✗ Tauri API failed to load after 5 seconds');
+                reject(new Error('Tauri API timeout'));
+            } else {
+                if (attempts % 10 === 0) {
+                    console.log(`⏳ Waiting for Tauri API... (attempt ${attempts}/${maxAttempts})`);
+                }
+                setTimeout(checkAPI, 50);
+            }
+        };
+
+        checkAPI();
+    });
+}
 
 // === Configuration ===
 const STATUS_POLL_INTERVAL = 500;  // ms
@@ -10,310 +43,187 @@ const STATUS_POLL_INTERVAL = 500;  // ms
 // === State ===
 let statusPollTimer = null;
 let currentSettings = {};
-let bridge = null;  // Qt bridge object
-let bridgeReady = false;
+let bridgeReady = true;  // Tauri is always ready
 
 // === DOM Elements ===
-const elements = {
-    // Tabs
-    tabButtons: document.querySelectorAll('.tab-btn'),
-    tabContents: document.querySelectorAll('.tab-content'),
+// Will be populated when DOM is ready
+let elements = null;
 
-    // Status
-    connectionStatus: document.getElementById('connectionStatus'),
-    runningStatus: document.getElementById('runningStatus'),
-    fpsValue: document.getElementById('fpsValue'),
-    activityValue: document.getElementById('activityValue'),
-    latchStatus: document.getElementById('latchStatus'),
-    framesCaptured: document.getElementById('framesCaptured'),
-    framesProcessed: document.getElementById('framesProcessed'),
+function getElements() {
+    return {
+        // Tabs
+        tabButtons: document.querySelectorAll('.tab-btn'),
+        tabContents: document.querySelectorAll('.tab-content'),
 
-    // Controls
-    startBtn: document.getElementById('startBtn'),
-    stopBtn: document.getElementById('stopBtn'),
-    controlMessage: document.getElementById('controlMessage'),
+        // Status
+        connectionStatus: document.getElementById('connectionStatus'),
+        runningStatus: document.getElementById('runningStatus'),
+        fpsValue: document.getElementById('fpsValue'),
+        activityValue: document.getElementById('activityValue'),
+        latchStatus: document.getElementById('latchStatus'),
+        framesCaptured: document.getElementById('framesCaptured'),
+        framesProcessed: document.getElementById('framesProcessed'),
 
-    // Settings - Mouse
-    sensitivity: document.getElementById('sensitivity'),
-    sensitivityValue: document.getElementById('sensitivityValue'),
-    smoothing: document.getElementById('smoothing'),
-    smoothingValue: document.getElementById('smoothingValue'),
-    deadZone: document.getElementById('deadZone'),
-    deadZoneValue: document.getElementById('deadZoneValue'),
-    mirrorX: document.getElementById('mirrorX'),
-    invertScroll: document.getElementById('invertScroll'),
+        // Controls
+        startBtn: document.getElementById('startBtn'),
+        stopBtn: document.getElementById('stopBtn'),
+        controlMessage: document.getElementById('controlMessage'),
 
-    // Settings - Gestures
-    pinchThreshold: document.getElementById('pinchThreshold'),
-    pinchThresholdValue: document.getElementById('pinchThresholdValue'),
-    fistThreshold: document.getElementById('fistThreshold'),
-    fistThresholdValue: document.getElementById('fistThresholdValue'),
-    swipeVelocity: document.getElementById('swipeVelocity'),
-    swipeVelocityValue: document.getElementById('swipeVelocityValue'),
-    openHandSpread: document.getElementById('openHandSpread'),
-    openHandSpreadValue: document.getElementById('openHandSpreadValue'),
-    thumbsVertical: document.getElementById('thumbsVertical'),
-    thumbsVerticalValue: document.getElementById('thumbsVerticalValue'),
+        // Settings - Mouse
+        sensitivity: document.getElementById('sensitivity'),
+        sensitivityValue: document.getElementById('sensitivityValue'),
+        smoothing: document.getElementById('smoothing'),
+        smoothingValue: document.getElementById('smoothingValue'),
+        deadZone: document.getElementById('deadZone'),
+        deadZoneValue: document.getElementById('deadZoneValue'),
+        mirrorX: document.getElementById('mirrorX'),
+        invertScroll: document.getElementById('invertScroll'),
 
-    // Settings - Timing
-    debounceMs: document.getElementById('debounceMs'),
-    debounceMsValue: document.getElementById('debounceMsValue'),
-    latchCooldownMs: document.getElementById('latchCooldownMs'),
-    latchCooldownMsValue: document.getElementById('latchCooldownMsValue'),
-    smoothingWindow: document.getElementById('smoothingWindow'),
-    smoothingWindowValue: document.getElementById('smoothingWindowValue'),
+        // Settings - Gestures
+        pinchThreshold: document.getElementById('pinchThreshold'),
+        pinchThresholdValue: document.getElementById('pinchThresholdValue'),
+        fistThreshold: document.getElementById('fistThreshold'),
+        fistThresholdValue: document.getElementById('fistThresholdValue'),
+        swipeVelocity: document.getElementById('swipeVelocity'),
+        swipeVelocityValue: document.getElementById('swipeVelocityValue'),
+        openHandSpread: document.getElementById('openHandSpread'),
+        openHandSpreadValue: document.getElementById('openHandSpreadValue'),
+        thumbsVertical: document.getElementById('thumbsVertical'),
+        thumbsVerticalValue: document.getElementById('thumbsVerticalValue'),
 
-    // Settings controls
-    saveSettingsBtn: document.getElementById('saveSettingsBtn'),
-    resetSettingsBtn: document.getElementById('resetSettingsBtn'),
-    settingsMessage: document.getElementById('settingsMessage'),
+        // Settings - Timing
+        debounceMs: document.getElementById('debounceMs'),
+        debounceMsValue: document.getElementById('debounceMsValue'),
+        latchCooldownMs: document.getElementById('latchCooldownMs'),
+        latchCooldownMsValue: document.getElementById('latchCooldownMsValue'),
+        smoothingWindow: document.getElementById('smoothingWindow'),
+        smoothingWindowValue: document.getElementById('smoothingWindowValue'),
 
-    // Mappings
-    mappingsList: document.getElementById('mappingsList'),
-    mappingsMessage: document.getElementById('mappingsMessage'),
+        // Settings controls
+        saveSettingsBtn: document.getElementById('saveSettingsBtn'),
+        resetSettingsBtn: document.getElementById('resetSettingsBtn'),
+        settingsMessage: document.getElementById('settingsMessage'),
 
-    // Info
-    infoCameraDevice: document.getElementById('infoCameraDevice'),
-    infoCameraResolution: document.getElementById('infoCameraResolution'),
-    infoCameraFPS: document.getElementById('infoCameraFPS'),
-    infoSystemPlatform: document.getElementById('infoSystemPlatform'),
-    infoSystemVersion: document.getElementById('infoSystemVersion'),
-    infoSystemPython: document.getElementById('infoSystemPython'),
-    infoPermissions: document.getElementById('infoPermissions'),
+        // Mappings
+        mappingsList: document.getElementById('mappingsList'),
+        mappingsMessage: document.getElementById('mappingsMessage'),
 
-    // First run modal
-    firstRunModal: document.getElementById('firstRunModal'),
-    closeFirstRunModal: document.getElementById('closeFirstRunModal')
-};
+        // Info
+        infoCameraDevice: document.getElementById('infoCameraDevice'),
+        infoCameraResolution: document.getElementById('infoCameraResolution'),
+        infoCameraFPS: document.getElementById('infoCameraFPS'),
+        infoSystemPlatform: document.getElementById('infoSystemPlatform'),
+        infoSystemVersion: document.getElementById('infoSystemVersion'),
+        infoSystemPython: document.getElementById('infoSystemPython'),
+        infoPermissions: document.getElementById('infoPermissions'),
 
-// === QWebChannel Initialization ===
-
-function initQWebChannel() {
-    return new Promise((resolve, reject) => {
-        if (typeof QWebChannel === 'undefined') {
-            console.error('QWebChannel not available - are we running in Qt?');
-            reject(new Error('QWebChannel not available'));
-            return;
-        }
-
-        new QWebChannel(qt.webChannelTransport, (channel) => {
-            bridge = channel.objects.bridge;
-            bridgeReady = true;
-            console.log('QWebChannel bridge connected');
-
-            // Connect to status change signal
-            bridge.statusChanged.connect((statusJson) => {
-                const status = JSON.parse(statusJson);
-                updateStatusUI(status);
-            });
-
-            resolve();
-        });
-    });
+        // First run modal
+        firstRunModal: document.getElementById('firstRunModal'),
+        closeFirstRunModal: document.getElementById('closeFirstRunModal')
+    };
 }
 
-// === API Functions (Qt Bridge) ===
-// QWebChannel requires callback-based API, not async/await
+// === Tauri Initialization ===
 
-function startHandsi() {
-    if (!bridgeReady) return Promise.resolve({ success: false, error: 'Bridge not ready' });
-
+function initTauri() {
     return new Promise((resolve) => {
-        try {
-            bridge.start((resultJson) => {
-                console.log('start() response:', resultJson);
-                const result = JSON.parse(resultJson);
-                resolve({ success: result.success, data: result });
-            });
-        } catch (error) {
-            console.error('start() failed:', error);
-            resolve({ success: false, error: error.message });
-        }
+        console.log('Tauri initialized');
+        resolve();
     });
 }
 
-function stopHandsi() {
-    if (!bridgeReady) return Promise.resolve({ success: false, error: 'Bridge not ready' });
+// === API Functions (Tauri IPC) ===
 
-    return new Promise((resolve) => {
-        try {
-            bridge.stop((resultJson) => {
-                console.log('stop() response:', resultJson);
-                const result = JSON.parse(resultJson);
-                resolve({ success: result.success, data: result });
-            });
-        } catch (error) {
-            console.error('stop() failed:', error);
-            resolve({ success: false, error: error.message });
-        }
-    });
+async function startHandsi() {
+    try {
+        console.log('[JS] Calling invoke("start")...');
+        const result = await invoke('start');
+        console.log('[JS] start() response:', result);
+        return result;
+    } catch (error) {
+        console.error('[JS] start() failed:', error);
+        return { success: false, error: String(error) };
+    }
 }
 
-function getStatus() {
-    if (!bridgeReady) return Promise.resolve({ success: false, error: 'Bridge not ready' });
-
-    return new Promise((resolve) => {
-        try {
-            bridge.getStatus((statusJson) => {
-                const status = JSON.parse(statusJson);
-                resolve({ success: true, data: status });
-            });
-        } catch (error) {
-            console.error('getStatus() failed:', error);
-            resolve({ success: false, error: error.message });
-        }
-    });
+async function stopHandsi() {
+    try {
+        console.log('[JS] Calling invoke("stop")...');
+        const result = await invoke('stop');
+        console.log('[JS] stop() response:', result);
+        return result;
+    } catch (error) {
+        console.error('[JS] stop() failed:', error);
+        return { success: false, error: String(error) };
+    }
 }
 
-function getSettings() {
-    if (!bridgeReady) return Promise.resolve({ success: false, error: 'Bridge not ready' });
-
-    return new Promise((resolve) => {
-        try {
-            bridge.getSettings((settingsJson) => {
-                const settings = JSON.parse(settingsJson);
-                resolve({ success: true, data: settings });
-            });
-        } catch (error) {
-            console.error('getSettings() failed:', error);
-            resolve({ success: false, error: error.message });
-        }
-    });
+async function getStatus() {
+    try {
+        console.log('[JS] Calling invoke("get_status")...');
+        const result = await invoke('get_status');
+        console.log('[JS] get_status() response:', result);
+        return result;
+    } catch (error) {
+        console.error('[JS] getStatus() failed:', error);
+        return { success: false, error: String(error) };
+    }
 }
 
-function updateSettings(settings) {
-    if (!bridgeReady) return Promise.resolve({ success: false, error: 'Bridge not ready' });
-
-    return new Promise((resolve) => {
-        try {
-            const settingsJson = JSON.stringify(settings);
-            bridge.updateSettings(settingsJson, (resultJson) => {
-                console.log('updateSettings() response:', resultJson);
-                const result = JSON.parse(resultJson);
-                resolve({ success: result.success, data: result });
-            });
-        } catch (error) {
-            console.error('updateSettings() failed:', error);
-            resolve({ success: false, error: error.message });
-        }
-    });
+async function getSettings() {
+    try {
+        const result = await invoke('get_settings');
+        return result;
+    } catch (error) {
+        console.error('getSettings() failed:', error);
+        return { success: false, error: error };
+    }
 }
 
-function resetToDefaults() {
-    if (!bridgeReady) return Promise.resolve({ success: false, error: 'Bridge not ready' });
-
-    return new Promise((resolve) => {
-        try {
-            bridge.resetToDefaults((resultJson) => {
-                console.log('resetToDefaults() response:', resultJson);
-                const result = JSON.parse(resultJson);
-                resolve({ success: result.success, data: result });
-            });
-        } catch (error) {
-            console.error('resetToDefaults() failed:', error);
-            resolve({ success: false, error: error.message });
-        }
-    });
+async function updateSettings(settings) {
+    try {
+        const result = await invoke('update_settings', { settings });
+        console.log('updateSettings() response:', result);
+        return result;
+    } catch (error) {
+        console.error('updateSettings() failed:', error);
+        return { success: false, error: error };
+    }
 }
 
-function restart() {
-    if (!bridgeReady) return Promise.resolve({ success: false, error: 'Bridge not ready' });
-
-    return new Promise((resolve) => {
-        try {
-            bridge.restart((resultJson) => {
-                console.log('restart() response:', resultJson);
-                const result = JSON.parse(resultJson);
-                resolve({ success: result.success, data: result });
-            });
-        } catch (error) {
-            console.error('restart() failed:', error);
-            resolve({ success: false, error: error.message });
-        }
-    });
+async function getMappings() {
+    try {
+        const result = await invoke('get_mappings');
+        return result;
+    } catch (error) {
+        console.error('getMappings() failed:', error);
+        return { success: false, error: error };
+    }
 }
 
-function getMappings() {
-    if (!bridgeReady) return Promise.resolve({ success: false, error: 'Bridge not ready' });
-
-    return new Promise((resolve) => {
-        try {
-            bridge.getMappings((resultJson) => {
-                const result = JSON.parse(resultJson);
-                resolve({ success: result.success, data: result });
-            });
-        } catch (error) {
-            console.error('getMappings() failed:', error);
-            resolve({ success: false, error: error.message });
-        }
-    });
+async function updateMapping(gesture, enabled) {
+    try {
+        const result = await invoke('update_mapping', { gesture, enabled });
+        console.log('updateMapping() response:', result);
+        return result;
+    } catch (error) {
+        console.error('updateMapping() failed:', error);
+        return { success: false, error: error };
+    }
 }
 
-function updateMappings(mappings) {
-    if (!bridgeReady) return Promise.resolve({ success: false, error: 'Bridge not ready' });
-
-    return new Promise((resolve) => {
-        try {
-            const mappingsJson = JSON.stringify(mappings);
-            bridge.updateMappings(mappingsJson, (resultJson) => {
-                console.log('updateMappings() response:', resultJson);
-                const result = JSON.parse(resultJson);
-                resolve({ success: result.success, data: result });
-            });
-        } catch (error) {
-            console.error('updateMappings() failed:', error);
-            resolve({ success: false, error: error.message });
-        }
-    });
+async function getSystemInfo() {
+    try {
+        const result = await invoke('get_info');
+        return result;
+    } catch (error) {
+        console.error('getSystemInfo() failed:', error);
+        return { success: false, error: error };
+    }
 }
 
-function getSystemInfo() {
-    if (!bridgeReady) return Promise.resolve({ success: false, error: 'Bridge not ready' });
-
-    return new Promise((resolve) => {
-        try {
-            bridge.getSystemInfo((resultJson) => {
-                const result = JSON.parse(resultJson);
-                resolve({ success: result.success, data: result });
-            });
-        } catch (error) {
-            console.error('getSystemInfo() failed:', error);
-            resolve({ success: false, error: error.message });
-        }
-    });
-}
-
-function checkFirstRun() {
-    if (!bridgeReady) return Promise.resolve({ success: false, error: 'Bridge not ready' });
-
-    return new Promise((resolve) => {
-        try {
-            bridge.checkFirstRun((resultJson) => {
-                const result = JSON.parse(resultJson);
-                resolve({ success: result.success, data: result });
-            });
-        } catch (error) {
-            console.error('checkFirstRun() failed:', error);
-            resolve({ success: false, error: error.message });
-        }
-    });
-}
-
-function getAvailableGesturesAndActions() {
-    if (!bridgeReady) return Promise.resolve({ success: false, error: 'Bridge not ready' });
-
-    return new Promise((resolve) => {
-        try {
-            bridge.getAvailableGesturesAndActions((resultJson) => {
-                const result = JSON.parse(resultJson);
-                resolve({ success: result.success, data: result });
-            });
-        } catch (error) {
-            console.error('getAvailableGesturesAndActions() failed:', error);
-            resolve({ success: false, error: error.message });
-        }
-    });
-}
+// Removed: getAvailableGesturesAndActions, resetToDefaults, restart, checkFirstRun
+// These functions were Qt-specific and may need to be re-implemented if needed
 
 // === UI Update Functions ===
 
@@ -342,7 +252,9 @@ function updateStatusUI(status) {
     elements.stopBtn.disabled = !running;
 }
 
-function updateSettingsUI(settings) {
+function updateSettingsUI(result) {
+    // Extract settings from nested response
+    const settings = result.data || result;
     currentSettings = settings;
 
     // Mouse settings
@@ -410,21 +322,25 @@ function setConnectionStatus(connected) {
 // === Event Handlers ===
 
 async function handleStart() {
+    console.log('[JS] handleStart() called - Start button clicked!');
     elements.startBtn.disabled = true;
     const result = await startHandsi();
+    console.log('[JS] handleStart() - result:', result);
 
     if (result.success) {
         showMessage(elements.controlMessage, 'success', 'Handsi started successfully');
         startStatusPolling();
     } else {
-        showMessage(elements.controlMessage, 'error', `Failed to start: ${result.data.error || result.error}`);
+        showMessage(elements.controlMessage, 'error', `Failed to start: ${result.data?.error || result.error}`);
         elements.startBtn.disabled = false;
     }
 }
 
 async function handleStop() {
+    console.log('[JS] handleStop() called - Stop button clicked!');
     elements.stopBtn.disabled = true;
     const result = await stopHandsi();
+    console.log('[JS] handleStop() - result:', result);
 
     if (result.success) {
         showMessage(elements.controlMessage, 'success', 'Handsi stopped successfully');
@@ -478,28 +394,9 @@ async function handleSaveSettings() {
 }
 
 async function handleResetSettings() {
-    // Confirm with user
-    if (!confirm('Reset all settings to defaults? This will delete your custom configuration.')) {
-        return;
-    }
-
-    // Call reset API
-    const result = await resetToDefaults();
-    if (result.success) {
-        // Reload settings from server (now defaults)
-        const settingsResult = await getSettings();
-        if (settingsResult.success) {
-            updateSettingsUI(settingsResult.data);
-
-            let message = 'Settings reset to defaults';
-            if (result.data.restart_needed) {
-                message += ' - Restart detection to apply changes';
-            }
-            showMessage(elements.settingsMessage, 'success', message, 5000);
-        }
-    } else {
-        showMessage(elements.settingsMessage, 'error', `Failed to reset: ${result.error || result.data?.error}`);
-    }
+    // TODO: Implement reset to defaults via Python IPC
+    // For now, just show a message
+    showMessage(elements.settingsMessage, 'info', 'Reset to defaults not yet implemented in Tauri version');
 }
 
 // === Tab Switching ===
@@ -576,14 +473,8 @@ function setupCollapsibleSections() {
 // === Mappings Tab ===
 
 async function loadMappings() {
-    // Load available options
-    const availableResult = await getAvailableGesturesAndActions();
-    if (!availableResult.success) {
-        elements.mappingsList.innerHTML = '<div class="error">Failed to load options</div>';
-        return;
-    }
-
-    const availableActions = availableResult.data.actions;
+    // Note: getAvailableGesturesAndActions is not implemented in Tauri version yet
+    // For now, we'll just load the current mappings
 
     // Load current mappings
     const mappingsResult = await getMappings();
@@ -592,7 +483,7 @@ async function loadMappings() {
         return;
     }
 
-    const mappings = mappingsResult.data.mappings;
+    const mappings = mappingsResult.mappings || mappingsResult.data?.mappings || [];
 
     if (mappings.length === 0) {
         elements.mappingsList.innerHTML = '<div class="no-data">No gestures available</div>';
@@ -606,32 +497,22 @@ async function loadMappings() {
         return 0;
     });
 
-    // Render each gesture with dropdown
+    // Render each gesture with its action (read-only for now)
     let html = '';
     mappings.forEach(mapping => {
         const gestureDisplay = mapping.gesture.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        const actionDisplay = mapping.action ? mapping.action.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'None';
 
         html += `
             <div class="mapping-item ${!mapping.enabled ? 'unmapped' : ''}">
                 <div class="gesture-label">${gestureDisplay}</div>
                 <div class="mapping-arrow">→</div>
-                <select class="action-dropdown" data-gesture="${mapping.gesture}">
-                    <option value="">-- None --</option>
-                    ${availableActions.map(action => {
-                        const actionDisplay = action.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-                        return `<option value="${action}" ${mapping.action === action ? 'selected' : ''}>${actionDisplay}</option>`;
-                    }).join('')}
-                </select>
+                <div class="action-label">${actionDisplay}</div>
             </div>
         `;
     });
 
     elements.mappingsList.innerHTML = html;
-
-    // Add change listeners
-    document.querySelectorAll('.action-dropdown').forEach(dropdown => {
-        dropdown.addEventListener('change', handleMappingChange);
-    });
 }
 
 async function handleMappingChange(event) {
@@ -682,7 +563,8 @@ async function loadSystemInfo() {
         return;
     }
 
-    const info = result.data;
+    // Handle both wrapped and unwrapped responses
+    const info = result.data || result;
 
     // Camera info
     elements.infoCameraDevice.textContent = info.camera.device_id;
@@ -705,11 +587,9 @@ async function loadSystemInfo() {
 // === First Run Modal ===
 
 async function checkAndShowFirstRun() {
-    const result = await checkFirstRun();
-
-    if (result.success && result.data.is_first_run) {
-        elements.firstRunModal.classList.remove('hidden');
-    }
+    // TODO: Implement first-run check via Tauri if needed
+    // For now, just hide the modal
+    elements.firstRunModal.classList.add('hidden');
 }
 
 function setupFirstRunModal() {
@@ -721,15 +601,9 @@ function setupFirstRunModal() {
 // === Auto-Restart ===
 
 async function handleAutoRestart() {
-    if (confirm('Settings changed. Restart Handsi to apply changes?')) {
-        const result = await restart();
-        if (result.success) {
-            showMessage(elements.controlMessage, 'success', 'Handsi restarted successfully');
-            startStatusPolling();
-        } else {
-            showMessage(elements.controlMessage, 'error', `Failed to restart: ${result.error}`);
-        }
-    }
+    // Restart not needed with Tauri - settings are applied immediately
+    // Just show success message
+    showMessage(elements.settingsMessage, 'success', 'Settings updated successfully');
 }
 
 // === Slider Updates ===
@@ -809,29 +683,42 @@ function stopStatusPolling() {
 // === Initialization ===
 
 async function init() {
-    console.log('Initializing Handsi Control Panel...');
+    console.log('🚀 [JS] Initializing Handsi Control Panel...');
+    console.log('🔍 [JS] invoke function type:', typeof invoke);
+    console.log('🔍 [JS] window.__TAURI_INVOKE__ type:', typeof window.__TAURI_INVOKE__);
 
-    // Initialize QWebChannel first
+    // Get DOM elements now that DOM is ready
+    elements = getElements();
+    console.log('✓ [JS] DOM elements loaded');
+
+    // Wait for Tauri API to load
     try {
-        await initQWebChannel();
-        console.log('QWebChannel initialized');
+        await waitForTauriAPI();
+        console.log('✓ [JS] Tauri API ready, invoke type:', typeof invoke);
     } catch (error) {
-        console.error('Failed to initialize QWebChannel:', error);
+        console.error('❌ [JS] Failed to load Tauri API:', error);
         setConnectionStatus(false);
-        showMessage(elements.controlMessage, 'error', 'Failed to initialize bridge');
+        showMessage(elements.controlMessage, 'error', 'Failed to initialize: ' + error.message);
+        // Add visible error on page
+        alert('CRITICAL ERROR: Tauri API failed to load!\n\n' + error.message + '\n\nCheck browser console (Cmd+Option+I) for details.');
         return;
     }
 
     // Setup UI event listeners
+    console.log('[JS] Setting up UI event listeners...');
     setupTabListeners();
     setupCollapsibleSections();
     setupFirstRunModal();
 
     // Setup control event listeners
+    console.log('[JS] Attaching button event listeners...');
+    console.log('[JS] Start button:', elements.startBtn);
+    console.log('[JS] Stop button:', elements.stopBtn);
     elements.startBtn.addEventListener('click', handleStart);
     elements.stopBtn.addEventListener('click', handleStop);
     elements.saveSettingsBtn.addEventListener('click', handleSaveSettings);
     elements.resetSettingsBtn.addEventListener('click', handleResetSettings);
+    console.log('[JS] Button event listeners attached successfully');
 
     setupSliderListeners();
 
@@ -839,7 +726,9 @@ async function init() {
     await checkAndShowFirstRun();
 
     // Load initial data
+    console.log('[JS] Loading initial status...');
     const statusResult = await getStatus();
+    console.log('[JS] Initial status result:', statusResult);
     if (statusResult.success) {
         updateStatusUI(statusResult.data);
         setConnectionStatus(true);
@@ -853,12 +742,14 @@ async function init() {
         showMessage(elements.controlMessage, 'error', 'Failed to connect to bridge');
     }
 
+    console.log('[JS] Loading initial settings...');
     const settingsResult = await getSettings();
+    console.log('[JS] Initial settings result:', settingsResult);
     if (settingsResult.success) {
         updateSettingsUI(settingsResult.data);
     }
 
-    console.log('Initialization complete');
+    console.log('[JS] ✅ Initialization complete');
 }
 
 // === Start Application ===
