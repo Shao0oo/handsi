@@ -250,6 +250,10 @@ class HandsiController:
                 self.config.actions.mouse.smoothing_factor = float(settings["smoothing"])
             if "dead_zone" in settings:
                 self.config.actions.mouse.dead_zone = float(settings["dead_zone"])
+            if "scroll_sensitivity" in settings:
+                self.config.actions.scroll.sensitivity = float(settings["scroll_sensitivity"])
+            if "scroll_dead_zone" in settings:
+                self.config.actions.scroll.dead_zone = float(settings["scroll_dead_zone"])
             if "pinch_threshold" in settings:
                 self.config.gestures.pinch_threshold = float(settings["pinch_threshold"])
             if "fist_threshold" in settings:
