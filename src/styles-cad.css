@@ -18,18 +18,18 @@ body {
     min-height: 100vh;
     height: 100vh;
     overflow: hidden;
-    padding: 2rem 1rem;
+    padding: 0 1rem;
 }
 
 /* === Container === */
 .container {
     max-width: 900px;
     margin: 0 auto;
-    height: calc(100vh - 4rem);
-    max-height: calc(100vh - 4rem);
+    height: 100vh;
+    max-height: 100vh;
     overflow-y: auto;
     overflow-x: hidden;
-    padding-bottom: 4rem;
+    padding: 1rem 0;
     scroll-behavior: smooth;
     scrollbar-gutter: stable;
 }
@@ -88,58 +88,63 @@ body {
     transform: translate(-50%, -50%) scale(0.85);
 }
 
-/* Center aperture circle */
-.status-indicator .dot::after {
-    content: '';
-    position: absolute;
-    width: 8px;
-    height: 8px;
-    background: #000;
-    border-radius: 50%;
-    z-index: 10;
+/* Register --open as animatable number */
+@property --open {
+  syntax: '<number>';
+  initial-value: 0;
+  inherits: false;
 }
 
-/* Aperture blades (8 blades) */
-.aperture-blade {
-    position: absolute;
-    width: 16px;
-    height: 3px;
-    background: #000;
-    top: 50%;
-    left: 50%;
-    transform-origin: 0% 50%;
-    border-radius: 2px;
+/* SVG Iris aperture */
+.iris {
+  width: 92%;
+  height: 92%;
+  display: block;
 }
 
-.aperture-blade:nth-child(1) { transform: translate(-50%, -50%) rotate(0deg) translateX(0); }
-.aperture-blade:nth-child(2) { transform: translate(-50%, -50%) rotate(45deg) translateX(0); }
-.aperture-blade:nth-child(3) { transform: translate(-50%, -50%) rotate(90deg) translateX(0); }
-.aperture-blade:nth-child(4) { transform: translate(-50%, -50%) rotate(135deg) translateX(0); }
-.aperture-blade:nth-child(5) { transform: translate(-50%, -50%) rotate(180deg) translateX(0); }
-.aperture-blade:nth-child(6) { transform: translate(-50%, -50%) rotate(225deg) translateX(0); }
-.aperture-blade:nth-child(7) { transform: translate(-50%, -50%) rotate(270deg) translateX(0); }
-.aperture-blade:nth-child(8) { transform: translate(-50%, -50%) rotate(315deg) translateX(0); }
-
-/* Animated aperture opening/closing for connected state */
-.status-indicator:not(.disconnected) .aperture-blade {
-    animation: apertureOpen 3s ease-in-out infinite;
+/* Blade styling - 8 blades at 45deg spacing */
+.blades use {
+  fill: #333;
+  shape-rendering: geometricPrecision;
+  transform-origin: 50px 50px;
+  --angle: calc(var(--i) * 45deg);
+  --open: 0;
+  /* Compute transform from --open variable (0 = closed, 1 = open) */
+  transform:
+    rotate(var(--angle))
+    translate(0, calc(-68px + var(--open) * 35px))
+    rotate(calc(-10deg - var(--open) * 45deg));
 }
 
-@keyframes apertureOpen {
-    0% { transform: translate(-50%, -50%) rotate(var(--rotation)) translateX(0); }
-    33% { transform: translate(-50%, -50%) rotate(var(--rotation)) translateX(10px); }
-    66% { transform: translate(-50%, -50%) rotate(var(--rotation)) translateX(10px); }
-    100% { transform: translate(-50%, -50%) rotate(var(--rotation)) translateX(0); }
+/* Animated aperture - animate --open variable smoothly */
+.status-indicator:not(.disconnected) .blades use {
+  animation: irisBreath 3s ease-in-out infinite;
 }
 
-.status-indicator:not(.disconnected) .aperture-blade:nth-child(1) { --rotation: 0deg; }
-.status-indicator:not(.disconnected) .aperture-blade:nth-child(2) { --rotation: 45deg; }
-.status-indicator:not(.disconnected) .aperture-blade:nth-child(3) { --rotation: 90deg; }
-.status-indicator:not(.disconnected) .aperture-blade:nth-child(4) { --rotation: 135deg; }
-.status-indicator:not(.disconnected) .aperture-blade:nth-child(5) { --rotation: 180deg; }
-.status-indicator:not(.disconnected) .aperture-blade:nth-child(6) { --rotation: 225deg; }
-.status-indicator:not(.disconnected) .aperture-blade:nth-child(7) { --rotation: 270deg; }
-.status-indicator:not(.disconnected) .aperture-blade:nth-child(8) { --rotation: 315deg; }
+@keyframes irisBreath {
+  0% {
+    --open: 0;  /* Open: blades pulled inward */
+  }
+  75% {
+    --open: 0;  /* Stay open */
+  }
+  85% {
+    --open: 1;  /* Close: blades at outer edge */
+  }
+  90% {
+    --open: 1;  /* Stay closed briefly */
+  }
+  100% {
+    --open: 0;  /* Stay closed briefly */
+  }
+}
+
+/* Disconnected state - blades stay closed and grayed out */
+.status-indicator.disconnected .blades use {
+  fill: #999;
+  animation: none;
+  --open: 0;
+}
 
 /* Disconnected state - blades stay closed, whole lens grayed out */
 .status-indicator.disconnected .dot {
@@ -149,10 +154,6 @@ body {
 
 .status-indicator.disconnected .dot::before {
     border-color: #ccc;
-}
-
-.status-indicator.disconnected .dot::after {
-    background: #999;
 }
 
 .status-indicator.disconnected .aperture-blade {
@@ -193,7 +194,7 @@ body {
 /* === Status Grid === */
 .status-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    grid-template-columns: repeat(2, 1fr);
     gap: 1rem;
 }
 

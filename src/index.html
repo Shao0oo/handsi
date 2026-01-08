@@ -14,20 +14,44 @@
     <div class="container">
         <!-- Header -->
         <header class="header">
-            <h1>Handsi</h1>
-            <div class="status-indicator" id="connectionStatus">
+            <h1>Handsi</h1><div class="status-indicator" id="connectionStatus">
                 <span class="dot">
-                    <span class="aperture-blade"></span>
-                    <span class="aperture-blade"></span>
-                    <span class="aperture-blade"></span>
-                    <span class="aperture-blade"></span>
-                    <span class="aperture-blade"></span>
-                    <span class="aperture-blade"></span>
-                    <span class="aperture-blade"></span>
-                    <span class="aperture-blade"></span>
+                    <svg class="iris" viewBox="0 0 100 100" aria-hidden="true">
+                    <defs>
+                        <!-- Circular clipping mask -->
+                        <clipPath id="irisClip">
+                            <circle cx="50" cy="50" r="48" />
+                        </clipPath>
+
+                        <!-- Blade shape: flat wedge/plane for smooth circular aperture -->
+                        <path id="blade"
+                        d="M50 5
+                            L62 5
+                            L70 60
+                            L62 90
+                            L50 85
+                            L38 80
+                            L30 70
+                            L38 5
+                            Z" />
+                    </defs>
+
+                    <!-- Render order: blade 7 first (bottom), blade 0 last (top) -->
+                    <g class="blades" clip-path="url(#irisClip)">
+                        <use href="#blade" style="--i:7"></use>
+                        <use href="#blade" style="--i:6"></use>
+                        <use href="#blade" style="--i:5"></use>
+                        <use href="#blade" style="--i:4"></use>
+                        <use href="#blade" style="--i:3"></use>
+                        <use href="#blade" style="--i:2"></use>
+                        <use href="#blade" style="--i:1"></use>
+                        <use href="#blade" style="--i:0"></use>
+                    </g>
+                    </svg>
                 </span>
+                
                 <span class="label">Connected</span>
-            </div>
+                </div>
         </header>
 
         <!-- Tab Navigation -->
