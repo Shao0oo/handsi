@@ -20,6 +20,8 @@ struct IpcResponse {
     data: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    request_id: Option<String>,
 }
 
 struct PythonProcess {
@@ -114,12 +116,20 @@ impl PythonProcess {
             return Err("Python process not running".to_string());
         }
 
-        eprintln!("[Rust] Sending command to Python: {}", command);
+        // Generate unique request ID
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let request_id = format!("{}-{}",
+            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis(),
+            command
+        );
 
-        let cmd = IpcCommand {
-            command: command.to_string(),
-            args,
-        };
+        eprintln!("[Rust] Sending command to Python: {} (request_id: {})", command, request_id);
+
+        let cmd = serde_json::json!({
+            "command": command,
+            "args": args,
+            "request_id": request_id.clone()
+        });
 
         // Send command
         let cmd_json = serde_json::to_string(&cmd)
@@ -138,32 +148,40 @@ impl PythonProcess {
 
         eprintln!("[Rust] Waiting for Python response...");
 
-        // Read response
-        if let Some(ref mut stdout) = self.stdout {
-            let mut response_line = String::new();
-            stdout.read_line(&mut response_line)
-                .map_err(|e| format!("Failed to read from Python stdout: {}", e))?;
-
-            eprintln!("[Rust] Python response: {}", response_line.trim());
-
-            // Skip empty lines (shouldn't happen but be defensive)
-            if response_line.trim().is_empty() {
-                eprintln!("[Rust] Warning: Got empty line from Python, retrying...");
-                response_line.clear();
+        // Read responses until we get the one matching our request_id
+        let max_attempts = 10;  // Prevent infinite loop
+        for attempt in 0..max_attempts {
+            if let Some(ref mut stdout) = self.stdout {
+                let mut response_line = String::new();
                 stdout.read_line(&mut response_line)
-                    .map_err(|e| format!("Failed to read from Python stdout on retry: {}", e))?;
-                eprintln!("[Rust] Python response (retry): {}", response_line.trim());
+                    .map_err(|e| format!("Failed to read from Python stdout: {}", e))?;
+
+                eprintln!("[Rust] Python response (attempt {}): {}", attempt + 1, response_line.trim());
+
+                // Skip empty lines
+                if response_line.trim().is_empty() {
+                    eprintln!("[Rust] Warning: Got empty line from Python, continuing...");
+                    continue;
+                }
+
+                let response: IpcResponse = serde_json::from_str(&response_line)
+                    .map_err(|e| format!("Failed to parse Python response: {}", e))?;
+
+                // Check if this response matches our request
+                if response.request_id.as_ref() == Some(&request_id) {
+                    eprintln!("[Rust] ✓ Response matched request_id, success={}", response.success);
+                    return Ok(response);
+                } else {
+                    eprintln!("[Rust] ⚠ Response has wrong request_id! Expected '{}', got '{:?}'. Continuing to read...",
+                        request_id, response.request_id);
+                    // Continue reading until we find the right response
+                }
+            } else {
+                return Err("Python stdout not available".to_string());
             }
-
-            let response: IpcResponse = serde_json::from_str(&response_line)
-                .map_err(|e| format!("Failed to parse Python response: {}", e))?;
-
-            eprintln!("[Rust] Response parsed successfully: success={}", response.success);
-
-            Ok(response)
-        } else {
-            Err("Python stdout not available".to_string())
         }
+
+        Err(format!("Failed to receive matching response for request_id '{}' after {} attempts", request_id, max_attempts))
     }
 
     fn stop(&mut self) -> Result<(), String> {
@@ -238,6 +256,20 @@ async fn update_mapping(state: tauri::State<'_, AppState>, gesture: String, enab
     }))
 }
 
+#[tauri::command]
+async fn update_mappings(state: tauri::State<'_, AppState>, mappings: serde_json::Value) -> Result<IpcResponse, String> {
+    let mut python = state.python.lock().unwrap();
+    python.send_command("update_mappings", serde_json::json!({
+        "mappings": mappings
+    }))
+}
+
+#[tauri::command]
+async fn get_available_gestures_and_actions(state: tauri::State<'_, AppState>) -> Result<IpcResponse, String> {
+    let mut python = state.python.lock().unwrap();
+    python.send_command("get_available_gestures_and_actions", serde_json::json!({}))
+}
+
 fn main() {
     eprintln!("[Rust] ============================================");
     eprintln!("[Rust] Handsi Tauri Application Starting");
@@ -281,7 +313,9 @@ fn main() {
             update_settings,
             get_info,
             get_mappings,
-            update_mapping
+            update_mapping,
+            update_mappings,
+            get_available_gestures_and_actions
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

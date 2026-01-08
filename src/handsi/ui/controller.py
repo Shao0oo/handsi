@@ -115,7 +115,7 @@ class HandsiController:
                 self._running = True
                 log_info("Controller: Handsi started successfully")
 
-                return {"success": True, "message": "Handsi started"}
+                return {"success": True, "data": {"message": "Handsi started"}}
 
             except Exception as e:
                 log_info(f"Controller: Failed to start - {e}")
@@ -158,7 +158,7 @@ class HandsiController:
                 self._running = False
                 log_info("Controller: Handsi stopped successfully")
 
-                return {"success": True, "message": "Handsi stopped"}
+                return {"success": True, "data": {"message": "Handsi stopped"}}
 
             except Exception as e:
                 log_info(f"Controller: Failed to stop - {e}")
@@ -282,8 +282,10 @@ class HandsiController:
 
             return {
                 "success": True,
-                "message": "Settings saved successfully",
-                "restart_needed": restart_needed
+                "data": {
+                    "message": "Settings saved successfully",
+                    "restart_needed": restart_needed
+                }
             }
 
         except Exception as e:
@@ -316,8 +318,10 @@ class HandsiController:
 
             return {
                 "success": True,
-                "message": "Settings reset to defaults",
-                "restart_needed": restart_needed
+                "data": {
+                    "message": "Settings reset to defaults",
+                    "restart_needed": restart_needed
+                }
             }
 
         except Exception as e:
@@ -350,7 +354,7 @@ class HandsiController:
                 }
 
             log_info("Controller: Handsi restarted successfully")
-            return {"success": True, "message": "Handsi restarted successfully"}
+            return {"success": True, "data": {"message": "Handsi restarted successfully"}}
 
         except Exception as e:
             log_info(f"Controller: Failed to restart - {e}")
@@ -372,7 +376,7 @@ class HandsiController:
                 "enabled": action is not None
             })
 
-        return {"success": True, "mappings": mappings}
+        return {"success": True, "data": {"mappings": mappings}}
 
     def update_mapping(self, gesture: str, enabled: bool) -> dict:
         """
@@ -410,13 +414,17 @@ class HandsiController:
 
                     return {
                         "success": True,
-                        "message": f"Mapping disabled for {gesture}",
-                        "restart_needed": restart_needed
+                        "data": {
+                            "message": f"Mapping disabled for {gesture}",
+                            "restart_needed": restart_needed
+                        }
                     }
                 else:
                     return {
                         "success": True,
-                        "message": f"Gesture {gesture} was already disabled"
+                        "data": {
+                            "message": f"Gesture {gesture} was already disabled"
+                        }
                     }
 
         except Exception as e:
@@ -456,8 +464,10 @@ class HandsiController:
 
             return {
                 "success": True,
-                "message": "Mappings updated successfully",
-                "restart_needed": restart_needed
+                "data": {
+                    "message": "Mappings updated successfully",
+                    "restart_needed": restart_needed
+                }
             }
 
         except Exception as e:
@@ -539,8 +549,10 @@ class HandsiController:
 
         return {
             "success": True,
-            "is_first_run": is_first_run,
-            "user_config_path": str(user_config_path)
+            "data": {
+                "is_first_run": is_first_run,
+                "user_config_path": str(user_config_path)
+            }
         }
 
     def get_available_gestures_and_actions(self) -> dict:
@@ -552,6 +564,8 @@ class HandsiController:
         """
         return {
             "success": True,
-            "gestures": AVAILABLE_GESTURES,
-            "actions": AVAILABLE_ACTIONS
+            "data": {
+                "gestures": AVAILABLE_GESTURES,
+                "actions": AVAILABLE_ACTIONS
+            }
         }

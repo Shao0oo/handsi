@@ -50,65 +50,60 @@ class IpcServer:
         log_info("IPC server initialized")
         log_info(f"Config: {config_path}")
 
-    def handle_command(self, command: str, args: Dict[str, Any]) -> Dict[str, Any]:
+    def handle_command(self, command: str, args: Dict[str, Any], request_id: Any = None) -> Dict[str, Any]:
         """
         Handle a command from Tauri.
 
         Args:
             command: Command name
             args: Command arguments
+            request_id: Optional request ID for correlation
 
         Returns:
-            Response dictionary with 'success' and 'data' or 'error'
+            Response dictionary with 'success', 'data' or 'error', and 'request_id'
         """
         try:
-            log_info(f"Handling command: {command}")
+            log_info(f"Handling command: {command} (request_id: {request_id})")
 
             if command == "start":
                 result = self.controller.start()
-                return result
-
             elif command == "stop":
                 result = self.controller.stop()
-                return result
-
             elif command == "get_status":
                 result = self.controller.get_status()
-                return result
-
             elif command == "get_settings":
                 result = self.controller.get_settings()
-                return result
-
             elif command == "update_settings":
                 result = self.controller.update_settings(args)
-                return result
-
             elif command == "get_info":
                 result = self.controller.get_info()
-                return result
-
             elif command == "get_mappings":
                 result = self.controller.get_mappings()
-                return result
-
             elif command == "update_mapping":
                 gesture = args.get("gesture")
                 enabled = args.get("enabled")
                 result = self.controller.update_mapping(gesture, enabled)
-                return result
-
+            elif command == "update_mappings":
+                mappings = args.get("mappings", {})
+                result = self.controller.update_mappings(mappings)
+            elif command == "get_available_gestures_and_actions":
+                result = self.controller.get_available_gestures_and_actions()
             else:
-                return {
+                result = {
                     "success": False,
                     "error": f"Unknown command: {command}"
                 }
+
+            # Add request_id to response for correlation
+            result["request_id"] = request_id
+            return result
 
         except Exception as e:
             log_info(f"Error handling command {command}: {e}")
             return {
                 "success": False,
-                "error": str(e)
+                "error": str(e),
+                "request_id": request_id
             }
 
     def run(self) -> None:
@@ -132,9 +127,10 @@ class IpcServer:
                     data = json.loads(line)
                     command = data.get("command")
                     args = data.get("args", {})
+                    request_id = data.get("request_id")  # Extract request_id
 
                     # Handle command
-                    response = self.handle_command(command, args)
+                    response = self.handle_command(command, args, request_id)
 
                     # Write response to stdout
                     print(json.dumps(response), flush=True)
@@ -142,14 +138,16 @@ class IpcServer:
                 except json.JSONDecodeError as e:
                     error_response = {
                         "success": False,
-                        "error": f"Invalid JSON: {e}"
+                        "error": f"Invalid JSON: {e}",
+                        "request_id": None
                     }
                     print(json.dumps(error_response), flush=True)
 
                 except Exception as e:
                     error_response = {
                         "success": False,
-                        "error": f"Internal error: {e}"
+                        "error": f"Internal error: {e}",
+                        "request_id": None
                     }
                     print(json.dumps(error_response), flush=True)
 

@@ -38,7 +38,7 @@ function waitForTauriAPI() {
 }
 
 // === Configuration ===
-const STATUS_POLL_INTERVAL = 500;  // ms
+const STATUS_POLL_INTERVAL = 1000;  // ms (reduced from 500ms to minimize IPC load)
 
 // === State ===
 let statusPollTimer = null;
@@ -208,6 +208,27 @@ async function updateMapping(gesture, enabled) {
         return result;
     } catch (error) {
         console.error('updateMapping() failed:', error);
+        return { success: false, error: error };
+    }
+}
+
+async function updateMappings(mappings) {
+    try {
+        const result = await invoke('update_mappings', { mappings });
+        console.log('updateMappings() response:', result);
+        return result;
+    } catch (error) {
+        console.error('updateMappings() failed:', error);
+        return { success: false, error: error };
+    }
+}
+
+async function getAvailableGesturesAndActions() {
+    try {
+        const result = await invoke('get_available_gestures_and_actions');
+        return result;
+    } catch (error) {
+        console.error('getAvailableGesturesAndActions() failed:', error);
         return { success: false, error: error };
     }
 }
@@ -401,7 +422,7 @@ async function handleResetSettings() {
 
 // === Tab Switching ===
 
-function switchTab(tabName) {
+async function switchTab(tabName) {
     // Hide all tabs
     elements.tabContents.forEach(tab => {
         tab.classList.remove('active');
@@ -424,19 +445,19 @@ function switchTab(tabName) {
         selectedBtn.classList.add('active');
     }
 
-    // Load tab-specific data
+    // Load tab-specific data (await to prevent race conditions)
     if (tabName === 'mappings') {
-        loadMappings();
+        await loadMappings();
     } else if (tabName === 'info') {
-        loadSystemInfo();
+        await loadSystemInfo();
     }
 }
 
 function setupTabListeners() {
     elements.tabButtons.forEach(btn => {
-        btn.addEventListener('click', (e) => {
+        btn.addEventListener('click', async (e) => {
             const tabName = e.target.getAttribute('data-tab');
-            switchTab(tabName);
+            await switchTab(tabName);
         });
     });
 }
@@ -445,6 +466,57 @@ function setupTabListeners() {
 
 function setupCollapsibleSections() {
     const collapsibleHeaders = document.querySelectorAll('.collapsible-header');
+
+    // Helper function to update all parent collapsible heights
+    function updateParentHeights(element, immediate = false) {
+        let parent = element.parentElement;
+        const parentsToUpdate = [];
+
+        // First, collect all parent collapsibles
+        while (parent) {
+            if (parent.classList.contains('collapsible-content') && parent.style.maxHeight) {
+                parentsToUpdate.push(parent);
+            }
+            parent = parent.parentElement;
+        }
+
+        // Update in reverse order (outermost to innermost) to prevent jitter
+        parentsToUpdate.reverse().forEach(parentContent => {
+            if (immediate) {
+                // For expand: set to scrollHeight immediately so it animates
+                parentContent.style.maxHeight = parentContent.scrollHeight + 'px';
+            } else {
+                // For collapse: use the two-phase approach
+                parentContent.style.maxHeight = '9999px';
+
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        parentContent.style.maxHeight = parentContent.scrollHeight + 'px';
+                    });
+                });
+            }
+        });
+    }
+
+    // Helper function to continuously update parent heights during animation
+    function animateParentHeights(element, duration = 300) {
+        const startTime = performance.now();
+
+        function update() {
+            const elapsed = performance.now() - startTime;
+
+            if (elapsed < duration) {
+                updateParentHeights(element, true);
+                requestAnimationFrame(update);
+            } else {
+                // Final update after animation completes
+                updateParentHeights(element, true);
+            }
+        }
+
+        requestAnimationFrame(update);
+    }
+
     collapsibleHeaders.forEach(header => {
         header.addEventListener('click', (e) => {
             e.stopPropagation();  // Prevent bubbling to parent collapsibles
@@ -452,19 +524,48 @@ function setupCollapsibleSections() {
             const section = header.parentElement;
             const content = section.querySelector('.collapsible-content');
             const arrow = header.querySelector('.arrow');
+            const container = document.querySelector('.container');  // Get container reference
 
             if (content.style.maxHeight) {
                 // Collapse
                 content.style.maxHeight = null;
                 section.classList.remove('active');
                 arrow.textContent = '▼';
+
+                // Update parent heights after collapse animation completes
+                setTimeout(() => {
+                    updateParentHeights(section);
+                }, 350);  // Wait for transition to complete
             } else {
                 // Expand
-                // Calculate full height including nested expanded sections
-                const fullHeight = content.scrollHeight;
-                content.style.maxHeight = fullHeight + 'px';
                 section.classList.add('active');
                 arrow.textContent = '▲';
+
+                // Step 1: Set to 0 to establish starting point
+                content.style.maxHeight = '0px';
+
+                // Step 2: In next frame, measure the actual height needed
+                requestAnimationFrame(() => {
+                    const fullHeight = content.scrollHeight;
+
+                    // Step 3: Trigger the transition by setting to actual height
+                    content.style.maxHeight = fullHeight + 'px';
+
+                    // Step 4: Continuously update parent heights DURING the animation
+                    // This makes them expand smoothly along with the content
+                    animateParentHeights(section, 300);
+
+                    // After expansion completes, ensure the expanded section is visible
+                    setTimeout(() => {
+                        const sectionRect = section.getBoundingClientRect();
+                        const containerRect = container.getBoundingClientRect();
+
+                        // // If section bottom is below container bottom, scroll to make it visible
+                        // if (sectionRect.bottom > containerRect.bottom) {
+                        //     section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                        // }
+                    }, 350);  // Wait for transition to complete
+                });
             }
         });
     });
@@ -473,17 +574,29 @@ function setupCollapsibleSections() {
 // === Mappings Tab ===
 
 async function loadMappings() {
-    // Note: getAvailableGesturesAndActions is not implemented in Tauri version yet
-    // For now, we'll just load the current mappings
+    // Load available gestures and actions
+    const availableResult = await getAvailableGesturesAndActions();
+    console.log('[Mappings] availableResult:', availableResult);
+    if (!availableResult.success) {
+        elements.mappingsList.innerHTML = '<div class="error">Failed to load available gestures and actions</div>';
+        return;
+    }
+
+    const availableGestures = availableResult.data?.gestures || availableResult.gestures || [];
+    const availableActions = availableResult.data?.actions || availableResult.actions || [];
+    console.log('[Mappings] availableGestures:', availableGestures);
+    console.log('[Mappings] availableActions:', availableActions);
 
     // Load current mappings
     const mappingsResult = await getMappings();
+    console.log('[Mappings] mappingsResult:', mappingsResult);
     if (!mappingsResult.success) {
         elements.mappingsList.innerHTML = '<div class="error">Failed to load mappings</div>';
         return;
     }
 
     const mappings = mappingsResult.mappings || mappingsResult.data?.mappings || [];
+    console.log('[Mappings] mappings:', mappings);
 
     if (mappings.length === 0) {
         elements.mappingsList.innerHTML = '<div class="no-data">No gestures available</div>';
@@ -497,22 +610,36 @@ async function loadMappings() {
         return 0;
     });
 
-    // Render each gesture with its action (read-only for now)
+    // Render each gesture with a dropdown to select action
     let html = '';
     mappings.forEach(mapping => {
         const gestureDisplay = mapping.gesture.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-        const actionDisplay = mapping.action ? mapping.action.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'None';
+
+        // Build action dropdown
+        let actionOptions = '<option value="">-- None --</option>';
+        availableActions.forEach(action => {
+            const selected = mapping.action === action ? 'selected' : '';
+            const actionDisplay = action.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            actionOptions += `<option value="${action}" ${selected}>${actionDisplay}</option>`;
+        });
 
         html += `
             <div class="mapping-item ${!mapping.enabled ? 'unmapped' : ''}">
                 <div class="gesture-label">${gestureDisplay}</div>
                 <div class="mapping-arrow">→</div>
-                <div class="action-label">${actionDisplay}</div>
+                <select class="action-dropdown" data-gesture="${mapping.gesture}">
+                    ${actionOptions}
+                </select>
             </div>
         `;
     });
 
     elements.mappingsList.innerHTML = html;
+
+    // Attach event listeners to all dropdowns
+    document.querySelectorAll('.action-dropdown').forEach(dropdown => {
+        dropdown.addEventListener('change', handleMappingChange);
+    });
 }
 
 async function handleMappingChange(event) {
@@ -531,11 +658,12 @@ async function handleMappingChange(event) {
 
     // Update mappings
     const result = await updateMappings(mappings);
+    console.log('[Mappings] updateMappings result:', result);
 
     if (result.success) {
         const gestureDisplay = gesture.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
         const message = newAction
-            ? `${gestureDisplay} → ${newAction.replace(/_/g, ' ')}`
+            ? `${gestureDisplay} → ${newAction.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}`
             : `${gestureDisplay} unmapped`;
         showMessage(elements.mappingsMessage, 'success', message);
 
@@ -543,11 +671,15 @@ async function handleMappingChange(event) {
         await loadMappings();
 
         // Auto-restart if needed
-        if (result.data.restart_needed) {
+        const data = result.data || result;
+        console.log('[Mappings] Checking restart_needed:', data.restart_needed);
+        if (data.restart_needed) {
             await handleAutoRestart();
         }
     } else {
-        showMessage(elements.mappingsMessage, 'error', `Failed: ${result.error}`);
+        const errorMsg = result.data?.error || result.error || 'Unknown error';
+        console.error('[Mappings] Update failed:', errorMsg);
+        showMessage(elements.mappingsMessage, 'error', `Failed: ${errorMsg}`);
         // Revert dropdown
         await loadMappings();
     }
