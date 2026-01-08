@@ -81,7 +81,7 @@
                         <label for="sensitivity">
                             Mouse Sensitivity: <span id="sensitivityValue">0.7</span>
                         </label>
-                        <input type="range" id="sensitivity" min="0.1" max="5.0" step="0.1" value="0.7">
+                        <input type="range" id="sensitivity" min="0.1" max="10.0" step="0.1" value="0.7">
                     </div>
                     <div class="setting-item checkbox-item">
                         <label for="mirrorX">
@@ -117,7 +117,7 @@
                                         <label for="deadZone">
                                             Dead Zone: <span id="deadZoneValue">0.003</span>
                                         </label>
-                                        <input type="range" id="deadZone" min="0.0" max="0.1" step="0.001" value="0.003">
+                                        <input type="range" id="deadZone" min="0.0" max="0.03" step="0.001" value="0.003">
                                     </div>
                                 </div>
                             </div>
@@ -131,6 +131,18 @@
                             </button>
                             <div class="collapsible-content">
                                 <div class="settings-section">
+                                    <div class="setting-item">
+                                        <label for="scrollSensitivity">
+                                            Scroll Sensitivity: <span id="scrollSensitivityValue">5.0</span>
+                                        </label>
+                                        <input type="range" id="scrollSensitivity" min="0.1" max="10.0" step="0.1" value="5.0">
+                                    </div>
+                                    <div class="setting-item">
+                                        <label for="scrollDeadZone">
+                                            Scroll Dead Zone: <span id="scrollDeadZoneValue">0.02</span>
+                                        </label>
+                                        <input type="range" id="scrollDeadZone" min="0.0" max="0.03" step="0.001" value="0.02">
+                                    </div>
                                     <div class="setting-item checkbox-item">
                                         <label for="invertScroll">
                                             <input type="checkbox" id="invertScroll" checked>
@@ -165,7 +177,7 @@
                                         <label for="swipeVelocity">
                                             Swipe Velocity: <span id="swipeVelocityValue">5.0</span>
                                         </label>
-                                        <input type="range" id="swipeVelocity" min="0.3" max="10.0" step="0.1" value="5.0">
+                                        <input type="range" id="swipeVelocity" min="0.3" max="5.0" step="0.1" value="5.0">
                                     </div>
                                     <div class="setting-item">
                                         <label for="openHandSpread">

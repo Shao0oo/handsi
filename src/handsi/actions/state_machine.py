@@ -201,7 +201,6 @@ class GestureStateMachine:
         Returns:
             True if disable succeeded, False if in cooldown or already disabled
         """
-        print(f"Executing disable latch action")
         current_time = time.time()
         time_since_last = (current_time - self._last_latch_toggle_time) * 1000  # ms
 

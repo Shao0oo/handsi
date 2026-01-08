@@ -77,6 +77,12 @@ function getElements() {
         deadZone: document.getElementById('deadZone'),
         deadZoneValue: document.getElementById('deadZoneValue'),
         mirrorX: document.getElementById('mirrorX'),
+
+        // Settings - Scroll
+        scrollSensitivity: document.getElementById('scrollSensitivity'),
+        scrollSensitivityValue: document.getElementById('scrollSensitivityValue'),
+        scrollDeadZone: document.getElementById('scrollDeadZone'),
+        scrollDeadZoneValue: document.getElementById('scrollDeadZoneValue'),
         invertScroll: document.getElementById('invertScroll'),
 
         // Settings - Gestures
@@ -291,6 +297,12 @@ function updateSettingsUI(result) {
     elements.mirrorX.checked = settings.mirror_x;
 
     // Scroll settings
+    elements.scrollSensitivity.value = settings.scroll_sensitivity;
+    elements.scrollSensitivityValue.textContent = settings.scroll_sensitivity;
+
+    elements.scrollDeadZone.value = settings.scroll_dead_zone;
+    elements.scrollDeadZoneValue.textContent = settings.scroll_dead_zone;
+
     elements.invertScroll.checked = settings.invert_scroll;
 
     // Gesture settings
@@ -389,6 +401,8 @@ async function handleSaveSettings() {
         smoothing: parseFloat(elements.smoothing.value),
         dead_zone: parseFloat(elements.deadZone.value),
         mirror_x: elements.mirrorX.checked,
+        scroll_sensitivity: parseFloat(elements.scrollSensitivity.value),
+        scroll_dead_zone: parseFloat(elements.scrollDeadZone.value),
         invert_scroll: elements.invertScroll.checked,
         pinch_threshold: parseFloat(elements.pinchThreshold.value),
         fist_threshold: parseFloat(elements.fistThreshold.value),
@@ -752,6 +766,15 @@ function setupSliderListeners() {
 
     elements.deadZone.addEventListener('input', (e) => {
         elements.deadZoneValue.textContent = e.target.value;
+    });
+
+    // Scroll settings
+    elements.scrollSensitivity.addEventListener('input', (e) => {
+        elements.scrollSensitivityValue.textContent = e.target.value;
+    });
+
+    elements.scrollDeadZone.addEventListener('input', (e) => {
+        elements.scrollDeadZoneValue.textContent = e.target.value;
     });
 
     // Gesture settings
