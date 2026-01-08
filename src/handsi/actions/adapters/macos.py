@@ -21,6 +21,7 @@ try:
         CGEventPost,
         CGMainDisplayID,
         CGDisplayBounds,
+        CGGetActiveDisplayList,
         CGEventSourceCreate,
         CGEventSetIntegerValueField,
         kCGEventSourceStateHIDSystemState,
@@ -58,12 +59,18 @@ class MacOSAdapter(ActionAdapter):
         self._initialized = False
         self._screen_width = 0
         self._screen_height = 0
+        self._screen_x_offset = 0  # X offset of the combined display bounds (Quartz coords)
+        self._screen_y_offset = 0  # Y offset of the combined display bounds (Quartz coords)
+        self._main_display_height = 0  # Height of main display (for Cocoa coordinate conversion)
         self._double_click_threshold = 0.5  # Default 500ms, will be queried from system
         self._held_button: Optional[str] = None  # Track which button is currently held for drag events
 
     def initialize(self) -> bool:
         """
         Initialize macOS adapter and get screen dimensions.
+
+        For multi-monitor setups, this calculates the combined bounding box
+        that encompasses all active displays.
 
         Returns:
             True if initialization successful, False otherwise
@@ -73,11 +80,45 @@ class MacOSAdapter(ActionAdapter):
             return False
 
         try:
-            # Get screen dimensions
-            main_display = CGMainDisplayID()
-            bounds = CGDisplayBounds(main_display)
-            self._screen_width = int(bounds.size.width)
-            self._screen_height = int(bounds.size.height)
+            # Get main display ID for Cocoa coordinate reference
+            main_display_id = CGMainDisplayID()
+            main_display_bounds = CGDisplayBounds(main_display_id)
+            self._main_display_height = int(main_display_bounds.size.height)
+
+            # Get all active displays for multi-monitor support
+            max_displays = 16  # Reasonable upper limit for display count
+            (err, active_displays, display_count) = CGGetActiveDisplayList(max_displays, None, None)
+
+            if err != 0 or display_count == 0:
+                log_error("ACT-004", f"Failed to get active display list (error: {err})")
+                return False
+
+            # Calculate combined bounding box across all displays
+            min_x = float('inf')
+            min_y = float('inf')
+            max_x = float('-inf')
+            max_y = float('-inf')
+
+            for display_id in active_displays[:display_count]:
+                bounds = CGDisplayBounds(display_id)
+                display_min_x = bounds.origin.x
+                display_min_y = bounds.origin.y
+                display_max_x = display_min_x + bounds.size.width
+                display_max_y = display_min_y + bounds.size.height
+
+                min_x = min(min_x, display_min_x)
+                min_y = min(min_y, display_min_y)
+                max_x = max(max_x, display_max_x)
+                max_y = max(max_y, display_max_y)
+
+                is_main = " (main)" if display_id == main_display_id else ""
+                log_debug(f"Display {display_id}{is_main}: origin=({display_min_x}, {display_min_y}), size=({bounds.size.width}, {bounds.size.height})")
+
+            # Store combined screen dimensions and offset
+            self._screen_x_offset = int(min_x)
+            self._screen_y_offset = int(min_y)
+            self._screen_width = int(max_x - min_x)
+            self._screen_height = int(max_y - min_y)
 
             # Query macOS double-click threshold
             try:
@@ -95,7 +136,11 @@ class MacOSAdapter(ActionAdapter):
             except Exception as e:
                 log_warning("ACT-004", f"Error querying double-click threshold: {e}, using default")
 
-            log_info(f"macOS adapter initialized (screen: {self._screen_width}x{self._screen_height})")
+            log_info(
+                f"macOS adapter initialized (combined screen: {self._screen_width}x{self._screen_height}, "
+                f"offset: ({self._screen_x_offset}, {self._screen_y_offset}), "
+                f"displays: {display_count})"
+            )
             self._initialized = True
             return True
 
@@ -123,6 +168,9 @@ class MacOSAdapter(ActionAdapter):
         """
         Get current mouse cursor position in normalized coordinates.
 
+        For multi-monitor setups, coordinates are normalized relative to the
+        combined bounding box of all displays.
+
         Returns:
             Tuple of (x, y) where x and y are in range [0, 1] (screen percentage)
         """
@@ -131,16 +179,21 @@ class MacOSAdapter(ActionAdapter):
             return (0.5, 0.5)  # Fallback to center
 
         try:
-            # Get current mouse position using NSEvent
+            # Get current mouse position using NSEvent (Cocoa coordinates)
+            # Cocoa: origin at bottom-left of main display, Y increases upward
             mouse_loc = NSEvent.mouseLocation()
-            # Note: NSEvent.mouseLocation() returns Cocoa coordinates (origin at bottom-left)
-            # Need to convert to Quartz coordinates (origin at top-left)
-            pixel_x = mouse_loc.x
-            pixel_y = self._screen_height - mouse_loc.y
+            cocoa_x = mouse_loc.x
+            cocoa_y = mouse_loc.y
 
-            # Normalize to [0, 1] range
-            normalized_x = pixel_x / self._screen_width
-            normalized_y = pixel_y / self._screen_height
+            # Convert from Cocoa to Quartz coordinates
+            # Quartz: origin at top-left of virtual desktop, Y increases downward
+            # Formula: quartz_y = main_display_height - cocoa_y
+            quartz_x = cocoa_x
+            quartz_y = self._main_display_height - cocoa_y
+
+            # Normalize to [0, 1] range relative to combined display bounds
+            normalized_x = (quartz_x - self._screen_x_offset) / self._screen_width
+            normalized_y = (quartz_y - self._screen_y_offset) / self._screen_height
 
             # Clamp to [0, 1]
             normalized_x = max(0.0, min(1.0, normalized_x))
@@ -163,6 +216,7 @@ class MacOSAdapter(ActionAdapter):
         Move mouse cursor to specified position.
 
         Automatically uses drag events when a button is held down.
+        For multi-monitor setups, coordinates span the combined display area.
 
         Args:
             x: X coordinate (0-1 if normalized, pixels if not)
@@ -178,17 +232,17 @@ class MacOSAdapter(ActionAdapter):
             return False
 
         try:
-            # Convert normalized to screen coordinates
+            # Convert normalized to screen coordinates (relative to combined display bounds)
             if normalized:
-                pixel_x = int(x * self._screen_width)
-                pixel_y = int(y * self._screen_height)
+                pixel_x = int(x * self._screen_width) + self._screen_x_offset
+                pixel_y = int(y * self._screen_height) + self._screen_y_offset
             else:
                 pixel_x = int(x)
                 pixel_y = int(y)
 
-            # Clamp to screen bounds
-            pixel_x = max(0, min(self._screen_width - 1, pixel_x))
-            pixel_y = max(0, min(self._screen_height - 1, pixel_y))
+            # Clamp to combined screen bounds (including offset)
+            pixel_x = max(self._screen_x_offset, min(self._screen_x_offset + self._screen_width - 1, pixel_x))
+            pixel_y = max(self._screen_y_offset, min(self._screen_y_offset + self._screen_height - 1, pixel_y))
 
             # Create event source for proper mouse control
             source = CGEventSourceCreate(kCGEventSourceStateHIDSystemState)
@@ -260,9 +314,11 @@ class MacOSAdapter(ActionAdapter):
         try:
             down_event_type, _, button_num = self._get_button_event_types(button)
 
-            # Query current mouse position
+            # Query current mouse position in Cocoa coordinates, convert to Quartz
             mouse_loc = NSEvent.mouseLocation()
-            pos = (int(mouse_loc.x), int(self._screen_height - mouse_loc.y))
+            quartz_x = int(mouse_loc.x)
+            quartz_y = int(self._main_display_height - mouse_loc.y)
+            pos = (quartz_x, quartz_y)
 
             # Create and post mouse down event (hold button)
             down_event = CGEventCreateMouseEvent(
@@ -300,9 +356,11 @@ class MacOSAdapter(ActionAdapter):
         try:
             _, up_event_type, button_num = self._get_button_event_types(button)
 
-            # Query current mouse position
+            # Query current mouse position in Cocoa coordinates, convert to Quartz
             mouse_loc = NSEvent.mouseLocation()
-            pos = (int(mouse_loc.x), int(self._screen_height - mouse_loc.y))
+            quartz_x = int(mouse_loc.x)
+            quartz_y = int(self._main_display_height - mouse_loc.y)
+            pos = (quartz_x, quartz_y)
 
             # Create and post mouse up event (release button)
             up_event = CGEventCreateMouseEvent(
@@ -355,9 +413,11 @@ class MacOSAdapter(ActionAdapter):
         try:
             down_event_type, up_event_type, button_num = self._get_button_event_types(button)
 
-            # Get current mouse position
+            # Get current mouse position in Cocoa coordinates, convert to Quartz
             mouse_loc = NSEvent.mouseLocation()
-            pos = (int(mouse_loc.x), int(self._screen_height - mouse_loc.y))
+            quartz_x = int(mouse_loc.x)
+            quartz_y = int(self._main_display_height - mouse_loc.y)
+            pos = (quartz_x, quartz_y)
 
             # First click (clickCount=1)
             down_event = CGEventCreateMouseEvent(None, down_event_type, pos, button_num)

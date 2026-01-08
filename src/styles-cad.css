@@ -143,7 +143,7 @@ body {
 .status-indicator.disconnected .blades use {
   fill: #999;
   animation: none;
-  --open: 0;
+  --open: 1;
 }
 
 /* Disconnected state - blades stay closed, whole lens grayed out */
