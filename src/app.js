@@ -720,6 +720,7 @@ async function loadSystemInfo() {
     // System info
     elements.infoSystemPlatform.textContent = info.system.platform;
     elements.infoSystemVersion.textContent = info.system.version;
+    elements.infoSystemVersion.title = info.system.version; // Show full version on hover
     elements.infoSystemPython.textContent = info.system.python_version;
 
     // Permissions

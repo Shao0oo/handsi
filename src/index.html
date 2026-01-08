@@ -4,7 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Handsi</title>
-    <link rel="stylesheet" href="styles.css">
+    <!-- Swap these to test different styles -->
+    <!-- <link rel="stylesheet" href="styles.css"> -->
+    <!-- <link rel="stylesheet" href="styles-blueprint.css"> -->
+    <link rel="stylesheet" href="styles-cad.css">
+    <!-- <link rel="stylesheet" href="styles-schematic.css"> -->
 </head>
 <body>
     <div class="container">
@@ -12,7 +16,16 @@
         <header class="header">
             <h1>Handsi</h1>
             <div class="status-indicator" id="connectionStatus">
-                <span class="dot"></span>
+                <span class="dot">
+                    <span class="aperture-blade"></span>
+                    <span class="aperture-blade"></span>
+                    <span class="aperture-blade"></span>
+                    <span class="aperture-blade"></span>
+                    <span class="aperture-blade"></span>
+                    <span class="aperture-blade"></span>
+                    <span class="aperture-blade"></span>
+                    <span class="aperture-blade"></span>
+                </span>
                 <span class="label">Connected</span>
             </div>
         </header>
@@ -46,14 +59,6 @@
                     <div class="status-item">
                         <span class="status-label">Gesture Control:</span>
                         <span class="status-value" id="latchStatus">Disabled</span>
-                    </div>
-                    <div class="status-item">
-                        <span class="status-label">Frames Captured:</span>
-                        <span class="status-value" id="framesCaptured">0</span>
-                    </div>
-                    <div class="status-item">
-                        <span class="status-label">Frames Processed:</span>
-                        <span class="status-value" id="framesProcessed">0</span>
                     </div>
                 </div>
             </section>
@@ -304,6 +309,20 @@
                         Note: Accessibility permissions are required for gesture control on macOS.
                         If denied, grant them in System Settings → Privacy & Security → Accessibility.
                     </p>
+                </div>
+
+                <div class="info-section">
+                    <h3 class="settings-subtitle">Frames Information</h3>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <span class="info-label">Frames Captured:</span>
+                            <span class="info-value" id="framesCaptured">0</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Frames Processed:</span>
+                            <span class="info-value" id="framesProcessed">0</span>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="info-section">
