@@ -43,6 +43,41 @@ flowchart TD
     style J fill:#f0e1ff
 ```
 
+### High-Level Architecture: Tauri + Python
+Handsi uses a **dual-process architecture** that separates the UI from the core logic:
+
+```
+┌────────────────────────┐        ┌─────────────────────────┐
+│  Tauri App (.app)      │        │  Python Backend         │
+│                        │        │                         │
+│  - Rust binary         │◄──────►│  - Hand tracking        │
+│  - Web UI (HTML/JS)    │  IPC   │  - Gesture recognition  │
+│  - Window management   │ (JSON) │  - Mouse/keyboard ctrl  │
+│                        │        │  - OpenCV, MediaPipe    │
+│  Size: ~10-20 MB       │        │                         │
+└────────────────────────┘        └─────────────────────────┘
+```
+
+### Communication Flow
+
+When you click "Start Detection" in the UI:
+
+1. **JavaScript** (frontend) calls `invoke('start')`
+2. **Rust** (Tauri) receives the call and sends JSON to Python via stdin:
+   ```json
+   {"command": "start", "args": {}}
+   ```
+3. **Python** reads from stdin, processes command, writes response to stdout:
+   ```json
+   {"success": true}
+   ```
+4. **Rust** reads response and returns to JavaScript
+5. **JavaScript** updates UI (shows "Running", enables Stop button, starts polling status)
+
+All communication is **JSON over stdin/stdout** (IPC = Inter-Process Communication).
+
+---
+
 ## Data Flow Summary
 
 1. **Input Layer**: Camera frames + optional mic audio

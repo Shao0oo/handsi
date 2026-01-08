@@ -65,7 +65,7 @@ actions:
     smoothing_factor: 0.3           # EMA smoothing (0=no smoothing, 1=max smoothing) (alpha = 1 - smoothing factor)
     dead_zone: 0.015                # Ignore movements smaller than this (hand jitter)
     dead_zone_curve: 3.0            # Power curve for smooth dead zone (1.0=linear, 2.0=quadratic, 3.0=cubic)
-    dead_zone_min_damping: 0.005      # Minimum damping factor at zero movement (0.1 = 10% of input)
+    dead_zone_min_damping: 0.01      # Minimum damping factor at zero movement (0.1 = 10% of input)
     sensitivity: 0.7                # Movement multiplier (higher = faster)
     interpolation_rate: 60.0        # Hz - cursor interpolation update rate (higher = smoother but more CPU)
 

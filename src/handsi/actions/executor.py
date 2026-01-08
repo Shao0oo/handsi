@@ -220,7 +220,6 @@ class ActionExecutorThread(threading.Thread):
 
                     self.adapter.scroll(dx=int(scroll_dx), dy=int(scroll_dy))  # type: ignore
                     log_debug(f"Momentum scroll: dx={scroll_dx:.1f}, dy={scroll_dy:.1f}")
-                    print(f"Momentum scroll: dx={scroll_dx:.1f}, dy={scroll_dy:.1f}")
                     # Decay velocity (both components)
                     with self._momentum_lock:
                         self._momentum_velocity = (
@@ -591,7 +590,6 @@ class ActionExecutorThread(threading.Thread):
             self._update_interpolation_target()
             return True
         elif action_name == "click":
-            print(f"Executing click with button: {gesture_event.metadata.get('button', 'left')}")
             return self._action_click()
         elif action_name == "double_click":
             return self._action_double_click()
@@ -617,7 +615,6 @@ class ActionExecutorThread(threading.Thread):
         elif action_name == "enable_latch":
             return self._action_enable_latch()
         elif action_name == "disable_latch":
-            print(f"Executing disable latch action: {action_name}")
             return self._action_disable_latch()
         else:
             log_warning("ACT-003", f"Unknown action: {action_name}")

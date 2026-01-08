@@ -52,7 +52,7 @@ class GestureConfig(BaseModel):
     # Detection thresholds (hand-relative: fraction of hand size)
     # Hand size = distance from wrist to middle finger MCP knuckle
     pinch_threshold: float = Field(default=0.2, ge=0.05, le=0.5)
-    fist_threshold: float = Field(default=0.65, ge=0.3, le=1.0)
+    fist_threshold: float = Field(default=1.0, ge=0.3, le=2.0)
     open_hand_distance_threshold: float = Field(default=0.25, ge=0.1, le=0.6)  # DEPRECATED
     open_hand_spread_threshold: float = Field(default=0.3, ge=0.1, le=0.8)
     swipe_velocity_threshold: float = Field(default=0.8, ge=0.3, le=5.0)
@@ -64,7 +64,7 @@ class MouseConfig(BaseModel):
     """Mouse movement settings."""
     mirror_x: bool = Field(default=True)
     smoothing_factor: float = Field(default=0.3, ge=0.0, le=1.0)
-    dead_zone: float = Field(default=0.02, ge=0.0, le=0.1)
+    dead_zone: float = Field(default=0.02, ge=0.0, le=0.03)
     dead_zone_curve: float = Field(default=2.0, ge=1.0, le=3.0)
     dead_zone_min_damping: float = Field(default=0.1, ge=0.0, le=0.5)
     sensitivity: float = Field(default=1.5, ge=0.1, le=10.0)
@@ -74,7 +74,7 @@ class MouseConfig(BaseModel):
 class ScrollConfig(BaseModel):
     """Scroll control settings."""
     sensitivity: float = Field(default=1.5, ge=0.1, le=10.0)
-    dead_zone: float = Field(default=0.01, ge=0.0, le=0.1)
+    dead_zone: float = Field(default=0.01, ge=0.0, le=0.03)
     dead_zone_curve: float = Field(default=2.0, ge=1.0, le=3.0)
     dead_zone_min_damping: float = Field(default=0.1, ge=0.0, le=0.5)
     max_scroll_per_frame: int = Field(default=100, ge=10, le=10000)
@@ -128,6 +128,59 @@ class HandsiConfig(BaseModel):
     macos: MacOSConfig = Field(default_factory=MacOSConfig)
 
 
+def clamp_nested_dict(data: dict, model_class) -> dict:
+    """
+    Recursively clamp values in a nested dictionary based on Pydantic model constraints.
+
+    Args:
+        data: Dictionary with potentially out-of-bounds values
+        model_class: Pydantic model class with Field constraints
+
+    Returns:
+        Dictionary with clamped values
+    """
+    if not isinstance(data, dict):
+        return data
+
+    clamped = {}
+    for key, value in data.items():
+        if key not in model_class.model_fields:
+            # Unknown field, keep as-is
+            clamped[key] = value
+            continue
+
+        field_info = model_class.model_fields[key]
+
+        # If field is a nested model, recurse
+        if hasattr(field_info.annotation, 'model_fields'):
+            if isinstance(value, dict):
+                clamped[key] = clamp_nested_dict(value, field_info.annotation)
+            else:
+                clamped[key] = value
+        # If field has numeric constraints, clamp
+        elif isinstance(value, (int, float)):
+            clamped_value = value
+
+            # Get constraints from field metadata
+            metadata = field_info.metadata if hasattr(field_info, 'metadata') else []
+            for constraint in metadata:
+                if hasattr(constraint, 'ge') and constraint.ge is not None:
+                    if clamped_value < constraint.ge:
+                        log_info(f"Config: Clamping {key}={clamped_value} to minimum {constraint.ge}")
+                        clamped_value = constraint.ge
+                if hasattr(constraint, 'le') and constraint.le is not None:
+                    if clamped_value > constraint.le:
+                        log_info(f"Config: Clamping {key}={clamped_value} to maximum {constraint.le}")
+                        clamped_value = constraint.le
+
+            clamped[key] = clamped_value
+        else:
+            # Other types, keep as-is
+            clamped[key] = value
+
+    return clamped
+
+
 def load_config(config_path: str | Path) -> HandsiConfig:
     """
     Load and validate configuration from YAML file.
@@ -165,16 +218,38 @@ def load_config(config_path: str | Path) -> HandsiConfig:
         if raw_config is None:
             raw_config = {}
 
-        config = HandsiConfig(**raw_config)
-        log_info(f"Config loaded from {config_to_load}")
-        return config
+        # First attempt: try loading directly
+        try:
+            config = HandsiConfig(**raw_config)
+            log_info(f"Config loaded from {config_to_load}")
+            return config
+        except Exception as validation_error:
+            # Validation failed - try clamping values
+            log_info(f"Config validation failed, attempting to clamp out-of-bounds values: {validation_error}")
+
+            # Clamp values based on model constraints
+            clamped_config = clamp_nested_dict(raw_config, HandsiConfig)
+
+            # Try loading again with clamped values
+            config = HandsiConfig(**clamped_config)
+            log_info(f"Config loaded with clamped values from {config_to_load}")
+
+            # Save the clamped config back to file
+            if config_to_load == user_config_path:
+                try:
+                    save_user_config(config)
+                    log_info(f"Saved clamped config back to {user_config_path}")
+                except Exception as save_error:
+                    log_info(f"Warning: Could not save clamped config: {save_error}")
+
+            return config
 
     except yaml.YAMLError as e:
         log_error("CFG-002", f"Invalid YAML syntax: {e}")
         raise ValueError(f"Invalid YAML syntax: {e}")
 
     except Exception as e:
-        log_error("CFG-003", f"Config validation failed: {e}")
+        log_error("CFG-003", f"Config validation failed even after clamping: {e}")
         raise ValueError(f"Config validation failed: {e}")
 
 

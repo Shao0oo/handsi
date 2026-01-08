@@ -65,8 +65,8 @@ def setup_logging(
         datefmt="%Y-%m-%d %H:%M:%S"
     )
 
-    # Console handler
-    console_handler = logging.StreamHandler(sys.stdout)
+    # Console handler - use stderr to avoid interfering with IPC on stdout
+    console_handler = logging.StreamHandler(sys.stderr)
     console_handler.setLevel(effective_level)
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)

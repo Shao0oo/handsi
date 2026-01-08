@@ -31,7 +31,7 @@ class GestureDetector:
     def __init__(
         self,
         pinch_threshold: float = 0.05,
-        fist_threshold: float = 0.15,
+        fist_threshold: float = 1.0,
         open_hand_distance_threshold: float = 0.25,
         open_hand_spread_threshold: float = 0.08,
         swipe_velocity_threshold: float = 0.5,
@@ -470,13 +470,11 @@ class GestureDetector:
 
         # Require all 3 fingers closed (thumb, ring, pinky)
         if closed_count < 2:
-            # print(f"Two fingers point: only {closed_count} fingers closed, need 3")
             return None
 
         # Check if index and middle fingers are extended
         if not (self._is_finger_extended(lm, index_tip_idx, index_mcp_idx, extension_ratio=1.6) and
                 self._is_finger_extended(lm, middle_tip_idx, middle_mcp_idx, extension_ratio=1.6)):
-            # print("Two fingers point: index or middle finger not extended")
             return None
 
         # Check if index and middle fingertips are close together
@@ -485,7 +483,6 @@ class GestureDetector:
         distance = self._normalized_distance(index_tip, middle_tip, hand_scale)
 
         if distance >= self.pinch_threshold * 100:  # Allow wider spread for two fingers point
-            # print(f"Two fingers point: distance {distance:.3f} exceeds threshold")
             return None
 
         # Calculate confidence based on finger proximity
@@ -554,7 +551,6 @@ class GestureDetector:
 
         # Require all 5 fingers to be extended
         if extended_count < 5:
-            # print(f"Open hand: only {extended_count} fingers extended, need 5")
             return None
 
         # Secondary checks: normalized finger spread
@@ -572,15 +568,12 @@ class GestureDetector:
 
         # Check minimum spread
         if avg_spread < self.open_hand_spread_threshold:
-            # print(f"Open hand average spread too small: {avg_spread:.3f} < {self.open_hand_spread_threshold:.3f}")
             return None
         if min_spread < self.open_hand_distance_threshold:
-            # print(f"Open hand spread too small: {min_spread:.3f} < {self.open_hand_distance_threshold:.3f}")
             return None
 
         # Calculate confidence based on spread
         conf_spread = min(avg_spread / 0.5, 1.0)
-        # print(f"Open hand detected with average spread {avg_spread:.3f}, confidence {conf_spread:.2f}")
         confidence = conf_spread
         # # position = self._get_hand_center_of_mass(lm)
 
@@ -702,7 +695,6 @@ class GestureDetector:
 
         # Need enough history to detect swipe
         if len(self.wrist_history[hand_idx]) < 3:
-            print("Not enough history to detect swipe")
             return open_hand_result
 
         history = list(self.wrist_history[hand_idx])
@@ -715,7 +707,6 @@ class GestureDetector:
         avg_hand_scale = sum(h[3] for h in history[-n:]) / n
 
         if dt <= 0 or avg_hand_scale < 0.01:
-            print("Invalid swipe history - no movement detected")
             return open_hand_result
 
         # Normalize velocities by hand scale
@@ -725,8 +716,6 @@ class GestureDetector:
         # Determine dominant direction (horizontal vs vertical)
         abs_vx = abs(velocity_x)
         abs_vy = abs(velocity_y)
-
-        # print(f"Hand scale: {avg_hand_scale}, Swipe velocity thresholds {self.swipe_velocity_threshold}, vx={abs_vx:.3f}, vy={abs_vy:.3f},")
 
         # Check if velocity exceeds threshold
         if abs_vx > self.swipe_velocity_threshold or abs_vy > self.swipe_velocity_threshold:

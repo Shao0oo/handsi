@@ -4,18 +4,54 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Handsi</title>
-    <link rel="stylesheet" href="styles.css">
-    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+    <!-- Swap these to test different styles -->
+    <!-- <link rel="stylesheet" href="styles.css"> -->
+    <!-- <link rel="stylesheet" href="styles-blueprint.css"> -->
+    <link rel="stylesheet" href="styles-cad.css">
+    <!-- <link rel="stylesheet" href="styles-schematic.css"> -->
 </head>
 <body>
     <div class="container">
         <!-- Header -->
         <header class="header">
-            <h1>Handsi</h1>
-            <div class="status-indicator" id="connectionStatus">
-                <span class="dot"></span>
+            <h1>Handsi</h1><div class="status-indicator" id="connectionStatus">
+                <span class="dot">
+                    <svg class="iris" viewBox="0 0 100 100" aria-hidden="true">
+                    <defs>
+                        <!-- Circular clipping mask -->
+                        <clipPath id="irisClip">
+                            <circle cx="50" cy="50" r="48" />
+                        </clipPath>
+
+                        <!-- Blade shape: flat wedge/plane for smooth circular aperture -->
+                        <path id="blade"
+                        d="M50 5
+                            L62 5
+                            L70 60
+                            L62 90
+                            L50 85
+                            L38 80
+                            L30 70
+                            L38 5
+                            Z" />
+                    </defs>
+
+                    <!-- Render order: blade 7 first (bottom), blade 0 last (top) -->
+                    <g class="blades" clip-path="url(#irisClip)">
+                        <use href="#blade" style="--i:7"></use>
+                        <use href="#blade" style="--i:6"></use>
+                        <use href="#blade" style="--i:5"></use>
+                        <use href="#blade" style="--i:4"></use>
+                        <use href="#blade" style="--i:3"></use>
+                        <use href="#blade" style="--i:2"></use>
+                        <use href="#blade" style="--i:1"></use>
+                        <use href="#blade" style="--i:0"></use>
+                    </g>
+                    </svg>
+                </span>
+                
                 <span class="label">Connected</span>
-            </div>
+                </div>
         </header>
 
         <!-- Tab Navigation -->
@@ -48,14 +84,6 @@
                         <span class="status-label">Gesture Control:</span>
                         <span class="status-value" id="latchStatus">Disabled</span>
                     </div>
-                    <div class="status-item">
-                        <span class="status-label">Frames Captured:</span>
-                        <span class="status-value" id="framesCaptured">0</span>
-                    </div>
-                    <div class="status-item">
-                        <span class="status-label">Frames Processed:</span>
-                        <span class="status-value" id="framesProcessed">0</span>
-                    </div>
                 </div>
             </section>
 
@@ -82,7 +110,7 @@
                         <label for="sensitivity">
                             Mouse Sensitivity: <span id="sensitivityValue">0.7</span>
                         </label>
-                        <input type="range" id="sensitivity" min="0.1" max="5.0" step="0.1" value="0.7">
+                        <input type="range" id="sensitivity" min="0.1" max="10.0" step="0.1" value="0.7">
                     </div>
                     <div class="setting-item checkbox-item">
                         <label for="mirrorX">
@@ -118,7 +146,7 @@
                                         <label for="deadZone">
                                             Dead Zone: <span id="deadZoneValue">0.003</span>
                                         </label>
-                                        <input type="range" id="deadZone" min="0.0" max="0.1" step="0.001" value="0.003">
+                                        <input type="range" id="deadZone" min="0.0" max="0.03" step="0.001" value="0.003">
                                     </div>
                                 </div>
                             </div>
@@ -132,6 +160,18 @@
                             </button>
                             <div class="collapsible-content">
                                 <div class="settings-section">
+                                    <div class="setting-item">
+                                        <label for="scrollSensitivity">
+                                            Scroll Sensitivity: <span id="scrollSensitivityValue">5.0</span>
+                                        </label>
+                                        <input type="range" id="scrollSensitivity" min="0.1" max="10.0" step="0.1" value="5.0">
+                                    </div>
+                                    <div class="setting-item">
+                                        <label for="scrollDeadZone">
+                                            Scroll Dead Zone: <span id="scrollDeadZoneValue">0.02</span>
+                                        </label>
+                                        <input type="range" id="scrollDeadZone" min="0.0" max="0.03" step="0.001" value="0.02">
+                                    </div>
                                     <div class="setting-item checkbox-item">
                                         <label for="invertScroll">
                                             <input type="checkbox" id="invertScroll" checked>
@@ -166,7 +206,7 @@
                                         <label for="swipeVelocity">
                                             Swipe Velocity: <span id="swipeVelocityValue">5.0</span>
                                         </label>
-                                        <input type="range" id="swipeVelocity" min="0.3" max="10.0" step="0.1" value="5.0">
+                                        <input type="range" id="swipeVelocity" min="0.3" max="5.0" step="0.1" value="5.0">
                                     </div>
                                     <div class="setting-item">
                                         <label for="openHandSpread">
@@ -296,6 +336,20 @@
                 </div>
 
                 <div class="info-section">
+                    <h3 class="settings-subtitle">Frames Information</h3>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <span class="info-label">Frames Captured:</span>
+                            <span class="info-value" id="framesCaptured">0</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Frames Processed:</span>
+                            <span class="info-value" id="framesProcessed">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="info-section">
                     <h3 class="settings-subtitle">About</h3>
                     <p class="info-text">
                         Handsi is a contactless desktop control system using computer vision and gesture recognition.
@@ -349,6 +403,65 @@
         </footer>
     </div>
 
-    <script src="app.js"></script>
+    <script>
+        // Tauri v2 with withGlobalTauri: true injects window.__TAURI_INTERNALS__
+        // We need to expose the invoke function for our app
+        console.log('📦 Checking for Tauri...');
+        console.log('Available globals:', Object.keys(window).filter(k => k.includes('TAURI')));
+
+        // Function to wait for Tauri to be available
+        function waitForTauri() {
+            return new Promise((resolve, reject) => {
+                let attempts = 0;
+                const maxAttempts = 100;
+
+                const check = () => {
+                    attempts++;
+
+                    // Tauri v2 exposes __TAURI_INTERNALS__
+                    if (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke) {
+                        console.log('✓ Tauri v2 internals found!');
+                        window.__TAURI_INVOKE__ = window.__TAURI_INTERNALS__.invoke;
+                        resolve();
+                    }
+                    // Also check for __TAURI__ (older style)
+                    else if (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke) {
+                        console.log('✓ Tauri global object found!');
+                        window.__TAURI_INVOKE__ = window.__TAURI__.core.invoke;
+                        resolve();
+                    }
+                    // Check if invoke is directly available
+                    else if (window.__TAURI__ && window.__TAURI__.invoke) {
+                        console.log('✓ Tauri invoke found!');
+                        window.__TAURI_INVOKE__ = window.__TAURI__.invoke;
+                        resolve();
+                    }
+                    else if (attempts >= maxAttempts) {
+                        console.error('✗ Tauri not found after 5 seconds');
+                        console.error('Available window properties:', Object.keys(window).filter(k => k.includes('TAURI')));
+                        reject(new Error('Tauri not available'));
+                    } else {
+                        if (attempts % 20 === 0) {
+                            console.log(`⏳ Waiting for Tauri... (${attempts}/${maxAttempts})`);
+                        }
+                        setTimeout(check, 50);
+                    }
+                };
+
+                check();
+            });
+        }
+
+        // Wait for Tauri and then load app
+        waitForTauri().then(() => {
+            console.log('✓ Tauri API ready, loading app.js...');
+            const script = document.createElement('script');
+            script.src = 'app.js';
+            document.body.appendChild(script);
+        }).catch(err => {
+            console.error('❌ Failed to load Tauri:', err);
+            document.body.innerHTML += '<div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:red;color:white;padding:20px;z-index:9999;font-size:20px;text-align:center;">CRITICAL ERROR: Tauri API not available!<br><br>Check the console for details.</div>';
+        });
+    </script>
 </body>
 </html>
