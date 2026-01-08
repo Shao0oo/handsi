@@ -69,6 +69,9 @@ function getElements() {
         stopBtn: document.getElementById('stopBtn'),
         controlMessage: document.getElementById('controlMessage'),
 
+        // Settings - General
+        cameraDevice: document.getElementById('cameraDevice'),
+
         // Settings - Mouse
         sensitivity: document.getElementById('sensitivity'),
         sensitivityValue: document.getElementById('sensitivityValue'),
@@ -284,6 +287,9 @@ function updateSettingsUI(result) {
     const settings = result.data || result;
     currentSettings = settings;
 
+    // General settings
+    elements.cameraDevice.value = settings.device_id;
+
     // Mouse settings
     elements.sensitivity.value = settings.sensitivity;
     elements.sensitivityValue.textContent = settings.sensitivity;
@@ -397,6 +403,7 @@ async function handleStop() {
 async function handleSaveSettings() {
     // Collect current settings from UI
     const settings = {
+        device_id: parseInt(elements.cameraDevice.value),
         sensitivity: parseFloat(elements.sensitivity.value),
         smoothing: parseFloat(elements.smoothing.value),
         dead_zone: parseFloat(elements.deadZone.value),
@@ -748,9 +755,28 @@ function setupFirstRunModal() {
 // === Auto-Restart ===
 
 async function handleAutoRestart() {
-    // Restart not needed with Tauri - settings are applied immediately
-    // Just show success message
-    showMessage(elements.settingsMessage, 'success', 'Settings updated successfully');
+    // Auto-restart for camera device change
+    // Most settings apply immediately via shared config references, but camera requires restart
+    showMessage(elements.settingsMessage, 'info', 'Restarting to apply camera change...');
+
+    // Stop current detection
+    const stopResult = await stopHandsi();
+    if (!stopResult.success) {
+        showMessage(elements.settingsMessage, 'error', 'Failed to stop: ' + (stopResult.error || 'Unknown error'));
+        return;
+    }
+
+    // Wait a moment for cleanup
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Start with new camera
+    const startResult = await startHandsi();
+    if (startResult.success) {
+        showMessage(elements.settingsMessage, 'success', 'Restarted with new camera');
+        startStatusPolling();
+    } else {
+        showMessage(elements.settingsMessage, 'error', 'Failed to restart: ' + (startResult.error || 'Unknown error'));
+    }
 }
 
 // === Slider Updates ===

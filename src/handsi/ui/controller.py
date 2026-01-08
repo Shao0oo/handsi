@@ -47,6 +47,7 @@ class HandsiController:
         # State
         self._running = False
         self._lock = threading.Lock()
+        self._previous_device_id: Optional[int] = None  # Track device_id for restart detection
 
         # Load initial config
         self._load_config()
@@ -54,6 +55,7 @@ class HandsiController:
     def _load_config(self) -> None:
         """Load configuration from file."""
         self.config = load_config(self.config_path)
+        self._previous_device_id = self.config.camera.device_id  # Track initial device_id
         log_info(f"Controller: Config loaded from {self.config_path}")
 
     def is_running(self) -> bool:
@@ -209,9 +211,12 @@ class HandsiController:
         return {
             "success": True,
             "data": {
+                "device_id": self.config.camera.device_id,
                 "sensitivity": self.config.actions.mouse.sensitivity,
                 "smoothing": self.config.actions.mouse.smoothing_factor,
                 "dead_zone": self.config.actions.mouse.dead_zone,
+                "scroll_sensitivity": self.config.actions.scroll.sensitivity,
+                "scroll_dead_zone": self.config.actions.scroll.dead_zone,
                 "pinch_threshold": self.config.gestures.pinch_threshold,
                 "fist_threshold": self.config.gestures.fist_threshold,
                 "swipe_velocity": self.config.gestures.swipe_velocity_threshold,
@@ -266,6 +271,16 @@ class HandsiController:
             if "invert_scroll" in settings:
                 self.config.actions.scroll.invert = bool(settings["invert_scroll"])
 
+            # Handle camera device_id - track changes for restart detection
+            device_id_changed = False
+            if "device_id" in settings:
+                new_device_id = int(settings["device_id"])
+                if new_device_id != self._previous_device_id:
+                    device_id_changed = True
+                    self._previous_device_id = new_device_id
+                    log_info(f"Controller: Camera device changed from {self.config.camera.device_id} to {new_device_id}")
+                self.config.camera.device_id = new_device_id
+
             log_info(f"Controller: Settings updated in memory")
 
             # Save to user config file for persistence
@@ -276,15 +291,16 @@ class HandsiController:
                 log_info(f"Controller: Warning - failed to save settings: {save_error}")
                 # Continue anyway - settings are updated in memory
 
-            # Note: Settings will take effect on next start
-            # To apply immediately, would need to restart
-            restart_needed = self.is_running()
+            # Camera device change requires restart to reopen camera
+            # Most other settings apply immediately via shared config references
+            restart_needed = self.is_running() and device_id_changed
 
             return {
                 "success": True,
                 "data": {
                     "message": "Settings saved successfully",
-                    "restart_needed": restart_needed
+                    "restart_needed": restart_needed,
+                    "requires_restart_reason": "camera_change" if device_id_changed else None
                 }
             }
 
