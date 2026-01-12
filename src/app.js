@@ -348,14 +348,21 @@ function showMessage(element, type, message, duration = 3000) {
     }, duration);
 }
 
-function setConnectionStatus(connected) {
-    if (connected) {
-        elements.connectionStatus.classList.remove('disconnected');
-        elements.connectionStatus.querySelector('.label').textContent = 'Connected';
-    } else {
-        elements.connectionStatus.classList.add('disconnected');
-        elements.connectionStatus.querySelector('.label').textContent = 'Disconnected';
-    }
+function setConnectionStatus(status) {
+    // status: 'disconnected' | 'connecting' | 'connected'
+    // Remove all status classes
+    elements.connectionStatus.classList.remove('disconnected', 'connecting', 'connected');
+
+    // Add the current status class
+    elements.connectionStatus.classList.add(status);
+
+    // Set label text
+    const labels = {
+        'disconnected': 'Disconnected',
+        'connecting': 'Connecting',
+        'connected': 'Connected'
+    };
+    elements.connectionStatus.querySelector('.label').textContent = labels[status] || 'Unknown';
 }
 
 // === Event Handlers ===
@@ -909,19 +916,36 @@ async function init() {
 
     // Load initial data
     console.log('[JS] Loading initial status...');
+    setConnectionStatus('connecting');  // Show connecting state immediately
+
     const statusResult = await getStatus();
     console.log('[JS] Initial status result:', statusResult);
     if (statusResult.success) {
         updateStatusUI(statusResult.data);
-        setConnectionStatus(true);
+        setConnectionStatus('connected');  // Backend is ready
 
         // Start polling if already running
         if (statusResult.data.running) {
             startStatusPolling();
         }
     } else {
-        setConnectionStatus(false);
-        showMessage(elements.controlMessage, 'error', 'Failed to connect to bridge');
+        // Backend not ready yet (might be initializing)
+        console.log('[JS] Backend not ready, will retry...');
+        showMessage(elements.controlMessage, 'info', 'Backend initializing, please wait...');
+
+        // Retry connection after 3 seconds (backend might be loading MediaPipe)
+        setTimeout(async () => {
+            console.log('[JS] Retrying connection to backend...');
+            const retry = await getStatus();
+            if (retry.success) {
+                setConnectionStatus('connected');
+                updateStatusUI(retry.data);
+                showMessage(elements.controlMessage, 'success', 'Connected to backend');
+            } else {
+                setConnectionStatus('disconnected');
+                showMessage(elements.controlMessage, 'error', 'Failed to connect to backend');
+            }
+        }, 3000);
     }
 
     console.log('[JS] Loading initial settings...');

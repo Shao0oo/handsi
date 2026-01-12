@@ -8,6 +8,7 @@ camera:
 
 tracking:
   max_hands: 2
+  model_complexity: 1      # 0=lite (faster), 1=full (more accurate). Use 0 for faster startup (~5s vs ~15s)
   min_detection_confidence: 0.5
   min_tracking_confidence: 0.5
   # Activity level transitions

@@ -775,7 +775,7 @@ class GestureDetector:
         right_pinch = self._detect_index_pinch(lm_right)
 
         if left_pinch and right_pinch:
-            confidence = (left_pinch[1] + right_pinch[1]) / 2.0 + 0.1  # Boost confidence slightly
+            confidence = min(1, (left_pinch[1] + right_pinch[1]) / 2.0 + 0.1)  # Boost confidence slightly
             left_position = self._get_hand_center_of_mass(lm_left)
             right_position = self._get_hand_center_of_mass(lm_right)
 
@@ -784,16 +784,20 @@ class GestureDetector:
             right_scale = self._get_hand_scale(lm_right)
             avg_hand_scale = (left_scale + right_scale) / 2.0
 
-            position = self._normalized_distance(left_position, right_position, avg_hand_scale)
+            # Calculate normalized distance between hands
+            # Negative because coordinates are inverted for either Quartz vs OpenCV?
+            hand_distance = - self._normalized_distance(left_position, right_position, avg_hand_scale)
 
+            # Convert 1D distance to 2D position for scrolling:
+            # X = constant (0.5), Y = distance (pulling apart increases Y, pushing together decreases Y)
+            position = (0.5, hand_distance)
 
             return ("two_hands_pinch", confidence, {
-                "left_conf": left_pinch[1],
-                "right_conf": right_pinch[1],
                 "left_position": left_position,
                 "right_position": right_position,
                 "hand_scale": avg_hand_scale,
-                "position": position
+                "position": position,
+                "hand_distance": hand_distance
             })
         return None
 

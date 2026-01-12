@@ -9,6 +9,7 @@ This document outlines coding standards and general practices for the Handsi pro
 - Installation should be placed inside of pyproject.toml with specific version
 - For motion, always normalize relative to hand scale
 - default.yaml should NEVER be changed. I hand tuned many parts of it
+- When adding new gestures and actions, make sure to update the registry file inside of src/handsi/core/registry.py
 
 ## Core Principles
 
