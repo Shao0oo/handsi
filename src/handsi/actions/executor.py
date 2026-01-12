@@ -809,6 +809,14 @@ class ActionExecutorThread(threading.Thread):
             log_debug("Scroll skipped: hand_scale=0.0")
             return False
 
+        # Validate hand_pos is a valid tuple and extract (x, y)
+        if not isinstance(hand_pos, tuple) or len(hand_pos) < 2:
+            log_debug(f"Scroll skipped: invalid hand_pos={hand_pos}")
+            return False
+
+        # Extract only (x, y) - ignore z if it exists (from 3D landmarks)
+        hand_pos = (hand_pos[0], hand_pos[1])
+
         # Initialize anchor on first call
         if self._scroll_anchor_pos is None:
             self._scroll_anchor_pos = hand_pos

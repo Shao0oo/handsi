@@ -203,18 +203,42 @@ class IpcServer:
 - `handsi.spec` - PyInstaller spec
 - **Dependency**: `PySide6` (removed from pyproject.toml)
 
+## Python Bundling (✅ COMPLETE)
+
+The Python backend is now bundled as a standalone executable using PyInstaller:
+
+- **Location**: `src-tauri/bundle/handsi-backend.spec`
+- **Build process**: Automated in `./scripts/build-tauri.sh`
+- **Binary size**: ~196MB (includes OpenCV, MediaPipe, matplotlib, and all dependencies)
+- **Output**: `src-tauri/bin/handsi-backend-aarch64-apple-darwin` (or `x86_64-apple-darwin` for Intel)
+- **Bundle integration**: Tauri automatically bundles the binary into the .app and strips the target triple
+
+### Build Architecture
+
+**Dev Mode:**
+- Uses system Python from conda environment
+- Runs `python -m handsi.main --ipc stdio`
+- Requires `PYTHONPATH` set to project `src/` directory
+
+**Production Mode:**
+- Uses bundled `handsi-backend` binary in `Contents/MacOS/`
+- Standalone executable with all dependencies included
+- Config file bundled in `Contents/Resources/_up_/config/default.yaml`
+
 ## Known Issues / TODOs
 
-1. **Python bundling**: Currently uses system Python in dev mode. For production, need to bundle Python binary as Tauri sidecar.
-
-2. **Missing features from Qt version**:
+1. **Missing features from Qt version**:
    - Reset to defaults (easy to add)
    - Auto-restart (not needed - settings apply immediately)
    - First-run check (commented out)
 
-3. **Rust IPC implementation**: Currently simplified. May need better error handling and async improvements.
+2. **Rust IPC implementation**: Currently simplified. May need better error handling and async improvements.
 
-4. **Status polling**: Frontend polls status every 500ms. Could use Tauri events for push updates instead.
+3. **Status polling**: Frontend polls status every 500ms. Could use Tauri events for push updates instead.
+
+4. **Code signing**: App is not code-signed yet. Users will see "unidentified developer" warning.
+
+5. **Notarization**: Not notarized with Apple. Required for distribution outside of development.
 
 ## Troubleshooting
 
@@ -252,17 +276,62 @@ class IpcServer:
 - [x] Remove PySide6 dependency
 - [x] Delete obsolete Qt files
 - [x] Create build scripts
-- [ ] Bundle Python as sidecar
-- [ ] Test on macOS
+- [x] Bundle Python as sidecar (PyInstaller)
+- [x] Create production DMG
+- [ ] Test on macOS (fresh installation)
 - [ ] Test permissions (camera, accessibility)
-- [ ] Update documentation
+- [ ] Code signing and notarization
+
+## Building for Distribution
+
+### Prerequisites
+
+1. **Conda environment** with handsi:
+   ```bash
+   conda activate handsi
+   ```
+
+2. **Node.js** and **Rust**:
+   ```bash
+   brew install node
+   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+   ```
+
+3. **PyInstaller** (already in conda env):
+   ```bash
+   pip install pyinstaller
+   ```
+
+### Build Process
+
+Run the automated build script:
+
+```bash
+./scripts/build-tauri.sh
+```
+
+This script:
+1. Installs/updates npm dependencies
+2. Builds Python backend with PyInstaller (~1-2 minutes)
+3. Builds Tauri app and creates DMG (~1-2 minutes)
+
+### Build Output
+
+- **macOS App**: `src-tauri/target/release/bundle/macos/Handsi.app`
+- **DMG Installer**: `src-tauri/target/release/bundle/dmg/Handsi_0.1.0_aarch64.dmg`
+- **Size**: ~202MB DMG (includes full Python runtime + ML libraries)
+
+### Architecture Support
+
+- **Apple Silicon (M1/M2/M3)**: `aarch64-apple-darwin` (default)
+- **Intel**: Build on Intel Mac or use cross-compilation
 
 ## Next Steps
 
-1. **Test the Tauri app**: `./scripts/dev-tauri.sh`
-2. **Bundle Python**: Create PyInstaller spec for Python-only backend
-3. **Production build**: Test `./scripts/build-tauri.sh`
-4. **Distribution**: Test .dmg on clean macOS system
+1. **Test on fresh Mac**: Copy DMG to Mac without conda/Python installed
+2. **Code signing**: Sign with Apple Developer ID to avoid "unidentified developer" warning
+3. **Notarization**: Submit to Apple for Gatekeeper approval
+4. **Intel build**: Create universal binary or separate Intel build
 
 ---
 

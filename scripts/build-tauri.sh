@@ -49,9 +49,40 @@ npm install
 
 echo ""
 echo "Step 2: Building Python backend (PyInstaller)..."
-# TODO: Create PyInstaller spec for Python-only backend (no Qt!)
-# This will be much smaller than the old bundle
-# For now, we'll use the system Python in development mode
+
+# Detect macOS architecture
+ARCH=$(uname -m)
+if [ "$ARCH" = "arm64" ]; then
+    TARGET_TRIPLE="aarch64-apple-darwin"
+    echo "Detected architecture: Apple Silicon (M-series)"
+else
+    TARGET_TRIPLE="x86_64-apple-darwin"
+    echo "Detected architecture: Intel"
+fi
+
+# Check if PyInstaller is installed
+if ! command -v pyinstaller &> /dev/null; then
+    echo "Error: PyInstaller not found"
+    echo "Please install: pip install pyinstaller"
+    exit 1
+fi
+
+# Build Python backend binary
+echo "Building handsi-backend-${TARGET_TRIPLE}..."
+pyinstaller src-tauri/bundle/handsi-backend.spec \
+    --distpath src-tauri/bin \
+    --workpath build/pyinstaller \
+    --clean
+
+# Verify binary was created
+BINARY_PATH="src-tauri/bin/handsi-backend-${TARGET_TRIPLE}"
+if [ ! -f "$BINARY_PATH" ]; then
+    echo "Error: Binary not created at $BINARY_PATH"
+    exit 1
+fi
+
+BINARY_SIZE=$(du -h "$BINARY_PATH" | cut -f1)
+echo "✓ Python backend built successfully ($BINARY_SIZE)"
 
 echo ""
 echo "Step 3: Building Tauri app..."

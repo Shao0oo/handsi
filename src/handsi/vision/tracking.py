@@ -37,11 +37,13 @@ class MediaPipeTracker:
         self,
         max_hands: int = 2,
         min_detection_confidence: float = 0.5,
-        min_tracking_confidence: float = 0.5
+        min_tracking_confidence: float = 0.5,
+        model_complexity: int = 0
     ):
         self.max_hands = max_hands
         self.min_detection_confidence = min_detection_confidence
         self.min_tracking_confidence = min_tracking_confidence
+        self.model_complexity = model_complexity
 
         # Initialize MediaPipe Hands
         self.mp_hands = mp_hands
@@ -58,10 +60,11 @@ class MediaPipeTracker:
             self.hands = self.mp_hands.Hands(
                 static_image_mode=False,
                 max_num_hands=self.max_hands,
+                model_complexity=self.model_complexity,  # 0=lite (5-8s faster startup)
                 min_detection_confidence=self.min_detection_confidence,
                 min_tracking_confidence=self.min_tracking_confidence
             )
-            log_info("MediaPipe Hands initialized")
+            log_info(f"MediaPipe Hands initialized (model_complexity={self.model_complexity})")
             return True
 
         except Exception as e:
@@ -180,7 +183,8 @@ class TrackingThread(threading.Thread):
         self.tracker = MediaPipeTracker(
             max_hands=config.max_hands,
             min_detection_confidence=config.min_detection_confidence,
-            min_tracking_confidence=config.min_tracking_confidence
+            min_tracking_confidence=config.min_tracking_confidence,
+            model_complexity=config.model_complexity
         )
 
         # For preview window (optional)

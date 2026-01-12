@@ -12,13 +12,39 @@ import sys
 import time
 from pathlib import Path
 
+# Disable matplotlib font cache rebuilding for faster startup
+# This must be set BEFORE importing any libraries that use matplotlib
+os.environ['MPLCONFIGDIR'] = str(Path.home() / '.handsi' / 'matplotlib')
+# Skip font manager rebuild
+os.environ['MPLBACKEND'] = 'Agg'  # Non-interactive backend (faster)
+
+# Make this process a background-only app (no Dock icon)
+# This prevents the Python backend from appearing in the Dock
+if sys.platform == 'darwin':
+    try:
+        from Foundation import NSBundle
+        from AppKit import NSApp, NSApplicationActivationPolicyProhibited
+        # Set activation policy to prohibit Dock icon
+        # This must be done early, before any GUI frameworks initialize
+        info = NSBundle.mainBundle().infoDictionary()
+        if info:
+            info['LSUIElement'] = '1'
+        if NSApp:
+            NSApp.setActivationPolicy_(NSApplicationActivationPolicyProhibited)
+    except ImportError:
+        # PyObjC not available, skip (dev mode might not have it)
+        pass
+    except Exception:
+        # Silently fail if setting activation policy doesn't work
+        pass
+
 from handsi.actions.executor import ActionExecutorThread
 from handsi.core.bus import RuntimeState, create_queues
 from handsi.core.config import load_config
 from handsi.core.logging import log_info, setup_logging
 from handsi.core.utils import find_config_path
 from handsi.gestures.infer import GestureInferenceThread
-from handsi.ui.preview import PreviewWindow
+# PreviewWindow imported conditionally (only for CLI mode with --preview)
 from handsi.vision.capture import CaptureThread
 from handsi.vision.tracking import TrackingThread
 
@@ -178,6 +204,7 @@ def main() -> int:
     # Create preview window (non-threaded, runs in main loop)
     preview_window = None
     if config.system.preview:
+        from handsi.ui.preview import PreviewWindow
         preview_window = PreviewWindow(
             runtime_state=runtime_state,
             tracking_thread=tracking_thread

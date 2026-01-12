@@ -33,6 +33,7 @@ class CameraConfig(BaseModel):
 class TrackingConfig(BaseModel):
     """MediaPipe tracking settings."""
     max_hands: int = Field(default=2, ge=1, le=2)
+    model_complexity: int = Field(default=1, ge=0, le=1)  # 0=lite (faster), 1=full (more accurate)
     min_detection_confidence: float = Field(default=0.5, ge=0.0, le=1.0)
     min_tracking_confidence: float = Field(default=0.5, ge=0.0, le=1.0)
     idle_timeout: float = Field(default=3.0, ge=0.5, le=10.0)

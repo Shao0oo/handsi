@@ -14,5 +14,7 @@
     <string>Handsi needs camera access for hand tracking</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Handsi needs microphone access for voice commands (optional)</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Handsi needs accessibility access to control your computer via gestures</string>
 </dict>
 </plist>
