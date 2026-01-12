@@ -71,6 +71,10 @@ class ActionExecutorThread(threading.Thread):
         self._zoom_anchor_pos: Optional[tuple[float, float]] = None  # Where hand was when zoom started
         self._zoom_accumulated: float = 0.0  # Accumulated zoom movement since last step
 
+        # Volume tracking state
+        self._volume_anchor_pos: Optional[tuple[float, float]] = None  # Where hand was when volume control started
+        self._volume_accumulated: float = 0.0  # Accumulated volume movement since last step
+
         # Scroll momentum state (for kinetic scrolling)
         self._scroll_velocity_history: deque = deque(maxlen=3)  # Track last 3 scroll velocities (dx, dy tuples)
         self._momentum_velocity: tuple[float, float] = (0.0, 0.0)  # Current momentum velocity (dx, dy)
@@ -492,6 +496,11 @@ class ActionExecutorThread(threading.Thread):
                 self._zoom_anchor_pos = None
                 self._zoom_accumulated = 0.0
                 log_debug("Zoom tracking stopped")
+            elif action == "continuous_volume":
+                # Reset tracking when volume control gesture ends
+                self._volume_anchor_pos = None
+                self._volume_accumulated = 0.0
+                log_debug("Volume control stopped")
 
         # Handle gesture START
         if new_gesture is not None:
@@ -525,6 +534,11 @@ class ActionExecutorThread(threading.Thread):
                 self._zoom_anchor_pos = None
                 self._zoom_accumulated = 0.0
                 log_debug("Zoom tracking started")
+            elif action == "continuous_volume":
+                # Reset anchor for volume control when starting volume gesture
+                self._volume_anchor_pos = None
+                self._volume_accumulated = 0.0
+                log_debug("Volume control started")
 
     def _handle_gesture_continue(self, gesture_name: str) -> None:
         """
@@ -550,6 +564,9 @@ class ActionExecutorThread(threading.Thread):
         # Execute continuous zoom based on hand vertical movement
         elif action == "continuous_zoom":
             self._action_continuous_zoom()
+        # Execute continuous volume based on hand movement (any direction)
+        elif action == "continuous_volume":
+            self._action_continuous_volume()
 
     def _update_interpolation_target(self) -> None:
         """
@@ -616,6 +633,8 @@ class ActionExecutorThread(threading.Thread):
             return self._action_continuous_scroll()
         elif action_name == "continuous_zoom":
             return self._action_continuous_zoom()
+        elif action_name == "continuous_volume":
+            return self._action_continuous_volume()
         elif action_name == "scroll_down":
             return self._action_scroll(direction='down')
         elif action_name == "scroll_up":
@@ -980,5 +999,105 @@ class ActionExecutorThread(threading.Thread):
 
         # Update anchor to current hand position for continuous tracking
         self._zoom_anchor_pos = hand_pos
+
+        return result
+
+    def _action_continuous_volume(self) -> bool:
+        """
+        Execute continuous volume control using hand movement in any direction.
+
+        Uses the largest movement vector (horizontal or vertical) to control volume:
+        - Right or Up = volume increase
+        - Left or Down = volume decrease
+
+        Movement is normalized by hand scale for distance-invariance.
+
+        Returns:
+            True if successful, False otherwise
+        """
+        with self.runtime_state.lock:
+            hand_pos = self.runtime_state.cursor_position
+            hand_scale = self.runtime_state.hand_scale
+
+        if hand_scale == 0.0:
+            # No hand detected or invalid scale
+            log_debug("Volume control skipped: hand_scale=0.0")
+            return False
+
+        # Validate hand_pos is a valid tuple and extract (x, y)
+        if not isinstance(hand_pos, tuple) or len(hand_pos) < 2:
+            log_debug(f"Volume control skipped: invalid hand_pos={hand_pos}")
+            return False
+
+        # Extract only (x, y) - ignore z if it exists (from 3D landmarks)
+        hand_pos = (hand_pos[0], hand_pos[1])
+
+        # Initialize anchor on first call
+        if self._volume_anchor_pos is None:
+            self._volume_anchor_pos = hand_pos
+            self._volume_accumulated = 0.0
+            log_debug(f"Volume control anchor initialized to {hand_pos}")
+            return True  # Don't change volume on first frame
+
+        # Calculate hand movement delta from anchor (both X and Y)
+        hand_dx = hand_pos[0] - self._volume_anchor_pos[0]
+        hand_dy = hand_pos[1] - self._volume_anchor_pos[1]
+
+        # NORMALIZE by hand scale: divide by hand_scale to make movement distance-invariant
+        hand_dx = hand_dx / hand_scale
+        hand_dy = hand_dy / hand_scale
+
+        # Apply smooth dead zone (use volume config)
+        from handsi.actions.adapters.base import apply_smooth_dead_zone
+        hand_dx, hand_dy = apply_smooth_dead_zone(
+            hand_dx, hand_dy,
+            self.action_config.volume.dead_zone,
+            self.action_config.volume.dead_zone_curve,
+            self.action_config.volume.dead_zone_min_damping
+        )
+
+        # Check if movement is effectively zero after damping
+        if abs(hand_dx) < 0.0001 and abs(hand_dy) < 0.0001:
+            return True
+
+        # Use LARGEST movement vector (horizontal or vertical)
+        # Right/Up = positive (volume increase)
+        # Left/Down = negative (volume decrease)
+        if abs(hand_dx) > abs(hand_dy):
+            # Horizontal movement dominant: right = increase, left = decrease
+            # Apply mirror_x if enabled (for natural camera movement)
+            if self.action_config.volume.mirror_x:
+                movement = -hand_dx
+            else:
+                movement = hand_dx
+        else:
+            # Vertical movement dominant: up = increase (negative y), down = decrease (positive y)
+            movement = -hand_dy  # Invert because up is negative in screen coords
+
+        # Accumulate movement
+        self._volume_accumulated += movement
+
+        # Get volume step threshold from config (use volume sensitivity)
+        # Higher sensitivity = smaller threshold = more frequent volume changes
+        volume_step_threshold = 0.05 / self.action_config.volume.sensitivity
+
+        # Check if accumulated movement crosses step threshold
+        if abs(self._volume_accumulated) >= volume_step_threshold:
+            # Determine volume direction and amount
+            # Volume changes in increments of 5 (out of 100)
+            volume_delta = 5 if self._volume_accumulated > 0 else -5
+
+            # Execute volume change
+            result = self.adapter.continuous_volume(delta=volume_delta)  # type: ignore
+
+            # Reset accumulator (keep remainder for smooth multi-step changes)
+            self._volume_accumulated -= (volume_delta / 5.0) * volume_step_threshold
+
+            log_debug(f"Volume step: delta={volume_delta}, accumulated={self._volume_accumulated:.4f}")
+        else:
+            result = True  # No volume step needed yet, but still successful
+
+        # Update anchor to current hand position for continuous tracking
+        self._volume_anchor_pos = hand_pos
 
         return result

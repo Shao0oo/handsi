@@ -673,6 +673,59 @@ class MacOSAdapter(ActionAdapter):
             log_error("ACT-001", f"Zoom failed: {e}")
             return False
 
+    def continuous_volume(self, delta: int = 0) -> bool:
+        """
+        Continuous volume control using hand movement.
+
+        Uses AppleScript to adjust system volume. Volume ranges from 0-100.
+
+        Args:
+            delta: Volume change amount (positive = increase, negative = decrease)
+
+        Returns:
+            True if volume change successful, False otherwise
+        """
+        if not self._initialized:
+            log_error("ACT-001", "Adapter not initialized")
+            return False
+
+        try:
+            # Get current volume first
+            result = subprocess.run(
+                ['osascript', '-e', 'output volume of (get volume settings)'],
+                capture_output=True,
+                text=True,
+                timeout=1.0
+            )
+
+            if result.returncode != 0:
+                log_error("ACT-001", f"Failed to get current volume: {result.stderr}")
+                return False
+
+            current_volume = int(result.stdout.strip())
+
+            # Calculate new volume (clamp to 0-100)
+            new_volume = max(0, min(100, current_volume + delta))
+
+            # Set new volume
+            result = subprocess.run(
+                ['osascript', '-e', f'set volume output volume {new_volume}'],
+                capture_output=True,
+                text=True,
+                timeout=1.0
+            )
+
+            if result.returncode == 0:
+                log_debug(f"Volume changed: {current_volume} -> {new_volume} (delta={delta})")
+                return True
+            else:
+                log_error("ACT-001", f"Failed to set volume: {result.stderr}")
+                return False
+
+        except Exception as e:
+            log_error("ACT-001", f"Volume control failed: {e}")
+            return False
+
     def switch_desktop(self, direction: Literal['left', 'right', 'up', 'down', 'next', 'prev']) -> bool:
         """
         Switch to adjacent virtual desktop using Mission Control.

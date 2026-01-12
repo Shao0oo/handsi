@@ -52,12 +52,8 @@ actions:
     thumbs_down: disable_latch       # Disable gesture control (latch OFF)
     # fist: continuous_scroll          # Continuous: hand vertical movement controls scrolling
     two_fingers_point: continuous_scroll
-    # Ready to map (actions implemented, just add gesture mapping here):
-    # middle_pinch: scroll_up
-    # ring_pinch: zoom_in
-    # pinky_pinch: zoom_out
-    # swipe_left: switch_desktop_left
-    # swipe_right: switch_desktop_right
+    two_hands_pinch: continuous_zoom
+    ring_pinch: continuous_volume
     # thumbs_up: toggle_latch
 
   # Mouse movement settings
@@ -83,11 +79,19 @@ actions:
     momentum_min_velocity: 150.0    # Min velocity to trigger momentum (pixels/frame)
     momentum_stop_threshold: 100.0  # Stop momentum when velocity drops below this
 
-    zoom:
+  zoom:
     sensitivity: 1.0      # Higher = faster zoom (more frequent steps)
     dead_zone: 0.02       # Ignore small hand movements
     dead_zone_curve: 2.0  # Smooth dead zone transition
     dead_zone_min_damping: 0.1
+
+  # Volume control settings
+  volume:
+    mirror_x: true                  # Mirror X-coordinate (flip horizontally) for natural camera movement
+    sensitivity: 3.0                # Higher = faster volume changes (more frequent steps)
+    dead_zone: 0.02                 # Ignore small hand movements
+    dead_zone_curve: 2.0            # Power curve for smooth dead zone (1.0=linear, 2.0=quadratic, 3.0=cubic)
+    dead_zone_min_damping: 0.1      # Minimum damping factor at zero movement
 
 system:
   log_level: INFO           # DEBUG | INFO | WARN | ERROR
