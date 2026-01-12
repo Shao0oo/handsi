@@ -12,7 +12,7 @@ from typing import Any, Optional
 
 import numpy as np
 
-from handsi.core.logging import log_debug
+from handsi.core.logging import log_info, log_debug
 
 
 class GestureDetector:
@@ -30,7 +30,7 @@ class GestureDetector:
 
     def __init__(
         self,
-        pinch_threshold: float = 0.05,
+        pinch_threshold: float = 0.2,
         fist_threshold: float = 1.0,
         open_hand_distance_threshold: float = 0.25,
         open_hand_spread_threshold: float = 0.08,
@@ -293,6 +293,7 @@ class GestureDetector:
         distance = self._normalized_distance(thumb_tip, index_tip, hand_scale)
 
         if distance >= self.pinch_threshold:
+            # log_info(f"Index pinch failed: distance {distance:.2f} >= threshold {self.pinch_threshold}")
             return None
 
         # Check that other fingers (middle, ring, pinky) are extended
@@ -302,9 +303,13 @@ class GestureDetector:
 
         # Require at least 2 of 3 other fingers to be extended
         if extended_count < 3:
+            # log_info(f"Index pinch failed: {extended_count} fingers extended, expected at least 3")
             return None
 
-        confidence = 1.0 - distance
+        confidence = min(1.0, 1.0 - distance + 0.1)
+        if confidence < self.confidence_threshold:
+            # log_info(f"Index pinch confidence too low: {confidence} < {self.confidence_threshold}")
+            return None
         # position = self._get_hand_center_of_mass(lm)
 
         return ("index_pinch", confidence, {

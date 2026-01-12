@@ -435,7 +435,7 @@ async function handleSaveSettings() {
 
         // Auto-restart if needed
         if (result.data.restart_needed) {
-            await handleAutoRestart();
+            await handleAutoRestart(result.data.requires_restart_reason);
         }
     } else {
         showMessage(elements.settingsMessage, 'error', `Failed to save settings: ${result.data.error || result.error}`);
@@ -702,7 +702,7 @@ async function handleMappingChange(event) {
         const data = result.data || result;
         console.log('[Mappings] Checking restart_needed:', data.restart_needed);
         if (data.restart_needed) {
-            await handleAutoRestart();
+            await handleAutoRestart(data.requires_restart_reason);
         }
     } else {
         const errorMsg = result.data?.error || result.error || 'Unknown error';
@@ -761,10 +761,23 @@ function setupFirstRunModal() {
 
 // === Auto-Restart ===
 
-async function handleAutoRestart() {
-    // Auto-restart for camera device change
-    // Most settings apply immediately via shared config references, but camera requires restart
-    showMessage(elements.settingsMessage, 'info', 'Restarting to apply camera change...');
+async function handleAutoRestart(reason = null) {
+    // Auto-restart when settings require it (camera device change, gesture settings change)
+    let message = 'Restarting to apply changes...';
+    let successMessage = 'Restarted successfully';
+
+    if (reason === 'camera_change') {
+        message = 'Restarting to apply camera change...';
+        successMessage = 'Restarted with new camera';
+    } else if (reason === 'gesture_settings_change') {
+        message = 'Restarting to apply gesture settings...';
+        successMessage = 'Restarted with new gesture settings';
+    } else if (reason === 'camera_and_gesture_changes') {
+        message = 'Restarting to apply camera and gesture changes...';
+        successMessage = 'Restarted with new settings';
+    }
+
+    showMessage(elements.settingsMessage, 'info', message);
 
     // Stop current detection
     const stopResult = await stopHandsi();
@@ -776,10 +789,10 @@ async function handleAutoRestart() {
     // Wait a moment for cleanup
     await new Promise(resolve => setTimeout(resolve, 500));
 
-    // Start with new camera
+    // Start with new settings
     const startResult = await startHandsi();
     if (startResult.success) {
-        showMessage(elements.settingsMessage, 'success', 'Restarted with new camera');
+        showMessage(elements.settingsMessage, 'success', successMessage);
         startStatusPolling();
     } else {
         showMessage(elements.settingsMessage, 'error', 'Failed to restart: ' + (startResult.error || 'Unknown error'));

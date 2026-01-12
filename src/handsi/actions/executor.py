@@ -991,14 +991,12 @@ class ActionExecutorThread(threading.Thread):
             result = self.adapter.continuous_zoom(dy=zoom_direction)  # type: ignore
 
             # Reset accumulator (keep remainder for smooth multi-step zoom)
-            self._zoom_accumulated -= zoom_direction * zoom_step_threshold
+            self._zoom_accumulated = 0
+            self._zoom_anchor_pos = hand_pos
 
-            log_debug(f"Zoom step: direction={zoom_direction}, accumulated={self._zoom_accumulated:.4f}")
+            log_info(f"Zoom step: direction={zoom_direction}, accumulated={self._zoom_accumulated:.4f}")
         else:
             result = True  # No zoom step needed yet, but still successful
-
-        # Update anchor to current hand position for continuous tracking
-        self._zoom_anchor_pos = hand_pos
 
         return result
 
@@ -1091,13 +1089,11 @@ class ActionExecutorThread(threading.Thread):
             result = self.adapter.continuous_volume(delta=volume_delta)  # type: ignore
 
             # Reset accumulator (keep remainder for smooth multi-step changes)
-            self._volume_accumulated -= (volume_delta / 5.0) * volume_step_threshold
+            self._volume_accumulated = 0
+            self._volume_anchor_pos = hand_pos
 
             log_debug(f"Volume step: delta={volume_delta}, accumulated={self._volume_accumulated:.4f}")
         else:
             result = True  # No volume step needed yet, but still successful
-
-        # Update anchor to current hand position for continuous tracking
-        self._volume_anchor_pos = hand_pos
 
         return result
