@@ -243,6 +243,10 @@ class HandsiController:
             dict: Status response with success/error
         """
         try:
+            # Track which settings require restart
+            gesture_settings_changed = False
+            device_id_changed = False
+
             # Update config object
             if "sensitivity" in settings:
                 self.config.actions.mouse.sensitivity = float(settings["sensitivity"])
@@ -254,29 +258,39 @@ class HandsiController:
                 self.config.actions.scroll.sensitivity = float(settings["scroll_sensitivity"])
             if "scroll_dead_zone" in settings:
                 self.config.actions.scroll.dead_zone = float(settings["scroll_dead_zone"])
+
+            # Gesture settings - these require restart because GestureDetector stores them at init
             if "pinch_threshold" in settings:
                 self.config.gestures.pinch_threshold = float(settings["pinch_threshold"])
+                gesture_settings_changed = True
             if "fist_threshold" in settings:
                 self.config.gestures.fist_threshold = float(settings["fist_threshold"])
+                gesture_settings_changed = True
             if "swipe_velocity" in settings:
                 self.config.gestures.swipe_velocity_threshold = float(settings["swipe_velocity"])
+                gesture_settings_changed = True
             if "open_hand_spread" in settings:
                 self.config.gestures.open_hand_spread_threshold = float(settings["open_hand_spread"])
+                gesture_settings_changed = True
             if "thumbs_vertical" in settings:
                 self.config.gestures.thumbs_vertical_threshold = float(settings["thumbs_vertical"])
+                gesture_settings_changed = True
             if "debounce_ms" in settings:
                 self.config.gestures.debounce_ms = int(settings["debounce_ms"])
+                gesture_settings_changed = True
             if "latch_cooldown_ms" in settings:
                 self.config.gestures.latch_cooldown_ms = int(settings["latch_cooldown_ms"])
+                gesture_settings_changed = True
             if "smoothing_window" in settings:
                 self.config.gestures.smoothing_window = int(settings["smoothing_window"])
+                gesture_settings_changed = True
+
             if "mirror_x" in settings:
                 self.config.actions.mouse.mirror_x = bool(settings["mirror_x"])
             if "invert_scroll" in settings:
                 self.config.actions.scroll.invert = bool(settings["invert_scroll"])
 
             # Handle camera device_id - track changes for restart detection
-            device_id_changed = False
             if "device_id" in settings:
                 new_device_id = int(settings["device_id"])
                 if new_device_id != self._previous_device_id:
@@ -295,16 +309,27 @@ class HandsiController:
                 log_info(f"Controller: Warning - failed to save settings: {save_error}")
                 # Continue anyway - settings are updated in memory
 
-            # Camera device change requires restart to reopen camera
-            # Most other settings apply immediately via shared config references
-            restart_needed = self.is_running() and device_id_changed
+            # Determine if restart is needed
+            # - Camera device change requires restart to reopen camera
+            # - Gesture settings changes require restart because GestureDetector copies values at init
+            restart_needed = self.is_running() and (device_id_changed or gesture_settings_changed)
+
+            # Determine restart reason for user feedback
+            if device_id_changed and gesture_settings_changed:
+                restart_reason = "camera_and_gesture_changes"
+            elif device_id_changed:
+                restart_reason = "camera_change"
+            elif gesture_settings_changed:
+                restart_reason = "gesture_settings_change"
+            else:
+                restart_reason = None
 
             return {
                 "success": True,
                 "data": {
                     "message": "Settings saved successfully",
                     "restart_needed": restart_needed,
-                    "requires_restart_reason": "camera_change" if device_id_changed else None
+                    "requires_restart_reason": restart_reason
                 }
             }
 

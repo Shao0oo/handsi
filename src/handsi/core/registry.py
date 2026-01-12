@@ -28,6 +28,8 @@ AVAILABLE_GESTURES = [
 AVAILABLE_ACTIONS = [
     "click",
     "continuous_scroll",
+    "continuous_volume",
+    "continuous_zoom",
     "disable_latch",
     "double_click",
     "enable_latch",

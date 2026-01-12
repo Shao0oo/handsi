@@ -86,11 +86,30 @@ class ScrollConfig(BaseModel):
     momentum_stop_threshold: float = Field(default=1.0, ge=0.1, le=10000.0)
 
 
+class ZoomConfig(BaseModel):
+    """Zoom control settings."""
+    sensitivity: float = Field(default=3.0, ge=0.1, le=10.0)  # Higher = more frequent zoom steps
+    dead_zone: float = Field(default=0.02, ge=0.0, le=0.05)
+    dead_zone_curve: float = Field(default=2.0, ge=1.0, le=3.0)
+    dead_zone_min_damping: float = Field(default=0.1, ge=0.0, le=0.5)
+
+
+class VolumeConfig(BaseModel):
+    """Volume control settings."""
+    mirror_x: bool = Field(default=True)  # Mirror X-coordinate for natural camera movement
+    sensitivity: float = Field(default=3.0, ge=0.1, le=10.0)  # Higher = more frequent volume changes
+    dead_zone: float = Field(default=0.02, ge=0.0, le=0.05)
+    dead_zone_curve: float = Field(default=2.0, ge=1.0, le=3.0)
+    dead_zone_min_damping: float = Field(default=0.1, ge=0.0, le=0.5)
+
+
 class ActionConfig(BaseModel):
     """Action execution settings."""
     mappings: dict[str, str] = Field(default_factory=dict)
     mouse: MouseConfig = Field(default_factory=MouseConfig)
     scroll: ScrollConfig = Field(default_factory=ScrollConfig)
+    zoom: ZoomConfig = Field(default_factory=ZoomConfig)
+    volume: VolumeConfig = Field(default_factory=VolumeConfig)
 
 
 class SystemConfig(BaseModel):
