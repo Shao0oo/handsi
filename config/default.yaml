@@ -83,6 +83,12 @@ actions:
     momentum_min_velocity: 150.0    # Min velocity to trigger momentum (pixels/frame)
     momentum_stop_threshold: 100.0  # Stop momentum when velocity drops below this
 
+    zoom:
+    sensitivity: 1.0      # Higher = faster zoom (more frequent steps)
+    dead_zone: 0.02       # Ignore small hand movements
+    dead_zone_curve: 2.0  # Smooth dead zone transition
+    dead_zone_min_damping: 0.1
+
 system:
   log_level: INFO           # DEBUG | INFO | WARN | ERROR
   log_file: logs/handsi.log

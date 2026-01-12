@@ -67,6 +67,10 @@ class ActionExecutorThread(threading.Thread):
         # Scroll tracking state
         self._scroll_anchor_pos: Optional[tuple[float, float]] = None  # Where hand was when scroll started
 
+        # Zoom tracking state
+        self._zoom_anchor_pos: Optional[tuple[float, float]] = None  # Where hand was when zoom started
+        self._zoom_accumulated: float = 0.0  # Accumulated zoom movement since last step
+
         # Scroll momentum state (for kinetic scrolling)
         self._scroll_velocity_history: deque = deque(maxlen=3)  # Track last 3 scroll velocities (dx, dy tuples)
         self._momentum_velocity: tuple[float, float] = (0.0, 0.0)  # Current momentum velocity (dx, dy)
@@ -483,6 +487,11 @@ class ActionExecutorThread(threading.Thread):
                 self._scroll_anchor_pos = None
                 self._scroll_velocity_history.clear()
                 log_debug("Scroll tracking stopped")
+            elif action == "continuous_zoom":
+                # Reset tracking when zoom gesture ends
+                self._zoom_anchor_pos = None
+                self._zoom_accumulated = 0.0
+                log_debug("Zoom tracking stopped")
 
         # Handle gesture START
         if new_gesture is not None:
@@ -511,6 +520,11 @@ class ActionExecutorThread(threading.Thread):
                 # Reset anchor for scroll tracking when starting scroll gesture
                 self._scroll_anchor_pos = None
                 log_debug("Scroll tracking started")
+            elif action == "continuous_zoom":
+                # Reset anchor for zoom tracking when starting zoom gesture
+                self._zoom_anchor_pos = None
+                self._zoom_accumulated = 0.0
+                log_debug("Zoom tracking started")
 
     def _handle_gesture_continue(self, gesture_name: str) -> None:
         """
@@ -533,6 +547,9 @@ class ActionExecutorThread(threading.Thread):
         # Execute continuous scroll based on hand vertical movement
         elif action == "continuous_scroll":
             self._action_continuous_scroll()
+        # Execute continuous zoom based on hand vertical movement
+        elif action == "continuous_zoom":
+            self._action_continuous_zoom()
 
     def _update_interpolation_target(self) -> None:
         """
@@ -597,6 +614,8 @@ class ActionExecutorThread(threading.Thread):
             return self._action_click(button="right")
         elif action_name == "continuous_scroll":
             return self._action_continuous_scroll()
+        elif action_name == "continuous_zoom":
+            return self._action_continuous_zoom()
         elif action_name == "scroll_down":
             return self._action_scroll(direction='down')
         elif action_name == "scroll_up":
@@ -878,5 +897,88 @@ class ActionExecutorThread(threading.Thread):
 
         # Update anchor to current hand position for continuous tracking
         self._scroll_anchor_pos = hand_pos
+
+        return result
+
+    def _action_continuous_zoom(self) -> bool:
+        """
+        Execute continuous zoom action using vertical hand movement.
+
+        Tracks hand vertical movement delta from an anchor point and triggers
+        Cmd+Plus/Minus when movement crosses step threshold. Movement is normalized
+        by hand scale for distance-invariance.
+
+        Returns:
+            True if successful, False otherwise
+        """
+        with self.runtime_state.lock:
+            hand_pos = self.runtime_state.cursor_position
+            hand_scale = self.runtime_state.hand_scale
+
+        if hand_scale == 0.0:
+            # No hand detected or invalid scale
+            log_debug("Zoom skipped: hand_scale=0.0")
+            return False
+
+        # Validate hand_pos is a valid tuple and extract (x, y)
+        if not isinstance(hand_pos, tuple) or len(hand_pos) < 2:
+            log_debug(f"Zoom skipped: invalid hand_pos={hand_pos}")
+            return False
+
+        # Extract only (x, y) - ignore z if it exists (from 3D landmarks)
+        hand_pos = (hand_pos[0], hand_pos[1])
+
+        # Initialize anchor on first call
+        if self._zoom_anchor_pos is None:
+            self._zoom_anchor_pos = hand_pos
+            self._zoom_accumulated = 0.0
+            log_debug(f"Zoom anchor initialized to {hand_pos}")
+            return True  # Don't zoom on first frame
+
+        # Calculate hand movement delta from anchor (vertical only for zoom)
+        hand_dy = hand_pos[1] - self._zoom_anchor_pos[1]
+
+        # NORMALIZE by hand scale: divide by hand_scale to make movement distance-invariant
+        hand_dy = hand_dy / hand_scale
+
+        # Apply smooth dead zone (use zoom config)
+        from handsi.actions.adapters.base import apply_smooth_dead_zone
+        _, hand_dy = apply_smooth_dead_zone(
+            0.0, hand_dy,  # Only care about vertical movement
+            self.action_config.zoom.dead_zone,
+            self.action_config.zoom.dead_zone_curve,
+            self.action_config.zoom.dead_zone_min_damping
+        )
+
+        # Check if movement is effectively zero after damping
+        if abs(hand_dy) < 0.0001:
+            return True
+
+        # Accumulate movement
+        # Positive hand_dy = hand moving down = zoom out (negative)
+        # Negative hand_dy = hand moving up = zoom in (positive)
+        self._zoom_accumulated += -hand_dy
+
+        # Get zoom step threshold from config (use zoom sensitivity)
+        # Higher sensitivity = smaller threshold = more frequent zoom steps
+        zoom_step_threshold = 0.05 / self.action_config.zoom.sensitivity
+
+        # Check if accumulated movement crosses step threshold
+        if abs(self._zoom_accumulated) >= zoom_step_threshold:
+            # Determine zoom direction
+            zoom_direction = 1 if self._zoom_accumulated > 0 else -1
+
+            # Execute zoom step (Cmd+Plus or Cmd+Minus)
+            result = self.adapter.continuous_zoom(dy=zoom_direction)  # type: ignore
+
+            # Reset accumulator (keep remainder for smooth multi-step zoom)
+            self._zoom_accumulated -= zoom_direction * zoom_step_threshold
+
+            log_debug(f"Zoom step: direction={zoom_direction}, accumulated={self._zoom_accumulated:.4f}")
+        else:
+            result = True  # No zoom step needed yet, but still successful
+
+        # Update anchor to current hand position for continuous tracking
+        self._zoom_anchor_pos = hand_pos
 
         return result

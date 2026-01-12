@@ -18,12 +18,14 @@ try:
     from Quartz import (
         CGEventCreateMouseEvent,
         CGEventCreateScrollWheelEvent,
+        CGEventCreateKeyboardEvent,
         CGEventPost,
         CGMainDisplayID,
         CGDisplayBounds,
         CGGetActiveDisplayList,
         CGEventSourceCreate,
         CGEventSetIntegerValueField,
+        CGEventSetFlags,
         kCGEventSourceStateHIDSystemState,
         kCGEventMouseMoved,
         kCGEventLeftMouseDown,
@@ -37,6 +39,11 @@ try:
         kCGMouseEventClickState,
         kCGHIDEventTap,
         kCGScrollEventUnitPixel,
+        kCGScrollEventUnitLine,
+        kCGEventFlagMaskControl,
+        kCGEventFlagMaskCommand,
+        kCGEventKeyDown,
+        kCGEventKeyUp,
     )
     from AppKit import NSEvent
     from Foundation import NSAppleScript
@@ -136,6 +143,9 @@ class MacOSAdapter(ActionAdapter):
             except Exception as e:
                 log_warning("ACT-004", f"Error querying double-click threshold: {e}, using default")
 
+            # # Check zoom scroll gesture settings
+            # self.check_zoom_settings()
+
             log_info(
                 f"macOS adapter initialized (combined screen: {self._screen_width}x{self._screen_height}, "
                 f"offset: ({self._screen_x_offset}, {self._screen_y_offset}), "
@@ -163,6 +173,73 @@ class MacOSAdapter(ActionAdapter):
             "If actions don't work, grant permissions in System Preferences > Privacy & Security > Accessibility"
         )
         return True
+
+    def check_zoom_settings(self) -> bool:
+        """
+        Check if macOS zoom scroll gesture is enabled.
+
+        Checks system settings for:
+        - closeViewScrollWheelToggle (whether zoom scroll is enabled)
+        - closeViewScrollWheelModifiersInt (which modifier key: 2 = Control)
+
+        Logs a warning if settings are not properly configured for continuous_zoom action.
+
+        Returns:
+            True if zoom settings are properly configured, False otherwise
+        """
+        try:
+            # Check if scroll wheel zoom is enabled
+            result_toggle = subprocess.run(
+                ['defaults', 'read', 'com.apple.universalaccess', 'closeViewScrollWheelToggle'],
+                capture_output=True,
+                text=True,
+                timeout=1.0
+            )
+
+            # Check which modifier key is set
+            result_modifier = subprocess.run(
+                ['defaults', 'read', 'com.apple.universalaccess', 'closeViewScrollWheelModifiersInt'],
+                capture_output=True,
+                text=True,
+                timeout=1.0
+            )
+
+            zoom_enabled = False
+            control_modifier = False
+
+            # Parse toggle (should be 1 for enabled)
+            if result_toggle.returncode == 0:
+                try:
+                    toggle_value = int(result_toggle.stdout.strip())
+                    zoom_enabled = (toggle_value == 1)
+                except ValueError:
+                    pass
+
+            # Parse modifier (should be 2 for Control key)
+            if result_modifier.returncode == 0:
+                try:
+                    modifier_value = int(result_modifier.stdout.strip())
+                    control_modifier = (modifier_value == 2)
+                except ValueError:
+                    pass
+
+            # Warn user if not properly configured
+            if not zoom_enabled or not control_modifier:
+                log_warning(
+                    "ACT-004",
+                    "Zoom scroll gesture not enabled or using wrong modifier. "
+                    "To use continuous_zoom action, enable in: "
+                    "System Settings > Accessibility > Zoom > 'Use scroll gesture with modifier keys to zoom' "
+                    "(ensure Control key is selected as modifier)"
+                )
+                return False
+            else:
+                log_info("macOS zoom scroll gesture properly configured (Control + scroll)")
+                return True
+
+        except Exception as e:
+            log_warning("ACT-004", f"Could not check zoom settings: {e}")
+            return False
 
     def get_mouse_position_normalized(self) -> tuple[float, float]:
         """
@@ -513,6 +590,57 @@ class MacOSAdapter(ActionAdapter):
 
         except Exception as e:
             log_error("ACT-001", f"Scroll failed: {e}")
+            return False
+
+    def continuous_zoom(self, dy: int = 0) -> bool:
+        """
+        Continuous zoom using Command+Plus/Minus keyboard shortcuts.
+
+        Sends Cmd+Plus for zoom in or Cmd+Minus for zoom out. This works in most
+        applications (browsers, PDF viewers, image editors, etc.) without requiring
+        system accessibility settings.
+
+        Args:
+            dy: Vertical zoom amount (pixels, positive = zoom in, negative = zoom out)
+
+        Returns:
+            True if zoom successful, False otherwise
+        """
+        if not self._initialized:
+            log_error("ACT-001", "Adapter not initialized")
+            return False
+
+        try:
+            # Determine zoom direction
+            if dy == 0:
+                return True  # No zoom needed
+
+            # Key codes for zoom:
+            # 24 = "=" key (same as + on US keyboard, zoom in with Cmd)
+            # 27 = "-" key (zoom out with Cmd)
+            key_code = 24 if dy > 0 else 27
+            zoom_direction = "in" if dy > 0 else "out"
+
+            # Create event source
+            source = CGEventSourceCreate(kCGEventSourceStateHIDSystemState)
+
+            # Create key down event
+            key_down_event = CGEventCreateKeyboardEvent(source, key_code, True)
+            CGEventSetFlags(key_down_event, kCGEventFlagMaskCommand)
+
+            # Create key up event
+            key_up_event = CGEventCreateKeyboardEvent(source, key_code, False)
+            CGEventSetFlags(key_up_event, kCGEventFlagMaskCommand)
+
+            # Post events (down then up = key press)
+            CGEventPost(kCGHIDEventTap, key_down_event)
+            CGEventPost(kCGHIDEventTap, key_up_event)
+
+            log_debug(f"Continuous zoom executed: zoom {zoom_direction} (dy={dy})")
+            return True
+
+        except Exception as e:
+            log_error("ACT-001", f"Continuous zoom failed: {e}")
             return False
 
     def zoom(self, direction: Literal['in', 'out'], step: float = 0.1) -> bool:
