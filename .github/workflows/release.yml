@@ -12,7 +12,7 @@ env:
 jobs:
   release-macos:
     name: Build and Release (macOS)
-    runs-on: macos-latest
+    runs-on: macos-latest  # GitHub now uses M1 runners (aarch64)
 
     steps:
       - name: Checkout code
@@ -20,11 +20,8 @@ jobs:
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
-
-      - name: Install Rust dependencies
-        run: |
-          rustup target add aarch64-apple-darwin
-          rustup target add x86_64-apple-darwin
+        with:
+          targets: aarch64-apple-darwin
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -35,29 +32,41 @@ jobs:
       - name: Install npm dependencies
         run: npm install
 
-      - name: Set up Python (via Miniconda)
-        uses: conda-incubator/setup-miniconda@v3
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          auto-activate-base: false
           python-version: ${{ env.PYTHON_VERSION }}
-          miniconda-version: "latest"
+          cache: 'pip'
 
       - name: Install Python dependencies
-        shell: bash -l {0}  # Ensure conda is available
         run: |
+          # Install project dependencies first (includes all required packages)
+          pip install -e .
+
           # Install PyInstaller
           pip install pyinstaller
-
-          # Install project dependencies (editable mode to include src/)
-          pip install -e .
 
           # Install macOS-specific dependencies
           pip install pyobjc-framework-Quartz pyobjc-framework-Cocoa
 
       - name: Build Python backend with PyInstaller
-        shell: bash -l {0}
         run: |
-          # Detect architecture
+          # Detect what architecture we're running on
+          echo "System info:"
+          uname -m
+          python -c "import platform; print(f'platform.machine() = {platform.machine()}')"
+
+          # Build Python backend (spec file auto-detects architecture)
+          pyinstaller src-tauri/bundle/handsi-backend.spec \
+            --distpath src-tauri/bin \
+            --workpath build/pyinstaller \
+            --clean
+
+          # Show what was created
+          echo "Contents of src-tauri/bin/:"
+          ls -lh src-tauri/bin/
+
+          # Determine expected name based on architecture
           ARCH=$(uname -m)
           if [ "$ARCH" = "arm64" ]; then
             TARGET_TRIPLE="aarch64-apple-darwin"
@@ -65,23 +74,29 @@ jobs:
             TARGET_TRIPLE="x86_64-apple-darwin"
           fi
 
-          echo "Building for architecture: $ARCH ($TARGET_TRIPLE)"
-
-          # Build Python backend
-          pyinstaller src-tauri/bundle/handsi-backend.spec \
-            --distpath src-tauri/bin \
-            --workpath build/pyinstaller \
-            --clean
-
-          # Verify binary was created
           BINARY_PATH="src-tauri/bin/handsi-backend-${TARGET_TRIPLE}"
-          if [ ! -f "$BINARY_PATH" ]; then
-            echo "Error: Binary not created at $BINARY_PATH"
-            exit 1
+
+          # Check if binary exists with correct name
+          if [ -f "$BINARY_PATH" ]; then
+            echo "✓ Binary found with correct name: $BINARY_PATH"
+          else
+            echo "❌ Binary not found at expected path: $BINARY_PATH"
+            echo "Checking for binary without suffix..."
+
+            if [ -f "src-tauri/bin/handsi-backend" ]; then
+              echo "Found handsi-backend without suffix, renaming..."
+              mv src-tauri/bin/handsi-backend "$BINARY_PATH"
+              echo "✓ Renamed to: $BINARY_PATH"
+            else
+              echo "Error: No binary found at all!"
+              exit 1
+            fi
           fi
 
-          ls -lh src-tauri/bin/
-          echo "Python backend built successfully: $BINARY_PATH"
+          # Make executable
+          chmod +x "$BINARY_PATH"
+
+          echo "✓ Python backend ready: $BINARY_PATH"
 
       - name: Build Tauri app and create release
         uses: tauri-apps/tauri-action@v0
