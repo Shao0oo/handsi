@@ -41,7 +41,6 @@ src-tauri/Cargo.lock
 
 # Node.js dependencies
 node_modules/ 
-package-lock.json
 
 # Build outputs
 dist/
