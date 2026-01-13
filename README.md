@@ -20,10 +20,10 @@ Handsi is a local, privacy-first gesture control system that tracks your hands v
 
 ## Features:
 
-- ✅ Real-time hand tracking (single webcam)
-- ✅ Gesture toggle: enable/disable control mode
-- ✅ Configurable gesture → action mapping
-- ✅ Actions:
+- Real-time hand tracking (single webcam)
+- Gesture toggle: enable/disable control mode
+- Configurable gesture → action mapping
+- Actions:
   - Mouse movement
   - Click and drag
   - Scroll (vertical/horizontal)
@@ -53,7 +53,7 @@ Handsi is a local, privacy-first gesture control system that tracks your hands v
 
 | Platform | Status | Notes |
 |----------|--------|-------|
-| **macOS** | ✅ Supported | Apple Silicon (M1/M2/M3) and Intel |
+| **macOS** | ✅ Supported | Apple Silicon (MX) and Intel |
 | **Linux** | ⏳ Planned | Future release |
 | **Windows** | ⏳ Planned | Future release |
 
