@@ -20,7 +20,7 @@ jobs:
             runner: macos-latest  # M1 runner
             arch: arm64
           - target: x86_64-apple-darwin
-            runner: macos-13  # Intel runner
+            runner: macos-15-intel  # Intel runner
             arch: x86_64
 
     steps:
@@ -43,12 +43,16 @@ jobs:
 
       - name: Set up Python
         uses: actions/setup-python@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
-
       - name: Install Python dependencies
         run: |
+          # Install project dependencies first (includes all required packages)
+          pip install -e .
+
           # Install project dependencies first (includes all required packages)
           pip install -e .
 
