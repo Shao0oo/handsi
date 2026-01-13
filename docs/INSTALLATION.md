@@ -12,8 +12,8 @@ See **[SETUP_TAURI.md](SETUP_TAURI.md)** for complete setup instructions.
 ```bash
 # 1. Clone the repository
 cd ~/Desktop
-git clone <repo-url> Contactless_Workspace
-cd Contactless_Workspace
+git clone https://github.com/Shao0oo/handsi.git handsi
+cd handsi
 
 # 2. Create conda environment
 conda create -n handsi python=3.11
@@ -38,8 +38,8 @@ If you only want CLI mode (background service, no GUI):
 1. **Clone the repository**
    ```bash
    cd ~/Desktop
-   git clone <repo-url> Contactless_Workspace
-   cd Contactless_Workspace
+   git clone https://github.com/Shao0oo/handsi.git handsi
+   cd handsi
    ```
 
 2. **Create conda environment**

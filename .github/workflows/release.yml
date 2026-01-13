@@ -1,0 +1,122 @@
+name: Release Handsi
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger on version tags like v0.1.0, v1.2.3
+  workflow_dispatch:  # Allow manual trigger
+
+env:
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  release-macos:
+    name: Build and Release (macOS)
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Rust dependencies
+        run: |
+          rustup target add aarch64-apple-darwin
+          rustup target add x86_64-apple-darwin
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install npm dependencies
+        run: npm install
+
+      - name: Set up Python (via Miniconda)
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          auto-activate-base: false
+          python-version: ${{ env.PYTHON_VERSION }}
+          miniconda-version: "latest"
+
+      - name: Install Python dependencies
+        shell: bash -l {0}  # Ensure conda is available
+        run: |
+          # Install PyInstaller
+          pip install pyinstaller
+
+          # Install project dependencies (editable mode to include src/)
+          pip install -e .
+
+          # Install macOS-specific dependencies
+          pip install pyobjc-framework-Quartz pyobjc-framework-Cocoa
+
+      - name: Build Python backend with PyInstaller
+        shell: bash -l {0}
+        run: |
+          # Detect architecture
+          ARCH=$(uname -m)
+          if [ "$ARCH" = "arm64" ]; then
+            TARGET_TRIPLE="aarch64-apple-darwin"
+          else
+            TARGET_TRIPLE="x86_64-apple-darwin"
+          fi
+
+          echo "Building for architecture: $ARCH ($TARGET_TRIPLE)"
+
+          # Build Python backend
+          pyinstaller src-tauri/bundle/handsi-backend.spec \
+            --distpath src-tauri/bin \
+            --workpath build/pyinstaller \
+            --clean
+
+          # Verify binary was created
+          BINARY_PATH="src-tauri/bin/handsi-backend-${TARGET_TRIPLE}"
+          if [ ! -f "$BINARY_PATH" ]; then
+            echo "Error: Binary not created at $BINARY_PATH"
+            exit 1
+          fi
+
+          ls -lh src-tauri/bin/
+          echo "Python backend built successfully: $BINARY_PATH"
+
+      - name: Build Tauri app and create release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Handsi ${{ github.ref_name }}'
+          releaseBody: |
+            ## Handsi ${{ github.ref_name }}
+
+            Contactless desktop control using hand tracking.
+
+            ### Installation (macOS)
+            1. Download the DMG file below
+            2. Open the DMG and drag Handsi.app to Applications
+            3. Launch Handsi from Applications
+            4. Grant Camera and Accessibility permissions when prompted
+
+            ### First Launch
+            macOS will show a security warning because the app is not code-signed.
+            **Workaround:** Right-click Handsi.app → Open (instead of double-click)
+
+            Or run in Terminal:
+            ```bash
+            xattr -cr /Applications/Handsi.app
+            open /Applications/Handsi.app
+            ```
+
+            ### System Requirements
+            - macOS 10.15+ (Catalina or newer)
+            - Webcam (built-in or external)
+            - Apple Silicon (M1/M2/M3) or Intel processor
+
+            🤖 Built with [Tauri](https://tauri.app) + Python + MediaPipe
+          releaseDraft: false
+          prerelease: false
+          args: --target aarch64-apple-darwin

@@ -4,6 +4,10 @@
 #
 # Creates a production-ready Tauri app bundle with Python backend.
 #
+# Usage:
+#   ./scripts/build-tauri.sh        # Local build (requires conda)
+#   CI=true ./scripts/build-tauri.sh  # CI build (skips conda checks)
+#
 
 set -e
 
@@ -11,22 +15,27 @@ echo "============================"
 echo "Handsi Tauri - Build Script"
 echo "============================"
 
-# Check if conda environment is active
-if [[ -z "${CONDA_DEFAULT_ENV}" ]]; then
-    echo "Error: Conda environment not active"
-    echo "Please run: conda activate handsi"
-    exit 1
-fi
-
-# Check if in handsi environment
-if [[ "${CONDA_DEFAULT_ENV}" != "handsi" ]]; then
-    echo "Warning: Not in 'handsi' conda environment"
-    echo "Current environment: ${CONDA_DEFAULT_ENV}"
-    read -p "Continue anyway? (y/n) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+# Skip conda checks in CI environment
+if [[ "${CI}" != "true" ]]; then
+    # Check if conda environment is active
+    if [[ -z "${CONDA_DEFAULT_ENV}" ]]; then
+        echo "Error: Conda environment not active"
+        echo "Please run: conda activate handsi"
         exit 1
     fi
+
+    # Check if in handsi environment
+    if [[ "${CONDA_DEFAULT_ENV}" != "handsi" ]]; then
+        echo "Warning: Not in 'handsi' conda environment"
+        echo "Current environment: ${CONDA_DEFAULT_ENV}"
+        read -p "Continue anyway? (y/n) " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            exit 1
+        fi
+    fi
+else
+    echo "Running in CI mode (skipping conda checks)"
 fi
 
 # Check if Node.js is installed
@@ -89,13 +98,37 @@ echo "Step 3: Building Tauri app..."
 npm run build
 
 echo ""
+echo "Step 4: Creating DMG..."
+APP_PATH="src-tauri/target/release/bundle/macos/Handsi.app"
+DMG_PATH="src-tauri/target/release/bundle/macos/Handsi_0.1.0_aarch64.dmg"
+
+if [ -f "$APP_PATH/Contents/MacOS/Handsi" ]; then
+    # Remove old DMG if exists
+    rm -f "$DMG_PATH"
+
+    # Create a simple DMG without fancy UI (no Finder permissions needed)
+    echo "Creating DMG from .app bundle..."
+    hdiutil create -volname "Handsi" \
+        -srcfolder "$APP_PATH" \
+        -ov -format UDZO \
+        "$DMG_PATH"
+
+    DMG_SIZE=$(du -h "$DMG_PATH" | cut -f1)
+    echo "✓ DMG created successfully ($DMG_SIZE)"
+else
+    echo "Warning: .app bundle not found at $APP_PATH"
+fi
+
+echo ""
 echo "============================"
 echo "Build complete!"
 echo "============================"
 echo ""
 echo "Output:"
-echo "  macOS: dist/Handsi.app"
-echo "  DMG:   dist/Handsi.dmg"
+echo "  .app: $APP_PATH"
+if [ -f "$DMG_PATH" ]; then
+    echo "  DMG:  $DMG_PATH"
+fi
 echo ""
-echo "To run: open dist/Handsi.app"
+echo "To run: open \"$APP_PATH\""
 echo ""

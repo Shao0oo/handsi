@@ -13,8 +13,8 @@ This guide covers macOS-specific setup for Handsi, including camera permissions.
 1. **Clone the repository**
    ```bash
    cd ~/Desktop
-   git clone <repo-url> Contactless_Workspace
-   cd Contactless_Workspace
+   git clone https://github.com/Shao0oo/handsi.git handsi
+   cd handsi
    ```
 
 2. **Create conda environment**
