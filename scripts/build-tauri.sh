@@ -4,6 +4,10 @@
 #
 # Creates a production-ready Tauri app bundle with Python backend.
 #
+# Usage:
+#   ./scripts/build-tauri.sh        # Local build (requires conda)
+#   CI=true ./scripts/build-tauri.sh  # CI build (skips conda checks)
+#
 
 set -e
 
@@ -11,22 +15,27 @@ echo "============================"
 echo "Handsi Tauri - Build Script"
 echo "============================"
 
-# Check if conda environment is active
-if [[ -z "${CONDA_DEFAULT_ENV}" ]]; then
-    echo "Error: Conda environment not active"
-    echo "Please run: conda activate handsi"
-    exit 1
-fi
-
-# Check if in handsi environment
-if [[ "${CONDA_DEFAULT_ENV}" != "handsi" ]]; then
-    echo "Warning: Not in 'handsi' conda environment"
-    echo "Current environment: ${CONDA_DEFAULT_ENV}"
-    read -p "Continue anyway? (y/n) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+# Skip conda checks in CI environment
+if [[ "${CI}" != "true" ]]; then
+    # Check if conda environment is active
+    if [[ -z "${CONDA_DEFAULT_ENV}" ]]; then
+        echo "Error: Conda environment not active"
+        echo "Please run: conda activate handsi"
         exit 1
     fi
+
+    # Check if in handsi environment
+    if [[ "${CONDA_DEFAULT_ENV}" != "handsi" ]]; then
+        echo "Warning: Not in 'handsi' conda environment"
+        echo "Current environment: ${CONDA_DEFAULT_ENV}"
+        read -p "Continue anyway? (y/n) " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            exit 1
+        fi
+    fi
+else
+    echo "Running in CI mode (skipping conda checks)"
 fi
 
 # Check if Node.js is installed
