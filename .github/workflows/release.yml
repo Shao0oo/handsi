@@ -11,8 +11,17 @@ env:
 
 jobs:
   release-macos:
-    name: Build and Release (macOS)
-    runs-on: macos-latest  # GitHub now uses M1 runners (aarch64)
+    name: Build and Release (macOS ${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            runner: macos-latest  # M1 runner
+            arch: arm64
+          - target: x86_64-apple-darwin
+            runner: macos-13  # Intel runner
+            arch: x86_64
 
     steps:
       - name: Checkout code
@@ -21,7 +30,7 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-darwin
+          targets: ${{ matrix.target }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -51,52 +60,36 @@ jobs:
 
       - name: Build Python backend with PyInstaller
         run: |
-          # Detect what architecture we're running on
-          echo "System info:"
-          uname -m
-          python -c "import platform; print(f'platform.machine() = {platform.machine()}')"
+          echo "Building Python backend for ${{ matrix.target }}..."
+          echo "System architecture: $(uname -m)"
+          python -c "import platform; print(f'Python platform: {platform.machine()}')"
 
-          # Build Python backend (spec file auto-detects architecture)
+          # Build Python backend (PyInstaller will create native binary for this architecture)
           pyinstaller src-tauri/bundle/handsi-backend.spec \
             --distpath src-tauri/bin \
             --workpath build/pyinstaller \
             --clean
 
-          # Show what was created
+          # Verify the binary was created with the correct name
+          EXPECTED_BINARY="src-tauri/bin/handsi-backend-${{ matrix.target }}"
+
+          if [ -f "$EXPECTED_BINARY" ]; then
+            echo "✓ Binary found: $EXPECTED_BINARY"
+          elif [ -f "src-tauri/bin/handsi-backend" ]; then
+            echo "Binary created without suffix, renaming..."
+            mv src-tauri/bin/handsi-backend "$EXPECTED_BINARY"
+          else
+            echo "❌ Error: Binary not found!"
+            ls -la src-tauri/bin/
+            exit 1
+          fi
+
+          chmod +x "$EXPECTED_BINARY"
+
           echo "Contents of src-tauri/bin/:"
           ls -lh src-tauri/bin/
 
-          # Determine expected name based on architecture
-          ARCH=$(uname -m)
-          if [ "$ARCH" = "arm64" ]; then
-            TARGET_TRIPLE="aarch64-apple-darwin"
-          else
-            TARGET_TRIPLE="x86_64-apple-darwin"
-          fi
-
-          BINARY_PATH="src-tauri/bin/handsi-backend-${TARGET_TRIPLE}"
-
-          # Check if binary exists with correct name
-          if [ -f "$BINARY_PATH" ]; then
-            echo "✓ Binary found with correct name: $BINARY_PATH"
-          else
-            echo "❌ Binary not found at expected path: $BINARY_PATH"
-            echo "Checking for binary without suffix..."
-
-            if [ -f "src-tauri/bin/handsi-backend" ]; then
-              echo "Found handsi-backend without suffix, renaming..."
-              mv src-tauri/bin/handsi-backend "$BINARY_PATH"
-              echo "✓ Renamed to: $BINARY_PATH"
-            else
-              echo "Error: No binary found at all!"
-              exit 1
-            fi
-          fi
-
-          # Make executable
-          chmod +x "$BINARY_PATH"
-
-          echo "✓ Python backend ready: $BINARY_PATH"
+          echo "✓ Python backend ready: $EXPECTED_BINARY"
 
       - name: Build Tauri app and create release
         uses: tauri-apps/tauri-action@v0
@@ -134,4 +127,4 @@ jobs:
             🤖 Built with [Tauri](https://tauri.app) + Python + MediaPipe
           releaseDraft: false
           prerelease: false
-          args: --target aarch64-apple-darwin
+          args: --target ${{ matrix.target }}
