@@ -89,13 +89,37 @@ echo "Step 3: Building Tauri app..."
 npm run build
 
 echo ""
+echo "Step 4: Creating DMG..."
+APP_PATH="src-tauri/target/release/bundle/macos/Handsi.app"
+DMG_PATH="src-tauri/target/release/bundle/macos/Handsi_0.1.0_aarch64.dmg"
+
+if [ -f "$APP_PATH/Contents/MacOS/Handsi" ]; then
+    # Remove old DMG if exists
+    rm -f "$DMG_PATH"
+
+    # Create a simple DMG without fancy UI (no Finder permissions needed)
+    echo "Creating DMG from .app bundle..."
+    hdiutil create -volname "Handsi" \
+        -srcfolder "$APP_PATH" \
+        -ov -format UDZO \
+        "$DMG_PATH"
+
+    DMG_SIZE=$(du -h "$DMG_PATH" | cut -f1)
+    echo "✓ DMG created successfully ($DMG_SIZE)"
+else
+    echo "Warning: .app bundle not found at $APP_PATH"
+fi
+
+echo ""
 echo "============================"
 echo "Build complete!"
 echo "============================"
 echo ""
 echo "Output:"
-echo "  macOS: dist/Handsi.app"
-echo "  DMG:   dist/Handsi.dmg"
+echo "  .app: $APP_PATH"
+if [ -f "$DMG_PATH" ]; then
+    echo "  DMG:  $DMG_PATH"
+fi
 echo ""
-echo "To run: open dist/Handsi.app"
+echo "To run: open \"$APP_PATH\""
 echo ""

@@ -1,189 +1,166 @@
-# Building and Distributing Handsi Native App
+# Building and Installing Handsi MVP
 
-**⚠️ IMPORTANT: Handsi now uses Tauri instead of PyInstaller!**
+**Current Status:** macOS only - Linux and Windows are not yet implemented.
 
-This guide covers the **new Tauri build system**. For the old PyInstaller method (deprecated), see the end of this document.
+This guide covers building and installing the macOS MVP using Tauri.
 
 ---
 
-## Building with Tauri (Recommended)
+## Prerequisites
 
-### Prerequisites
+1. **Development environment setup:**
+   - See [SETUP_TAURI.md](SETUP_TAURI.md) for full details
+   - Install Rust: `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
+   - Install Node.js: `brew install node`
+   - Activate conda: `conda activate handsi`
 
-See [SETUP_TAURI.md](SETUP_TAURI.md) for full setup instructions.
+2. **Install Tauri CLI:**
+   ```bash
+   chmod +x scripts/*.sh
+   ./scripts/setup-tauri.sh
+   ```
 
-**Quick setup:**
+---
+
+## Building the App (macOS)
+
+### Step 1: Run the Build Script
+
 ```bash
 conda activate handsi
-chmod +x scripts/*.sh
-./scripts/setup-tauri.sh
-```
-
-### Build for Your Platform
-
-```bash
-# Build Tauri app for current platform
 ./scripts/build-tauri.sh
-
-# Output will be in dist/ directory:
-# - macOS: dist/Handsi.app + dist/Handsi.dmg
-# - Windows: dist/Handsi.exe (if built on Windows)
-# - Linux: dist/handsi (if built on Linux)
 ```
 
-## Platform-Specific Notes
+This creates:
+- **App Bundle:** `src-tauri/target/release/bundle/macos/Handsi.app`
+- **DMG Installer:** `src-tauri/target/release/bundle/dmg/Handsi_<version>_<arch>.dmg`
 
-### macOS
+### Step 2: Verify Build
 
-**Output:** `dist/Handsi.app`
-
-**To run:**
 ```bash
-open dist/Handsi.app
+# Check app bundle
+ls -la src-tauri/target/release/bundle/macos/Handsi.app
+
+# Check DMG
+ls -la src-tauri/target/release/bundle/dmg/
 ```
 
-**To create DMG installer:**
+---
+
+## Installing to /Applications
+
+### Option 1: Using DMG (Recommended)
+
+1. Open the DMG:
+   ```bash
+   open src-tauri/target/release/bundle/dmg/Handsi_*.dmg
+   ```
+
+2. Drag **Handsi.app** to the **Applications** folder
+
+3. Eject the DMG
+
+4. Launch:
+   ```bash
+   open /Applications/Handsi.app
+   ```
+
+### Option 2: Manual Copy
+
 ```bash
-# Install create-dmg
-brew install create-dmg
+# Copy to /Applications
+cp -r src-tauri/target/release/bundle/macos/Handsi.app /Applications/
 
-# Create DMG
-create-dmg \
-  --volname "Handsi Installer" \
-  --window-pos 200 120 \
-  --window-size 600 400 \
-  --icon-size 100 \
-  --icon "Handsi.app" 175 120 \
-  --hide-extension "Handsi.app" \
-  --app-drop-link 425 120 \
-  "Handsi-1.0.0.dmg" \
-  "dist/"
+# Launch
+open /Applications/Handsi.app
 ```
 
-**Permissions on First Launch:**
-The app will request two permissions on first launch:
-1. **Camera** - For hand tracking (required)
-2. **Accessibility** - For mouse/keyboard/desktop switching (required)
+---
 
-**Note:** If you rebuild the app, see the "Permission Reset Warning" section below.
+## First Launch: Required Permissions
 
-## ⚠️ Permission Reset Warning (macOS)
+macOS will prompt for two permissions on first launch:
 
-**IMPORTANT:** Every time you rebuild the app with `pyinstaller handsi.spec`, macOS treats it as a **completely new app** with a different code signature. All permissions are reset and must be re-granted.
+### 1. Camera Access (Required)
+- **Purpose:** Hand tracking via webcam
+- **Location:** System Settings → Privacy & Security → Camera
+- **Action:** Enable **Handsi.app** ✓
 
-### Symptoms of Stale Permissions
+### 2. Accessibility Access (Required)
+- **Purpose:** Mouse/keyboard control and desktop switching
+- **Location:** System Settings → Privacy & Security → Accessibility
+- **Action:**
+  1. Click lock icon to unlock
+  2. Click **"+"** and add `/Applications/Handsi.app`
+  3. Enable **Handsi.app** ✓
 
-After rebuilding, you may experience:
-- ✅ Thumbs up/down work (internal state changes only)
-- ❌ Mouse movement doesn't work (cursor doesn't move)
-- ❌ Click/scroll/swipe don't work (no system control)
-- ⚠️ Logs show "Action executed" but nothing happens on screen
+**⚠️ Both permissions are required for Handsi to function.**
 
-This means macOS is **silently blocking** the app because it has stale/missing permissions.
-
-### How to Fix
-
-**Step 1: Remove old permissions**
-1. Open: **System Settings → Privacy & Security → Accessibility**
-2. Find "Handsi" or "Handsi.app" in the list
-3. Click the **(-) button** to remove it
-4. This clears the stale permission entry
-
-**Step 2: Re-grant permissions**
-1. Launch the rebuilt app: `open dist/Handsi.app`
-2. macOS will automatically prompt for:
-   - **Accessibility** permission (for mouse/keyboard/desktop switching)
-   - **Camera** permission (for hand tracking)
-3. Click **"Allow"** or **"OK"** for each prompt
-
-**Step 3: Verify**
-Check these settings are enabled:
-- **System Settings → Privacy & Security → Accessibility**: Handsi.app ✓
-- **System Settings → Privacy & Security → Camera**: Handsi.app ✓
-
-**Note:** Desktop switching (swipe gestures) now uses the same Accessibility permission as mouse/keyboard control, so no separate System Events permission is needed.
-
-### When This Matters
-
-- ✅ After rebuilding with `pyinstaller handsi.spec`
-- ✅ After cleaning and rebuilding (`pyinstaller --clean handsi.spec`)
-- ❌ NOT needed for development mode (`handsi --app` via Terminal)
-
-**Development Tip:** Use `handsi --app` during development to avoid permission resets across code changes.
-
-### Windows
-
-**Output:** `dist/Handsi/Handsi.exe` (directory)
-
-**To run:**
-```cmd
-dist\Handsi\Handsi.exe
-```
-
-**To create installer:**
-```bash
-# Install NSIS (Nullsoft Scriptable Install System)
-# Download from: https://nsis.sourceforge.io/
-
-# Create installer script (example):
-# See: https://nsis.sourceforge.io/Examples
-```
-
-### Linux
-
-**Output:** `dist/handsi/handsi` (directory)
-
-**To run:**
-```bash
-chmod +x dist/handsi/handsi
-./dist/handsi/handsi
-```
-
-**To create .deb package:**
-```bash
-# Install fpm
-gem install fpm
-
-# Create .deb
-fpm -s dir -t deb -n handsi -v 1.0.0 \
-  --prefix /opt/handsi \
-  dist/handsi/=/opt/handsi
-```
-
-**To create .rpm package:**
-```bash
-# Create .rpm
-fpm -s dir -t rpm -n handsi -v 1.0.0 \
-  --prefix /opt/handsi \
-  dist/handsi/=/opt/handsi
-```
-
+---
 
 ## Troubleshooting
 
-**"App is damaged and can't be opened" (macOS)**
+### "App is damaged and can't be opened"
+
+The app is not code-signed. Remove quarantine:
+
 ```bash
-# Remove quarantine attribute
-xattr -cr dist/Handsi.app
+xattr -cr /Applications/Handsi.app
+open /Applications/Handsi.app
 ```
 
-**Missing dependencies error**
-- Make sure you built with PyInstaller, not just copying Python files
-- Check that `handsi.spec` includes all data files
+### Camera/Actions Not Working
 
-**WebEngine not loading**
-- Verify PySide6 was installed correctly
-- Check that `qwebchannel.js` is accessible (bundled in Qt)
+**Check permissions:**
+1. System Settings → Privacy & Security → Camera → Handsi.app ✓
+2. System Settings → Privacy & Security → Accessibility → Handsi.app ✓
+3. Restart Handsi
 
-**Camera not working**
-- Ensure camera permissions are granted
-- Check system camera access settings
+### Permissions Reset After Rebuilding
 
-## Modifying the UI
+Each rebuild creates a new signature, resetting permissions:
 
-The UI files are located in `src/handsi/ui/web/`:
-- `index.html` - Structure
-- `styles.css` - Styling
-- `app.js` - Logic
+1. **Remove old permission:**
+   - System Settings → Privacy & Security → Accessibility
+   - Remove **Handsi.app** (click **"-"**)
 
-After modifying, rebuild with PyInstaller to bundle the changes.
+2. **Re-grant permissions:**
+   ```bash
+   open /Applications/Handsi.app
+   ```
+   Allow Camera and Accessibility when prompted.
+
+---
+
+## Uninstalling
+
+```bash
+# Remove app
+rm -rf /Applications/Handsi.app
+
+# Remove user data (optional)
+rm -rf ~/Library/Application\ Support/com.handsi.app
+```
+
+---
+
+## Platform Support
+
+| Platform | Status | Notes |
+|----------|--------|-------|
+| **macOS** | ✅ **Implemented** | Full MVP functionality |
+| **Linux** | ❌ Not Implemented | Planned for future release |
+| **Windows** | ❌ Not Implemented | Planned for future release |
+
+---
+
+## Development Mode (No Installation)
+
+Run directly from source without building:
+
+```bash
+conda activate handsi
+python -m handsi.main --help
+```
+
+No permission resets between code changes.

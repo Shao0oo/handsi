@@ -2,19 +2,19 @@ camera:
   device_id: 0
   resolution: [640, 480]
   # Adaptive FPS ranges
-  fps_idle: 10         # Hz when no hands detected
+  fps_idle: 2         # Hz when no hands detected
   fps_attentive: 24   # Hz when hands present, no gesture
   fps_active: 60      # Hz during/after gesture execution
 
 tracking:
   max_hands: 2
-  model_complexity: 1      # 0=lite (faster), 1=full (more accurate). Use 0 for faster startup (~5s vs ~15s)
+  model_complexity: 0      # 0=lite (faster), 1=full (more accurate). Use 0 for faster startup (~5s vs ~15s)
   min_detection_confidence: 0.5
   min_tracking_confidence: 0.5
   # Activity level transitions
   idle_timeout: 3.0        # seconds without hands → IDLE
   attentive_timeout: 2.0   # seconds without gesture → ATTENTIVE
-  fps_idle: 10         # Hz when no hands detected
+  fps_idle: 2         # Hz when no hands detected
   fps_attentive: 24   # Hz when hands present, no gesture
   fps_active: 60      # Hz during/after gesture execution
 
@@ -31,18 +31,17 @@ gestures:
   # Hand size = distance from wrist to middle finger MCP knuckle
   # This makes gestures work consistently regardless of distance from camera
 
-  pinch_threshold: 0.2           # max distance for pinch (15% of hand size)
+  pinch_threshold: 0.25          # max distance for pinch (15% of hand size)
   fist_threshold: 1.0            # max fingertip distance from wrist (65% of hand size)
   open_hand_distance_threshold: 0.3   # min distance between thumb and fingers
   open_hand_spread_threshold: 0.1     # min spread between adjacent fingers (25% of hand size)
-  swipe_velocity_threshold: 4.0        # min horizontal velocity (80% of hand size per second)
+  swipe_velocity_threshold: 5.0        # min horizontal velocity (80% of hand size per second)
   thumbs_vertical_threshold: 1.3       # min vertical distance for thumbs up/down (130% of hand size)
   confidence_threshold: 0.7            # min confidence to confirm gesture
 
 actions:
   # Gesture → Action mappings (fully modular - change mappings here, no code changes needed)
   mappings:
-    # Phase 1: Implemented gestures with actions
     open_hand: mouse_move           # Continuous: hand position controls cursor
     index_pinch: click               # Single: left click
     two_finger_pinch: double_click
@@ -50,11 +49,9 @@ actions:
     swipe: switch_desktop            # Swipe in any direction (direction passed via metadata)
     thumbs_up: enable_latch          # Enable gesture control (latch ON)
     thumbs_down: disable_latch       # Disable gesture control (latch OFF)
-    # fist: continuous_scroll          # Continuous: hand vertical movement controls scrolling
     two_fingers_point: continuous_scroll
     two_hands_pinch: continuous_zoom
     ring_pinch: continuous_volume
-    # thumbs_up: toggle_latch
 
   # Mouse movement settings
   mouse:
@@ -63,24 +60,24 @@ actions:
     dead_zone: 0.015                # Ignore movements smaller than this (hand jitter)
     dead_zone_curve: 3.0            # Power curve for smooth dead zone (1.0=linear, 2.0=quadratic, 3.0=cubic)
     dead_zone_min_damping: 0.01      # Minimum damping factor at zero movement (0.1 = 10% of input)
-    sensitivity: 0.7                # Movement multiplier (higher = faster)
+    sensitivity: 0.5                # Movement multiplier (higher = faster)
     interpolation_rate: 60.0        # Hz - cursor interpolation update rate (higher = smoother but more CPU)
 
   # Continuous scroll settings (fist gesture)
   scroll:
-    sensitivity: 5.0                # Scroll speed multiplier (higher = faster scroll)
+    sensitivity: 6.0                # Scroll speed multiplier (higher = faster scroll)
     dead_zone: 0.02                 # Ignore hand movements smaller than 1% of screen height
     dead_zone_curve: 3.0            # Power curve for smooth dead zone (1.0=linear, 2.0=quadratic, 3.0=cubic)
     dead_zone_min_damping: 0.01      # Minimum damping factor at zero movement (0.1 = 10% of input)
-    max_scroll_per_frame: 500       # Clamp maximum scroll amount per frame (pixels)
+    max_scroll_per_frame: 1000       # Clamp maximum scroll amount per frame (pixels)
     invert: true                    # Invert scroll (only for vertical scroll)
     momentum_enabled: true          # Enable kinetic scrolling (momentum continues after gesture ends)
-    momentum_decay: 0.8             # Velocity decay per frame (0.95 = 5% reduction, higher = longer momentum)
-    momentum_min_velocity: 150.0    # Min velocity to trigger momentum (pixels/frame)
-    momentum_stop_threshold: 100.0  # Stop momentum when velocity drops below this
+    momentum_decay: 0.9             # Velocity decay per frame (0.95 = 5% reduction, higher = longer momentum)
+    momentum_min_velocity: 100.0    # Min velocity to trigger momentum (pixels/frame)
+    momentum_stop_threshold: 30.0  # Stop momentum when velocity drops below this
 
   zoom:
-    sensitivity: 1.0      # Higher = faster zoom (more frequent steps)
+    sensitivity: 0.5      # Higher = faster zoom (more frequent steps)
     dead_zone: 0.02       # Ignore small hand movements
     dead_zone_curve: 2.0  # Smooth dead zone transition
     dead_zone_min_damping: 0.1
@@ -88,7 +85,7 @@ actions:
   # Volume control settings
   volume:
     mirror_x: true                  # Mirror X-coordinate (flip horizontally) for natural camera movement
-    sensitivity: 3.0                # Higher = faster volume changes (more frequent steps)
+    sensitivity: 6.0                # Higher = faster volume changes (more frequent steps)
     dead_zone: 0.02                 # Ignore small hand movements
     dead_zone_curve: 2.0            # Power curve for smooth dead zone (1.0=linear, 2.0=quadratic, 3.0=cubic)
     dead_zone_min_damping: 0.1      # Minimum damping factor at zero movement
