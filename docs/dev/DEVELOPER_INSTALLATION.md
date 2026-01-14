@@ -236,8 +236,19 @@ Default config: [`config/default.yaml`](../../config/default.yaml)
 **Never edit** `config/default.yaml` directly (it's hand-tuned).
 
 To override settings:
-- Use the GUI Settings panel (changes auto-save)
-- Or create `~/.handsi/config.yaml` (user overrides)
+- Use the GUI Settings panel (changes auto-save to `~/.handsi/config.yaml`)
+- Or manually edit `~/.handsi/config.yaml` (user overrides)
+
+### File Locations
+
+Handsi stores user data in `~/.handsi/`:
+```
+~/.handsi/
+├── config.yaml         # User settings (overrides defaults)
+├── logs/              # Application logs
+│   └── handsi_ipc.log # IPC communication log
+└── matplotlib/        # Matplotlib cache (for performance)
+```
 
 ---
 

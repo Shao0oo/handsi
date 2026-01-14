@@ -89,8 +89,8 @@ The following steps should be done **preferably before reinstallation**.
 # Remove the app
 rm -rf /Applications/Handsi.app
 
-# (Optional) Remove user data
-rm -rf ~/Library/Application\ Support/com.handsi.app
+# (Optional) Remove user data and settings
+rm -rf ~/.handsi
 ```
 
 ---
