@@ -83,14 +83,25 @@ The following steps should be done **preferably before reinstallation**.
 
 ---
 
+## Configuration & Settings
+
+Your settings are automatically saved to `~/.handsi/config.yaml`
+
+- **Settings persist** across app updates and restarts
+- **Edit settings** through the app's Settings panel (auto-saves)
+- **Manual editing:** You can also edit `~/.handsi/config.yaml` directly
+- **Reset to defaults:** Delete `~/.handsi/config.yaml` and restart the app
+
+---
+
 ## Uninstalling
 
 ```bash
 # Remove the app
 rm -rf /Applications/Handsi.app
 
-# (Optional) Remove user data
-rm -rf ~/Library/Application\ Support/com.handsi.app
+# (Optional) Remove user data and settings
+rm -rf ~/.handsi
 ```
 
 ---

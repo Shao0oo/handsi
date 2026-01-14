@@ -283,11 +283,10 @@ def get_user_config_path() -> Path:
     Get path to user configuration file.
 
     Returns:
-        Path to config/user_config/config.yaml (in project root)
+        Path to ~/.handsi/config.yaml
     """
-    # Get project root (assumes this file is in src/handsi/core/)
-    project_root = Path(__file__).parent.parent.parent.parent
-    return project_root / "config" / "user_config" / "config.yaml"
+    # Use the same approach as IPC logs - just Path.home()!
+    return Path.home() / ".handsi" / "config.yaml"
 
 
 def save_user_config(config: HandsiConfig) -> None:
