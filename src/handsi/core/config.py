@@ -47,6 +47,7 @@ class GestureConfig(BaseModel):
     """Gesture recognition settings."""
     debounce_ms: int = Field(default=300, ge=0, le=2000)
     latch_cooldown_ms: int = Field(default=500, ge=0, le=2000)
+    latch_active: bool = Field(default=True)  # Start with gesture control enabled
     smoothing_window: int = Field(default=3, ge=1, le=10)
     consistency_threshold: float = Field(default=0.6, ge=0.0, le=1.0)
 
@@ -138,6 +139,14 @@ class MacOSConfig(BaseModel):
     zoom_step: float = Field(default=0.1, ge=0.01, le=1.0)
 
 
+class StillModeConfig(BaseModel):
+    """Still Mode settings for presentation/focused use."""
+    enabled: bool = Field(default=False)
+    disabled_actions: list[str] = Field(
+        default_factory=lambda: ["mouse_move", "continuous_zoom", "double_click", "swipe"]
+    )
+
+
 class HandsiConfig(BaseModel):
     """Root configuration model."""
     camera: CameraConfig = Field(default_factory=CameraConfig)
@@ -146,6 +155,7 @@ class HandsiConfig(BaseModel):
     actions: ActionConfig = Field(default_factory=ActionConfig)
     system: SystemConfig = Field(default_factory=SystemConfig)
     macos: MacOSConfig = Field(default_factory=MacOSConfig)
+    still_mode: StillModeConfig = Field(default_factory=StillModeConfig)
 
 
 def clamp_nested_dict(data: dict, model_class) -> dict:

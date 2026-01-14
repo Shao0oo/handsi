@@ -19,7 +19,7 @@ camera:
 
 tracking:
   max_hands: 2
-  model_complexity: 0      # 0=lite (faster), 1=full (more accurate). Use 0 for faster startup (~5s vs ~15s)
+  model_complexity: 1      # 0=lite (faster), 1=full (more accurate). Use 0 for faster startup (~5s vs ~15s)
   min_detection_confidence: 0.5
   min_tracking_confidence: 0.5
   # Activity level transitions
@@ -34,6 +34,7 @@ gestures:
   debounce_ms: 500          # ignore same gesture for 300ms after firing
   # Latch: cooldown for activation gesture
   latch_cooldown_ms: 500    # prevent rapid latch on/off
+  latch_active: true         # start with gesture control enabled
   # Temporal smoothing
   smoothing_window: 3       # frames to average over
   consistency_threshold: 0.6  # fraction of frames that must agree (0-1)
