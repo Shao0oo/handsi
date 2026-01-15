@@ -12,6 +12,8 @@ Handsi is a local, privacy-first gesture control system that tracks your hands v
 
 **[Installation Guide](INSTALLATION.md)** - Download the DMG and start using Handsi in 2 minutes
 
+**Connecting might take a minute** - initializing backend takes a long time.
+
 #### For Developers:
 
 **[Developer Installation](docs/dev/DEVELOPER_INSTALLATION.md)** - Build from source or contribute

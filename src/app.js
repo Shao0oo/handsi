@@ -868,9 +868,9 @@ function startStatusPolling() {
         const result = await getStatus();
         if (result.success) {
             updateStatusUI(result.data);
-            setConnectionStatus(true);
+            setConnectionStatus('connected');
         } else {
-            setConnectionStatus(false);
+            setConnectionStatus('disconnected');
         }
     }, STATUS_POLL_INTERVAL);
 }
@@ -931,7 +931,38 @@ async function init() {
     console.log('[JS] Loading initial status...');
     setConnectionStatus('connecting');  // Show connecting state immediately
 
+    // Show looping "Connecting..." messages if it takes too long
+    let connectingMessageInterval = null;
+    const connectingMessages = [
+        'Loading MediaPipe model...     (this may take a minute)',
+        'Instantiating model...         (this may take a minute)',
+        'Connecting to backend...       (this may take a minute)',
+        'Reading configuration...       (this may take a minute)',
+        'Initializing camera...         (this may take a minute)',
+        'Preparing gestures...          (this may take a minute)'
+    ];
+    let messageIndex = 0;
+
+    const connectingTimeout = setTimeout(() => {
+        // Show first message immediately
+        elements.controlMessage.textContent = connectingMessages[messageIndex];
+        elements.controlMessage.className = 'message info';
+
+        // Loop through messages every 2 seconds
+        connectingMessageInterval = setInterval(() => {
+            messageIndex = (messageIndex + 1) % connectingMessages.length;
+            elements.controlMessage.textContent = connectingMessages[messageIndex];
+        }, 6000);
+    }, 1);
+
     const statusResult = await getStatus();
+    clearTimeout(connectingTimeout);
+    if (connectingMessageInterval) {
+        clearInterval(connectingMessageInterval);
+    }
+    // Clear connecting message if it was shown
+    elements.controlMessage.className = 'message';
+    elements.controlMessage.textContent = '';
     console.log('[JS] Initial status result:', statusResult);
     if (statusResult.success) {
         updateStatusUI(statusResult.data);
