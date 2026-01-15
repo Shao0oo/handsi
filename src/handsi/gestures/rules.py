@@ -292,7 +292,7 @@ class GestureDetector:
         index_tip = lm[8]
         distance = self._normalized_distance(thumb_tip, index_tip, hand_scale)
 
-        log_info(f"Index pinch distance: {distance:.2f} (threshold: {self.pinch_threshold})")
+        # log_info(f"Index pinch distance: {distance:.2f} (threshold: {self.pinch_threshold})")
         if distance >= self.pinch_threshold:
             # log_info(f"Index pinch failed: distance {distance:.2f} >= threshold {self.pinch_threshold}")
             return None
@@ -304,7 +304,7 @@ class GestureDetector:
 
         # Require at least 2 of 3 other fingers to be extended
         if extended_count < 3:
-            log_info(f"Index pinch failed: {extended_count} fingers extended, expected at least 3")
+            # log_info(f"Index pinch failed: {extended_count} fingers extended, expected at least 3")
             return None
 
         confidence = 1.0 - distance
