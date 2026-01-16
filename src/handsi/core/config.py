@@ -5,12 +5,13 @@ Loads YAML config files and validates them against type-safe models.
 """
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Union
 
 import yaml
 from pydantic import BaseModel, Field, field_validator
 
 from handsi.core.logging import log_error, log_info
+from handsi.core.types import ActionName
 
 
 class CameraConfig(BaseModel):
@@ -106,11 +107,32 @@ class VolumeConfig(BaseModel):
 
 class ActionConfig(BaseModel):
     """Action execution settings."""
-    mappings: dict[str, str] = Field(default_factory=dict)
+    mappings: dict[str, Union[str, ActionName]] = Field(default_factory=dict)
     mouse: MouseConfig = Field(default_factory=MouseConfig)
     scroll: ScrollConfig = Field(default_factory=ScrollConfig)
     zoom: ZoomConfig = Field(default_factory=ZoomConfig)
     volume: VolumeConfig = Field(default_factory=VolumeConfig)
+
+    @field_validator("mappings")
+    @classmethod
+    def validate_mappings(cls, v: dict[str, Union[str, ActionName]]) -> dict[str, ActionName]:
+        """Validate and convert action mappings to ActionName enum."""
+        validated = {}
+        for gesture, action in v.items():
+            if isinstance(action, ActionName):
+                validated[gesture] = action
+            elif isinstance(action, str):
+                try:
+                    validated[gesture] = ActionName(action)
+                except ValueError:
+                    valid_actions = [a.value for a in ActionName]
+                    raise ValueError(
+                        f"Invalid action '{action}' for gesture '{gesture}'. "
+                        f"Valid actions: {valid_actions}"
+                    )
+            else:
+                raise ValueError(f"Action must be string or ActionName, got {type(action)}")
+        return validated
 
 
 class SystemConfig(BaseModel):
@@ -142,9 +164,34 @@ class MacOSConfig(BaseModel):
 class StillModeConfig(BaseModel):
     """Still Mode settings for presentation/focused use."""
     enabled: bool = Field(default=False)
-    disabled_actions: list[str] = Field(
-        default_factory=lambda: ["mouse_move", "continuous_zoom", "double_click", "swipe"]
+    disabled_actions: list[Union[str, ActionName]] = Field(
+        default_factory=lambda: [
+            ActionName.MOUSE_MOVE,
+            ActionName.CONTINUOUS_ZOOM,
+            ActionName.DOUBLE_CLICK,
+        ]
     )
+
+    @field_validator("disabled_actions")
+    @classmethod
+    def validate_disabled_actions(cls, v: list[Union[str, ActionName]]) -> list[ActionName]:
+        """Validate and convert disabled actions to ActionName enum."""
+        validated = []
+        for action in v:
+            if isinstance(action, ActionName):
+                validated.append(action)
+            elif isinstance(action, str):
+                try:
+                    validated.append(ActionName(action))
+                except ValueError:
+                    valid_actions = [a.value for a in ActionName]
+                    raise ValueError(
+                        f"Invalid action '{action}' in disabled_actions. "
+                        f"Valid actions: {valid_actions}"
+                    )
+            else:
+                raise ValueError(f"Action must be string or ActionName, got {type(action)}")
+        return validated
 
 
 class HandsiConfig(BaseModel):
@@ -320,20 +367,22 @@ def save_user_config(config: HandsiConfig) -> None:
         # Convert config to dict
         config_dict = config.model_dump()
 
-        # Convert tuples to lists for YAML serialization
-        # yaml.safe_load() cannot handle Python-specific tuple tags
-        def convert_tuples_to_lists(obj):
-            """Recursively convert tuples to lists for YAML compatibility."""
+        # Convert tuples to lists and enums to strings for YAML serialization
+        # yaml.safe_load() cannot handle Python-specific tuple tags or enums
+        def convert_for_yaml(obj):
+            """Recursively convert tuples to lists and enums to strings for YAML compatibility."""
             if isinstance(obj, dict):
-                return {k: convert_tuples_to_lists(v) for k, v in obj.items()}
+                return {k: convert_for_yaml(v) for k, v in obj.items()}
             elif isinstance(obj, tuple):
                 return list(obj)
             elif isinstance(obj, list):
-                return [convert_tuples_to_lists(item) for item in obj]
+                return [convert_for_yaml(item) for item in obj]
+            elif isinstance(obj, ActionName):
+                return obj.value
             else:
                 return obj
 
-        config_dict = convert_tuples_to_lists(config_dict)
+        config_dict = convert_for_yaml(config_dict)
 
         # Write to YAML
         with open(user_config_path, "w") as f:

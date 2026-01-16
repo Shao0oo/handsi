@@ -9,11 +9,12 @@ This is the slim orchestrator that delegates to specialized handler classes.
 
 import threading
 import time
-from typing import Dict, Optional
+from typing import Dict, Optional, Union
 
 from handsi.actions.adapters.base import ActionAdapter
 from handsi.actions.adapters.factory import AdapterFactory
 from handsi.actions.handlers.base import ActionHandler
+from handsi.core.types import ActionName
 from handsi.actions.handlers.click import ClickHandler, DoubleClickHandler, RightClickHandler
 from handsi.actions.handlers.desktop import SwitchDesktopHandler
 from handsi.actions.handlers.latch import DisableLatchHandler, EnableLatchHandler
@@ -69,7 +70,7 @@ class ActionExecutorThread(threading.Thread):
         # Components (initialized in run())
         self.interpolator: Optional[CursorInterpolator] = None
         self.momentum: Optional[ScrollMomentum] = None
-        self.handlers: Dict[str, ActionHandler] = {}
+        self.handlers: Dict[ActionName, ActionHandler] = {}
 
         # Gesture state tracking
         self._last_tracked_gesture: Optional[str] = None
@@ -143,47 +144,47 @@ class ActionExecutorThread(threading.Thread):
         # Create handlers
         self.handlers = self._create_handlers()
 
-    def _create_handlers(self) -> Dict[str, ActionHandler]:
+    def _create_handlers(self) -> Dict[ActionName, ActionHandler]:
         """Create all action handlers."""
         return {
             # Mouse movement
-            "mouse_move": MouseMoveHandler(
+            ActionName.MOUSE_MOVE: MouseMoveHandler(
                 self.adapter,
                 self.runtime_state,
                 self.interpolator
             ),
 
             # Click actions
-            "click": ClickHandler(
+            ActionName.CLICK: ClickHandler(
                 self.adapter,
                 self.runtime_state,
                 self.interpolator,
                 button='left'
             ),
-            "double_click": DoubleClickHandler(
+            ActionName.DOUBLE_CLICK: DoubleClickHandler(
                 self.adapter,
                 self.runtime_state,
                 button='left'
             ),
-            "right_click": RightClickHandler(
+            ActionName.RIGHT_CLICK: RightClickHandler(
                 self.adapter,
                 self.runtime_state
             ),
 
             # Scroll actions
-            "scroll_up": ScrollStepHandler(
+            ActionName.SCROLL_UP: ScrollStepHandler(
                 self.adapter,
                 self.runtime_state,
                 self.macos_config,
                 direction='up'
             ),
-            "scroll_down": ScrollStepHandler(
+            ActionName.SCROLL_DOWN: ScrollStepHandler(
                 self.adapter,
                 self.runtime_state,
                 self.macos_config,
                 direction='down'
             ),
-            "continuous_scroll": ContinuousScrollHandler(
+            ActionName.CONTINUOUS_SCROLL: ContinuousScrollHandler(
                 self.adapter,
                 self.runtime_state,
                 self.action_config.scroll,
@@ -191,44 +192,44 @@ class ActionExecutorThread(threading.Thread):
             ),
 
             # Zoom actions
-            "zoom_in": ZoomStepHandler(
+            ActionName.ZOOM_IN: ZoomStepHandler(
                 self.adapter,
                 self.runtime_state,
                 self.macos_config,
                 direction='in'
             ),
-            "zoom_out": ZoomStepHandler(
+            ActionName.ZOOM_OUT: ZoomStepHandler(
                 self.adapter,
                 self.runtime_state,
                 self.macos_config,
                 direction='out'
             ),
-            "continuous_zoom": ContinuousZoomHandler(
+            ActionName.CONTINUOUS_ZOOM: ContinuousZoomHandler(
                 self.adapter,
                 self.runtime_state,
                 self.action_config.zoom
             ),
 
             # Volume control
-            "continuous_volume": ContinuousVolumeHandler(
+            ActionName.CONTINUOUS_VOLUME: ContinuousVolumeHandler(
                 self.adapter,
                 self.runtime_state,
                 self.action_config.volume
             ),
 
             # Desktop switching
-            "switch_desktop": SwitchDesktopHandler(
+            ActionName.SWITCH_DESKTOP: SwitchDesktopHandler(
                 self.adapter,
                 self.runtime_state
             ),
 
             # Latch control
-            "enable_latch": EnableLatchHandler(
+            ActionName.ENABLE_LATCH: EnableLatchHandler(
                 self.adapter,
                 self.runtime_state,
                 self.state_machine
             ),
-            "disable_latch": DisableLatchHandler(
+            ActionName.DISABLE_LATCH: DisableLatchHandler(
                 self.adapter,
                 self.runtime_state,
                 self.state_machine
@@ -264,7 +265,7 @@ class ActionExecutorThread(threading.Thread):
         self.state_machine.update_hand_state(gesture_event.metadata)
 
         # Skip queue-based execution for click - handled by state transitions
-        if action_name == "click":
+        if action_name == ActionName.CLICK:
             return
 
         # Check if action should execute (debouncing, latch)
@@ -337,11 +338,19 @@ class ActionExecutorThread(threading.Thread):
             )
             self.handlers[action].on_gesture_continue(dummy_event)
 
-    def _map_gesture_to_action(self, gesture_name: str) -> Optional[str]:
+    def _map_gesture_to_action(self, gesture_name: str) -> Optional[ActionName]:
         """Map gesture name to action name via config."""
-        return self.action_config.mappings.get(gesture_name)
+        action_str = self.action_config.mappings.get(gesture_name)
+        if action_str is None:
+            return None
+        # Convert string to ActionName (handles both str and ActionName inputs)
+        try:
+            return ActionName(action_str) if isinstance(action_str, str) else action_str
+        except ValueError:
+            log_warning("ACT-003", f"Invalid action in config: {action_str}")
+            return None
 
-    def _execute_action(self, action_name: str, gesture_event: GestureEvent) -> bool:
+    def _execute_action(self, action_name: ActionName, gesture_event: GestureEvent) -> bool:
         """Execute action via handler."""
         if action_name not in self.handlers:
             log_warning("ACT-003", f"Unknown action: {action_name}")
@@ -350,10 +359,10 @@ class ActionExecutorThread(threading.Thread):
         handler = self.handlers[action_name]
         return handler.execute(gesture_event)
 
-    def _record_action_success(self, action_name: str, gesture_event: GestureEvent) -> None:
+    def _record_action_success(self, action_name: ActionName, gesture_event: GestureEvent) -> None:
         """Record successful action execution."""
         with self.runtime_state.lock:
-            self.runtime_state.latest_action = action_name
+            self.runtime_state.latest_action = action_name.value  # Store string value
             self.runtime_state.latest_action_time = time.time()
             self.runtime_state.actions_executed += 1
             self.runtime_state.mark_gesture_detected()
