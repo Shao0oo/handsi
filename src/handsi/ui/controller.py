@@ -7,7 +7,7 @@ without blocking the main thread.
 
 import threading
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from handsi.actions.executor import ActionExecutorThread
 from handsi.core.bus import RuntimeState, create_queues
@@ -17,6 +17,21 @@ from handsi.core.registry import AVAILABLE_GESTURES, AVAILABLE_ACTIONS
 from handsi.gestures.infer import GestureInferenceThread
 from handsi.vision.capture import CaptureThread
 from handsi.vision.tracking import TrackingThread
+
+
+def _set_nested_attr(obj: Any, path: str, value: Any) -> None:
+    """
+    Set a nested attribute given a dot-separated path.
+
+    Args:
+        obj: The root object to modify
+        path: Dot-separated path (e.g., "actions.mouse.sensitivity")
+        value: The value to set
+    """
+    parts = path.split('.')
+    for part in parts[:-1]:
+        obj = getattr(obj, part)
+    setattr(obj, parts[-1], value)
 
 
 class HandsiController:
@@ -238,6 +253,9 @@ class HandsiController:
         """
         Update configuration settings.
 
+        Uses reload-and-merge pattern to preserve manual edits to config file.
+        Reloads fresh config from disk, applies only changed settings, then saves.
+
         Note: Changes will take effect after restart.
 
         Args:
@@ -247,65 +265,65 @@ class HandsiController:
             dict: Status response with success/error
         """
         try:
-            # Track which settings require restart
+            # Map UI setting keys to config paths and converters
+            # Format: "ui_key": ("config.path", converter, requires_restart)
+            settings_map = {
+                # Mouse settings (no restart needed)
+                "sensitivity": ("actions.mouse.sensitivity", float, False),
+                "smoothing": ("actions.mouse.smoothing_factor", float, False),
+                "dead_zone": ("actions.mouse.dead_zone", float, False),
+                "mirror_x": ("actions.mouse.mirror_x", bool, False),
+                # Scroll settings (no restart needed)
+                "scroll_sensitivity": ("actions.scroll.sensitivity", float, False),
+                "scroll_dead_zone": ("actions.scroll.dead_zone", float, False),
+                "invert_scroll": ("actions.scroll.invert", bool, False),
+                # Gesture settings (require restart)
+                "pinch_threshold": ("gestures.pinch_threshold", float, True),
+                "fist_threshold": ("gestures.fist_threshold", float, True),
+                "swipe_velocity": ("gestures.swipe_velocity_threshold", float, True),
+                "open_hand_spread": ("gestures.open_hand_spread_threshold", float, True),
+                "thumbs_vertical": ("gestures.thumbs_vertical_threshold", float, True),
+                "debounce_ms": ("gestures.debounce_ms", int, True),
+                "latch_cooldown_ms": ("gestures.latch_cooldown_ms", int, True),
+                "smoothing_window": ("gestures.smoothing_window", int, True),
+                # Camera settings (require restart)
+                "device_id": ("camera.device_id", int, True),
+            }
+
+            # Track which fields changed and if restart is needed
+            changed_fields: dict[str, Any] = {}
             gesture_settings_changed = False
             device_id_changed = False
 
-            # Update config object
-            if "sensitivity" in settings:
-                self.config.actions.mouse.sensitivity = float(settings["sensitivity"])
-            if "smoothing" in settings:
-                self.config.actions.mouse.smoothing_factor = float(settings["smoothing"])
-            if "dead_zone" in settings:
-                self.config.actions.mouse.dead_zone = float(settings["dead_zone"])
-            if "scroll_sensitivity" in settings:
-                self.config.actions.scroll.sensitivity = float(settings["scroll_sensitivity"])
-            if "scroll_dead_zone" in settings:
-                self.config.actions.scroll.dead_zone = float(settings["scroll_dead_zone"])
+            # Build list of changes
+            for key, value in settings.items():
+                if key in settings_map:
+                    path, converter, requires_restart = settings_map[key]
+                    converted_value = converter(value)
+                    changed_fields[path] = converted_value
 
-            # Gesture settings - these require restart because GestureDetector stores them at init
-            if "pinch_threshold" in settings:
-                self.config.gestures.pinch_threshold = float(settings["pinch_threshold"])
-                gesture_settings_changed = True
-            if "fist_threshold" in settings:
-                self.config.gestures.fist_threshold = float(settings["fist_threshold"])
-                gesture_settings_changed = True
-            if "swipe_velocity" in settings:
-                self.config.gestures.swipe_velocity_threshold = float(settings["swipe_velocity"])
-                gesture_settings_changed = True
-            if "open_hand_spread" in settings:
-                self.config.gestures.open_hand_spread_threshold = float(settings["open_hand_spread"])
-                gesture_settings_changed = True
-            if "thumbs_vertical" in settings:
-                self.config.gestures.thumbs_vertical_threshold = float(settings["thumbs_vertical"])
-                gesture_settings_changed = True
-            if "debounce_ms" in settings:
-                self.config.gestures.debounce_ms = int(settings["debounce_ms"])
-                gesture_settings_changed = True
-            if "latch_cooldown_ms" in settings:
-                self.config.gestures.latch_cooldown_ms = int(settings["latch_cooldown_ms"])
-                gesture_settings_changed = True
-            if "smoothing_window" in settings:
-                self.config.gestures.smoothing_window = int(settings["smoothing_window"])
-                gesture_settings_changed = True
+                    if requires_restart:
+                        if key == "device_id":
+                            if converted_value != self._previous_device_id:
+                                device_id_changed = True
+                                self._previous_device_id = converted_value
+                                log_info(f"Controller: Camera device changed to {converted_value}")
+                        else:
+                            gesture_settings_changed = True
 
-            if "mirror_x" in settings:
-                self.config.actions.mouse.mirror_x = bool(settings["mirror_x"])
-            if "invert_scroll" in settings:
-                self.config.actions.scroll.invert = bool(settings["invert_scroll"])
+            # Reload fresh config from disk to preserve manual edits
+            fresh_config = load_config(self.config_path)
 
-            # Handle camera device_id - track changes for restart detection
-            if "device_id" in settings:
-                new_device_id = int(settings["device_id"])
-                if new_device_id != self._previous_device_id:
-                    device_id_changed = True
-                    self._previous_device_id = new_device_id
-                    log_info(f"Controller: Camera device changed from {self.config.camera.device_id} to {new_device_id}")
-                self.config.camera.device_id = new_device_id
+            # Apply only the changed fields
+            for path, value in changed_fields.items():
+                _set_nested_attr(fresh_config, path, value)
+
+            # Update in-memory config
+            self.config = fresh_config
 
             log_info(f"Controller: Settings updated in memory")
 
-            # Save to user config file for persistence
+            # Save merged config to file
             try:
                 save_user_config(self.config)
                 log_info(f"Controller: Settings saved to {get_user_config_path()}")
@@ -431,6 +449,8 @@ class HandsiController:
         """
         Update a single gesture mapping (enable/disable).
 
+        Uses reload-and-merge pattern to preserve manual edits to config file.
+
         Args:
             gesture: Gesture name
             enabled: Whether to enable (True) or disable (False) this gesture
@@ -447,12 +467,18 @@ class HandsiController:
                     "error": "Enabling gestures not yet supported. Use update_mappings instead."
                 }
             else:
+                # Reload fresh config from disk to preserve manual edits
+                fresh_config = load_config(self.config_path)
+
                 # Disable by removing from mappings
-                if gesture in self.config.actions.mappings:
-                    del self.config.actions.mappings[gesture]
+                if gesture in fresh_config.actions.mappings:
+                    del fresh_config.actions.mappings[gesture]
                     log_info(f"Controller: Mapping disabled for gesture: {gesture}")
 
-                    # Save to user config
+                    # Update in-memory config
+                    self.config = fresh_config
+
+                    # Save merged config to file
                     try:
                         save_user_config(self.config)
                         log_info(f"Controller: Mappings saved to {get_user_config_path()}")
@@ -469,6 +495,8 @@ class HandsiController:
                         }
                     }
                 else:
+                    # Still update in-memory config to stay in sync
+                    self.config = fresh_config
                     return {
                         "success": True,
                         "data": {
@@ -484,6 +512,8 @@ class HandsiController:
         """
         Update gesture → action mappings.
 
+        Uses reload-and-merge pattern to preserve manual edits to config file.
+
         Args:
             mappings: Dictionary where keys are gestures and values are:
                      - action name (string) if enabled
@@ -493,16 +523,22 @@ class HandsiController:
             dict: Status response with success/error
         """
         try:
-            # Update config - remove disabled mappings
+            # Reload fresh config from disk to preserve manual edits
+            fresh_config = load_config(self.config_path)
+
+            # Update mappings - remove disabled ones
             new_mappings = {}
             for gesture, action in mappings.items():
                 if action and action.strip():  # Only include enabled mappings
                     new_mappings[gesture] = action
 
-            self.config.actions.mappings = new_mappings
+            fresh_config.actions.mappings = new_mappings
             log_info(f"Controller: Mappings updated - {len(new_mappings)} enabled")
 
-            # Save to user config
+            # Update in-memory config
+            self.config = fresh_config
+
+            # Save merged config to file
             try:
                 save_user_config(self.config)
                 log_info(f"Controller: Mappings saved to {get_user_config_path()}")

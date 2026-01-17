@@ -53,7 +53,7 @@ class ActionName(str, Enum):
         Continuous actions track state over time (scroll, zoom, volume)
         and don't use standard debouncing.
         """
-        return {cls.MOUSE_MOVE, cls.CONTINUOUS_SCROLL}
+        return {cls.MOUSE_MOVE, cls.CONTINUOUS_SCROLL, cls.CONTINUOUS_ZOOM, cls.CONTINUOUS_VOLUME}
 
     @classmethod
     def from_string(cls, value: str) -> "ActionName":
