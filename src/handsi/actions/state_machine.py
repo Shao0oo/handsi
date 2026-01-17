@@ -11,6 +11,7 @@ Handles:
 import time
 from typing import Optional
 
+from handsi.core.types import ActionName
 from handsi.core.bus import GestureEvent, RuntimeState
 from handsi.core.logging import log_debug
 
@@ -40,10 +41,10 @@ class GestureStateMachine:
         self._last_latch_toggle_time: float = 0.0
 
         # Continuous gesture state
-        self._continuous_gestures = {'mouse_move', 'continuous_scroll'}  # Actions that execute without debouncing
+        self._continuous_gestures = ActionName.continuous_actions()  # Actions that execute without debouncing
         self._current_continuous_gesture: Optional[str] = None
 
-    def should_execute(self, gesture_event: GestureEvent, action_name: str) -> bool:
+    def should_execute(self, gesture_event: GestureEvent, action_name: ActionName) -> bool:
         """
         Determine if gesture should trigger action execution.
 
@@ -115,7 +116,7 @@ class GestureStateMachine:
                     f"pos={self.runtime_state.cursor_position}"
                 )
 
-    def is_action_allowed(self, action_name: str) -> bool:
+    def is_action_allowed(self, action_name: ActionName) -> bool:
         """
         Check if action is allowed based on latch state.
 
@@ -131,13 +132,13 @@ class GestureStateMachine:
         with self.runtime_state.lock:
             latch_active = self.runtime_state.latch_active
 
-        if not latch_active and action_name != 'enable_latch':
+        if not latch_active and action_name != ActionName.ENABLE_LATCH:
             log_debug(f"Action {action_name} blocked: latch inactive")
             return False
 
         return True
 
-    def is_continuous_gesture(self, action_name: str) -> bool:
+    def is_continuous_gesture(self, action_name: ActionName) -> bool:
         """
         Check if action is continuous (vs discrete).
 

@@ -16,6 +16,8 @@ from typing import Any, Optional
 
 import numpy as np
 
+from handsi.core.types import GestureMetadata
+
 
 class ActivityLevel(Enum):
     """System activity level for adaptive FPS control."""
@@ -137,7 +139,7 @@ class GestureEvent:
     gesture_name: str
     confidence: float
     timestamp: float
-    metadata: dict[str, Any] = field(default_factory=dict)
+    metadata: GestureMetadata = field(default_factory=dict)  # type: ignore[assignment]
 
 
 # Queue type definitions
