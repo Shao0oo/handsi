@@ -10,7 +10,7 @@ from handsi.actions.adapters.base import ActionAdapter
 from handsi.actions.continuous_tracker import ContinuousActionTracker, ContinuousTrackerConfig
 from handsi.actions.handlers.base import ContinuousActionHandler, DiscreteActionHandler
 from handsi.core.bus import GestureEvent, RuntimeState
-from handsi.core.config import MacOSConfig, ZoomConfig
+from handsi.core.config import ZoomConfig
 from handsi.core.logging import log_debug, log_info
 
 
@@ -25,16 +25,16 @@ class ZoomStepHandler(DiscreteActionHandler):
         self,
         adapter: ActionAdapter,
         runtime_state: RuntimeState,
-        macos_config: MacOSConfig,
+        zoom_config: ZoomConfig,
         direction: str  # 'in' or 'out'
     ):
         super().__init__(adapter, runtime_state)
-        self.macos_config = macos_config
+        self.zoom_config = zoom_config
         self.direction = direction
 
     def execute(self, event: Optional[GestureEvent] = None) -> bool:
         """Execute a single zoom step."""
-        zoom_step = self.macos_config.zoom_step
+        zoom_step = self.zoom_config.zoom_step
         return self.adapter.zoom(direction=self.direction, step=zoom_step)
 
 

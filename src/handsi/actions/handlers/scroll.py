@@ -12,7 +12,7 @@ from handsi.actions.continuous_tracker import ContinuousActionTracker, Continuou
 from handsi.actions.handlers.base import ContinuousActionHandler, DiscreteActionHandler
 from handsi.actions.momentum import ScrollMomentum
 from handsi.core.bus import GestureEvent, RuntimeState
-from handsi.core.config import MacOSConfig, ScrollConfig
+from handsi.core.config import ScrollConfig
 from handsi.core.logging import log_debug
 
 
@@ -27,16 +27,16 @@ class ScrollStepHandler(DiscreteActionHandler):
         self,
         adapter: ActionAdapter,
         runtime_state: RuntimeState,
-        macos_config: MacOSConfig,
+        scroll_config: ScrollConfig,
         direction: str  # 'up' or 'down'
     ):
         super().__init__(adapter, runtime_state)
-        self.macos_config = macos_config
+        self.scroll_config = scroll_config
         self.direction = direction
 
     def execute(self, event: Optional[GestureEvent] = None) -> bool:
         """Execute a single scroll step."""
-        scroll_speed = self.macos_config.scroll_speed
+        scroll_speed = self.scroll_config.scroll_speed
 
         if self.direction == 'down':
             dy = scroll_speed

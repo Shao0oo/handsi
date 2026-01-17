@@ -86,6 +86,7 @@ class ScrollConfig(BaseModel):
     momentum_decay: float = Field(default=0.95, ge=0.0, le=0.99)
     momentum_min_velocity: float = Field(default=5.0, ge=0.1, le=10000.0)
     momentum_stop_threshold: float = Field(default=1.0, ge=0.1, le=10000.0)
+    scroll_speed: int = Field(default=10, ge=1, le=100)  # pixels per discrete scroll event
 
 
 class ZoomConfig(BaseModel):
@@ -94,6 +95,7 @@ class ZoomConfig(BaseModel):
     dead_zone: float = Field(default=0.02, ge=0.0, le=0.05)
     dead_zone_curve: float = Field(default=2.0, ge=1.0, le=3.0)
     dead_zone_min_damping: float = Field(default=0.1, ge=0.0, le=0.5)
+    zoom_step: float = Field(default=0.1, ge=0.01, le=1.0)  # zoom increment for discrete steps
 
 
 class VolumeConfig(BaseModel):
@@ -157,8 +159,6 @@ class SystemConfig(BaseModel):
 class MacOSConfig(BaseModel):
     """macOS-specific settings."""
     accessibility_check: bool = Field(default=True)
-    scroll_speed: int = Field(default=10, ge=1, le=100)
-    zoom_step: float = Field(default=0.1, ge=0.01, le=1.0)
 
 
 class StillModeConfig(BaseModel):

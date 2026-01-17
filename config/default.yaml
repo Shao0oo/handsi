@@ -112,5 +112,3 @@ system:
 macos:
   # macOS-specific settings
   accessibility_check: true  # verify permissions on startup
-  scroll_speed: 10           # pixels per scroll event
-  zoom_step: 0.1             # zoom increment (0.1 = 10%)

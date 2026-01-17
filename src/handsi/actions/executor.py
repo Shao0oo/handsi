@@ -175,13 +175,13 @@ class ActionExecutorThread(threading.Thread):
             ActionName.SCROLL_UP: ScrollStepHandler(
                 self.adapter,
                 self.runtime_state,
-                self.macos_config,
+                self.action_config.scroll,
                 direction='up'
             ),
             ActionName.SCROLL_DOWN: ScrollStepHandler(
                 self.adapter,
                 self.runtime_state,
-                self.macos_config,
+                self.action_config.scroll,
                 direction='down'
             ),
             ActionName.CONTINUOUS_SCROLL: ContinuousScrollHandler(
@@ -195,13 +195,13 @@ class ActionExecutorThread(threading.Thread):
             ActionName.ZOOM_IN: ZoomStepHandler(
                 self.adapter,
                 self.runtime_state,
-                self.macos_config,
+                self.action_config.zoom,
                 direction='in'
             ),
             ActionName.ZOOM_OUT: ZoomStepHandler(
                 self.adapter,
                 self.runtime_state,
-                self.macos_config,
+                self.action_config.zoom,
                 direction='out'
             ),
             ActionName.CONTINUOUS_ZOOM: ContinuousZoomHandler(
