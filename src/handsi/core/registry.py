@@ -8,10 +8,12 @@ in the Handsi system. Update these lists when adding new gestures or actions.
 # All available gestures (alphabetically sorted)
 # Update this list when adding new gestures to rules.py
 AVAILABLE_GESTURES = [
+    "facial_contact",
     "fist",
     "index_pinch",
     "middle_pinch",
     "open_hand",
+    "phone_scrolling",
     "pinky_pinch",
     "ring_pinch",
     "swipe",
@@ -26,6 +28,8 @@ AVAILABLE_GESTURES = [
 # All available actions (alphabetically sorted)
 # Update this list when adding new actions to executor.py
 AVAILABLE_ACTIONS = [
+    "alert_facial_contact",
+    "alert_phone_scrolling",
     "click",
     "continuous_scroll",
     "continuous_volume",
