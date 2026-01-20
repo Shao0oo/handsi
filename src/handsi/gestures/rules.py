@@ -37,7 +37,12 @@ class GestureDetector:
         swipe_velocity_threshold: float = 0.5,
         thumbs_vertical_threshold: float = 1.3,
         confidence_threshold: float = 0.7,
-        history_length: int = 10
+        history_length: int = 10,
+        # Habit awareness thresholds
+        facial_contact_distance_threshold: float = 0.3,
+        facial_contact_duration_threshold: float = 0.7,
+        phone_scroll_tilt_threshold: float = 0.2,
+        phone_scroll_duration_threshold: float = 0.8
     ):
         self.pinch_threshold = pinch_threshold
         self.fist_threshold = fist_threshold
@@ -51,6 +56,18 @@ class GestureDetector:
         self.wrist_history: dict[int, deque] = {}  # hand_idx -> deque of (x, y, t)
         self.hand_distance_history = deque(maxlen=history_length)  # two-hand distance
         self.history_length = history_length
+
+        # NEW: Habit awareness thresholds
+        self.facial_contact_distance_threshold = facial_contact_distance_threshold
+        self.facial_contact_duration_threshold = facial_contact_duration_threshold
+        self.phone_scroll_tilt_threshold = phone_scroll_tilt_threshold
+        self.phone_scroll_duration_threshold = phone_scroll_duration_threshold
+
+        # NEW: Habit history for temporal smoothing (require sustained behavior)
+        self.habit_history = {
+            "facial_contact": deque(maxlen=30),  # ~1-2 seconds at 20 fps
+            "phone_scrolling": deque(maxlen=60)  # ~2-4 seconds at 20 fps
+        }
 
     def detect_gestures(self, features: dict[str, Any]) -> list[tuple[str, float, dict]]:
         """

@@ -46,6 +46,8 @@ class PreviewWindow:
         self.mp_hands = mp.solutions.hands # type: ignore
         self.mp_drawing = mp.solutions.drawing_utils # type: ignore
         self.mp_drawing_styles = mp.solutions.drawing_styles # type: ignore
+        self.mp_face_mesh = mp.solutions.face_mesh # type: ignore
+        self.mp_pose = mp.solutions.pose # type: ignore
 
         # Display toggles
         self.show_gestures = False  # Toggle with 'g' key
@@ -92,10 +94,14 @@ class PreviewWindow:
                 key = cv2.waitKey(1) & 0xFF
                 return key != ord('q')
 
-            frame, landmarks = frame_data
+            frame, landmarks, holistic_results = frame_data
 
             # Create a copy to draw on
             display_frame = frame.copy()
+
+            # Draw holistic landmarks (face + pose) if available
+            if holistic_results is not None:
+                self._draw_holistic_landmarks(display_frame, holistic_results)
 
             # Draw hand landmarks if available
             if landmarks is not None:
@@ -254,6 +260,41 @@ class PreviewWindow:
                 0.25,
                 (0, 255, 255),
                 1
+            )
+
+    def _draw_holistic_landmarks(self, frame: np.ndarray, holistic_results: Any) -> None:
+        """
+        Draw face and pose landmarks from holistic tracking results.
+
+        Args:
+            frame: Frame to draw on (modified in-place)
+            holistic_results: MediaPipe Holistic results object
+        """
+        # Draw face mesh (tesselation for face contours)
+        if holistic_results.face_landmarks is not None:
+            self.mp_drawing.draw_landmarks(
+                frame,
+                holistic_results.face_landmarks,
+                self.mp_face_mesh.FACEMESH_TESSELATION,
+                landmark_drawing_spec=None,
+                connection_drawing_spec=self.mp_drawing_styles.get_default_face_mesh_tesselation_style()
+            )
+            # Draw face contours
+            self.mp_drawing.draw_landmarks(
+                frame,
+                holistic_results.face_landmarks,
+                self.mp_face_mesh.FACEMESH_CONTOURS,
+                landmark_drawing_spec=None,
+                connection_drawing_spec=self.mp_drawing_styles.get_default_face_mesh_contours_style()
+            )
+
+        # Draw pose landmarks
+        if holistic_results.pose_landmarks is not None:
+            self.mp_drawing.draw_landmarks(
+                frame,
+                holistic_results.pose_landmarks,
+                self.mp_pose.POSE_CONNECTIONS,
+                landmark_drawing_spec=self.mp_drawing_styles.get_default_pose_landmarks_style()
             )
 
     def _draw_status_overlay(self, frame: np.ndarray, hand_count: int) -> None:

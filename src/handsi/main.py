@@ -136,6 +136,9 @@ def main() -> int:
         print("To run in CLI mode (background service):")
         print("  handsi --cli")
         print("")
+        print("To run in preview mode (background service):")
+        print("  handsi --cli --preview")
+        print("")
         print("See docs/TAURI_MIGRATION.md for more info.")
         print("=" * 60)
         return 1

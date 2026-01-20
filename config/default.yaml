@@ -29,6 +29,12 @@ tracking:
   fps_attentive: 24   # Hz when hands present, no gesture
   fps_active: 60      # Hz during/after gesture execution
 
+  # TEMPORARY: Testing HolisticTracker with existing hand gestures
+  enable_holistic: true
+  holistic_model_complexity: 1
+  holistic_min_detection_confidence: 0.5
+  holistic_min_tracking_confidence: 0.5
+
 gestures:
   # Debouncing: cooldown after gesture fires
   debounce_ms: 500          # ignore same gesture for 300ms after firing
