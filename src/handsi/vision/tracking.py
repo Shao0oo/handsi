@@ -1,8 +1,8 @@
 """
-Thread 2: Hand tracking + feature extraction (inline).
+Thread 2: Holistic tracking + feature extraction (inline).
 
-Uses MediaPipe Hands to detect hand landmarks, extracts features,
-updates RuntimeState activity level, and pushes to FeatureQueue.
+Uses MediaPipe Holistic to detect hand, face, and pose landmarks,
+extracts features, updates RuntimeState activity level, and pushes to FeatureQueue.
 """
 
 import threading
@@ -10,12 +10,8 @@ import time
 from typing import Any, Optional
 
 import cv2
-import mediapipe as mp
 import numpy as np
 
-from typing import Optional, Any
-from mediapipe.python.solutions import hands as mp_hands
-from mediapipe.python.solutions.hands import Hands
 from mediapipe.python.solutions import holistic as mp_holistic
 from mediapipe.python.solutions.holistic import Holistic
 
@@ -27,85 +23,6 @@ from handsi.core.bus import (
 )
 from handsi.core.config import TrackingConfig
 from handsi.core.logging import log_debug, log_error, log_info, log_warning
-
-class MediaPipeTracker:
-    """
-    Wrapper for MediaPipe Hands tracking.
-
-    Handles initialization, processing, and landmark extraction.
-    """
-
-    def __init__(
-        self,
-        max_hands: int = 2,
-        min_detection_confidence: float = 0.5,
-        min_tracking_confidence: float = 0.5,
-        model_complexity: int = 0
-    ):
-        self.max_hands = max_hands
-        self.min_detection_confidence = min_detection_confidence
-        self.min_tracking_confidence = min_tracking_confidence
-        self.model_complexity = model_complexity
-
-        # Initialize MediaPipe Hands
-        self.mp_hands = mp_hands
-        self.hands: Optional[Hands] = None
-
-    def initialize(self) -> bool:
-        """
-        Initialize MediaPipe Hands model.
-
-        Returns:
-            True if initialization successful, False otherwise
-        """
-        try:
-            self.hands = self.mp_hands.Hands(
-                static_image_mode=False,
-                max_num_hands=self.max_hands,
-                model_complexity=self.model_complexity,  # 0=lite (5-8s faster startup)
-                min_detection_confidence=self.min_detection_confidence,
-                min_tracking_confidence=self.min_tracking_confidence
-            )
-            log_info(f"MediaPipe Hands initialized (model_complexity={self.model_complexity})")
-            return True
-
-        except Exception as e:
-            log_error("TRK-001", f"MediaPipe initialization failed: {e}")
-            return False
-
-    def process(self, image: np.ndarray) -> Optional[Any]:
-        """
-        Process a single frame and detect hands.
-
-        Args:
-            image: BGR image from OpenCV
-
-        Returns:
-            MediaPipe results object, or None if processing failed
-        """
-        if self.hands is None:
-            log_error("TRK-002", "MediaPipe not initialized")
-            return None
-
-        try:
-            # Convert BGR to RGB (MediaPipe expects RGB)
-            image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-
-            # Process with MediaPipe
-            results = self.hands.process(image_rgb)
-
-            return results
-
-        except Exception as e:
-            log_error("TRK-003", f"MediaPipe processing failed: {e}")
-            return None
-
-    def close(self) -> None:
-        """Release MediaPipe resources."""
-        if self.hands is not None:
-            self.hands.close()
-            self.hands = None
-            log_info("MediaPipe Hands closed")
 
 
 class HolisticTracker:
@@ -193,53 +110,6 @@ class HolisticTracker:
             log_info("MediaPipe Holistic closed")
 
 
-def extract_features(results: Any, image_shape: tuple[int, int, int]) -> dict[str, Any]:
-    """
-    Extract normalized feature vector from MediaPipe landmarks.
-
-    Args:
-        results: MediaPipe results object
-        image_shape: Shape of input image (H, W, C)
-
-    Returns:
-        Dictionary of extracted features
-    """
-    features: dict[str, Any] = {
-        "hands": [],
-        "hand_count": 0,
-        "image_shape": image_shape
-    }
-
-    if results.multi_hand_landmarks is None:
-        return features
-
-    features["hand_count"] = len(results.multi_hand_landmarks)
-
-    # Extract landmarks for each hand
-    for hand_idx, hand_landmarks in enumerate(results.multi_hand_landmarks):
-        hand_features = {
-            "landmarks": [],
-            "handedness": None
-        }
-
-        # Extract (x, y, z) for each landmark (21 landmarks per hand)
-        for landmark in hand_landmarks.landmark:
-            hand_features["landmarks"].append({
-                "x": landmark.x,
-                "y": landmark.y,
-                "z": landmark.z
-            })
-
-        # Extract handedness (left/right)
-        if results.multi_handedness:
-            handedness = results.multi_handedness[hand_idx]
-            hand_features["handedness"] = handedness.classification[0].label
-
-        features["hands"].append(hand_features)
-
-    return features
-
-
 def extract_holistic_features(results: Any, image_shape: tuple[int, int, int]) -> dict[str, Any]:
     """
     Extract normalized feature vector from MediaPipe Holistic landmarks.
@@ -321,7 +191,7 @@ class TrackingThread(threading.Thread):
 
     Responsibilities:
     - Pop frames from FrameQueue
-    - Process with MediaPipe Hands
+    - Process with MediaPipe Holistic (hands + face + pose)
     - Extract features inline
     - Update RuntimeState activity level
     - Push features to FeatureQueue
@@ -341,27 +211,18 @@ class TrackingThread(threading.Thread):
         self.feature_queue = feature_queue
         self.runtime_state = runtime_state
 
-        # MediaPipe tracker (conditional: Holistic or Hands-only)
-        if config.enable_holistic:
-            self.tracker = HolisticTracker(
-                model_complexity=config.holistic_model_complexity,
-                min_detection_confidence=config.holistic_min_detection_confidence,
-                min_tracking_confidence=config.holistic_min_tracking_confidence
-            )
-            log_info("Using HolisticTracker (hands + face + pose)")
-        else:
-            self.tracker = MediaPipeTracker(
-                max_hands=config.max_hands,
-                min_detection_confidence=config.min_detection_confidence,
-                min_tracking_confidence=config.min_tracking_confidence,
-                model_complexity=config.model_complexity
-            )
-            log_info("Using MediaPipeTracker (hands only)")
+        # MediaPipe Holistic tracker (hands + face + pose)
+        self.tracker = HolisticTracker(
+            model_complexity=config.holistic_model_complexity,
+            min_detection_confidence=config.holistic_min_detection_confidence,
+            min_tracking_confidence=config.holistic_min_tracking_confidence
+        )
+        log_info("Using HolisticTracker (hands + face + pose)")
 
         # For preview window (optional)
         self.latest_frame: Optional[np.ndarray] = None
         self.latest_landmarks: Optional[Any] = None
-        self.latest_holistic_results: Optional[Any] = None  # For face/pose when using HolisticTracker
+        self.latest_holistic_results: Optional[Any] = None
 
     def run(self) -> None:
         """Main tracking loop."""
@@ -406,20 +267,14 @@ class TrackingThread(threading.Thread):
                 log_warning("TRK-002", f"Tracking failed on frame {frame.frame_number}")
                 return
 
-            # Store landmarks for preview (handle both tracker types)
-            if isinstance(self.tracker, HolisticTracker):
-                # For HolisticTracker: build hand landmarks list + store full results
-                hand_landmarks_list = []
-                if results.left_hand_landmarks is not None:
-                    hand_landmarks_list.append(results.left_hand_landmarks)
-                if results.right_hand_landmarks is not None:
-                    hand_landmarks_list.append(results.right_hand_landmarks)
-                self.latest_landmarks = hand_landmarks_list if hand_landmarks_list else None
-                self.latest_holistic_results = results
-            else:
-                # For MediaPipeTracker: use multi_hand_landmarks directly
-                self.latest_landmarks = results.multi_hand_landmarks
-                self.latest_holistic_results = None
+            # Store landmarks for preview
+            hand_landmarks_list = []
+            if results.left_hand_landmarks is not None:
+                hand_landmarks_list.append(results.left_hand_landmarks)
+            if results.right_hand_landmarks is not None:
+                hand_landmarks_list.append(results.right_hand_landmarks)
+            self.latest_landmarks = hand_landmarks_list if hand_landmarks_list else None
+            self.latest_holistic_results = results
 
             # Extract features inline
             h, w, c = frame.image.shape
@@ -473,21 +328,17 @@ class TrackingThread(threading.Thread):
 
     def _extract_features(self, results: Any, image_shape: tuple[int, int, int]) -> dict[str, Any]:
         """
-        Extract features from MediaPipe results.
+        Extract features from MediaPipe Holistic results.
 
         Args:
-            results: MediaPipe results (Hands or Holistic)
+            results: MediaPipe Holistic results
             image_shape: Image shape (H, W, C)
 
         Returns:
-            Dictionary of extracted features
+            Dictionary of extracted features (hands, face, pose)
         """
         try:
-            # Dispatch to correct extractor based on tracker type
-            if isinstance(self.tracker, HolisticTracker):
-                return extract_holistic_features(results, image_shape)
-            else:
-                return extract_features(results, image_shape)
+            return extract_holistic_features(results, image_shape)
         except Exception as e:
             log_error("FEA-001", f"Feature extraction failed: {e}")
             return {
@@ -498,13 +349,12 @@ class TrackingThread(threading.Thread):
                 "image_shape": image_shape
             }
 
-    def get_latest_frame(self) -> Optional[tuple[np.ndarray, Any, Optional[Any]]]:
+    def get_latest_frame(self) -> Optional[tuple[np.ndarray, Any, Any]]:
         """
         Get latest frame and landmarks for preview.
 
         Returns:
             Tuple of (frame, hand_landmarks, holistic_results) or None.
-            holistic_results is None when using MediaPipeTracker.
         """
         if self.latest_frame is not None:
             return (self.latest_frame, self.latest_landmarks, self.latest_holistic_results)

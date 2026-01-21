@@ -13,7 +13,6 @@ AVAILABLE_GESTURES = [
     "index_pinch",
     "middle_pinch",
     "open_hand",
-    "phone_scrolling",
     "pinky_pinch",
     "ring_pinch",
     "swipe",
@@ -29,7 +28,6 @@ AVAILABLE_GESTURES = [
 # Update this list when adding new actions to executor.py
 AVAILABLE_ACTIONS = [
     "alert_facial_contact",
-    "alert_phone_scrolling",
     "click",
     "continuous_scroll",
     "continuous_volume",

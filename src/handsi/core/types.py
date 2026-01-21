@@ -47,7 +47,6 @@ class ActionName(str, Enum):
 
     # Habit awareness alerts
     ALERT_FACIAL_CONTACT = "alert_facial_contact"
-    ALERT_PHONE_SCROLLING = "alert_phone_scrolling"
 
     @classmethod
     def continuous_actions(cls) -> set["ActionName"]:
@@ -109,6 +108,5 @@ class GestureMetadata(TypedDict, total=False):
     # Habit awareness fields
     face_distance: NotRequired[float]  # Distance from hand to face (normalized by face scale)
     face_scale: NotRequired[float]  # Face scale reference (nose-to-chin distance)
-    head_tilt: NotRequired[float]  # Head tilt angle (normalized by shoulder width)
     sustained_frames: NotRequired[int]  # Number of frames habit was sustained
     proportion: NotRequired[float]  # Proportion of frames with habit detected (0-1)

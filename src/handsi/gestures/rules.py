@@ -1,9 +1,10 @@
 """
-Rule-based gesture detection using MediaPipe hand landmarks.
+Rule-based gesture detection using MediaPipe Holistic landmarks.
 
-Detects 11 gestures:
+Detects gestures:
 - Single hand: index/middle/ring/pinky pinch, fist, open_hand, thumbs_up/down, swipe (with direction)
 - Two hands: two_hands_pinch, two_hands_open
+- Habit awareness: facial_contact (hand near face)
 """
 
 import time
@@ -40,9 +41,7 @@ class GestureDetector:
         history_length: int = 10,
         # Habit awareness thresholds
         facial_contact_distance_threshold: float = 0.3,
-        facial_contact_duration_threshold: float = 0.7,
-        phone_scroll_tilt_threshold: float = 0.2,
-        phone_scroll_duration_threshold: float = 0.8
+        facial_contact_duration_threshold: float = 0.7
     ):
         self.pinch_threshold = pinch_threshold
         self.fist_threshold = fist_threshold
@@ -57,16 +56,13 @@ class GestureDetector:
         self.hand_distance_history = deque(maxlen=history_length)  # two-hand distance
         self.history_length = history_length
 
-        # NEW: Habit awareness thresholds
+        # Habit awareness thresholds
         self.facial_contact_distance_threshold = facial_contact_distance_threshold
         self.facial_contact_duration_threshold = facial_contact_duration_threshold
-        self.phone_scroll_tilt_threshold = phone_scroll_tilt_threshold
-        self.phone_scroll_duration_threshold = phone_scroll_duration_threshold
 
-        # NEW: Habit history for temporal smoothing (require sustained behavior)
+        # Habit history for temporal smoothing (require sustained behavior)
         self.habit_history = {
             "facial_contact": deque(maxlen=30),  # ~1-2 seconds at 20 fps
-            "phone_scrolling": deque(maxlen=60)  # ~2-4 seconds at 20 fps
         }
 
     def detect_gestures(self, features: dict[str, Any]) -> list[tuple[str, float, dict]]:
@@ -912,3 +908,206 @@ class GestureDetector:
             })
 
         return None
+
+    # === Habit Awareness Gestures ===
+
+    def _detect_facial_contact(self, features: dict) -> Optional[tuple[str, float, dict]]:
+        """
+        Detect hand touching face using two checks:
+        1. Depth check: hand_scale <= face_scale (hand at same depth as face)
+        2. Proximity check: fingertips are within 2D distance of face center
+
+        Logic:
+        - When hand is far from face (normal use): hand appears larger (closer to camera)
+        - When hand is near face: hand appears similar size to face (same depth)
+        - Additionally, fingertips must be close to the face in 2D space
+
+        Args:
+            features: Feature dict with 'hands' and 'face' lists
+
+        Returns:
+            (gesture_name, confidence, metadata) or None
+        """
+        if not features.get("face_detected"):
+            # log_info("[facial_contact] No face detected")
+            return None
+
+        hands = features.get("hands", [])
+        if not hands:
+            # log_info("[facial_contact] No hands detected")
+            return None
+
+        face_landmarks = features.get("face", [])
+        if len(face_landmarks) < 200:  # Need enough face landmarks
+            # log_info(f"[facial_contact] Insufficient face landmarks: {len(face_landmarks)} < 200")
+            return None
+
+        # Get face scale for normalization (nose tip to chin)
+        # MediaPipe face mesh indices: 1 = nose tip, 152 = chin
+        nose_tip = face_landmarks[1]
+        chin = face_landmarks[152]
+        face_scale = self._euclidean_distance(
+            (nose_tip["x"], nose_tip["y"], nose_tip["z"]),
+            (chin["x"], chin["y"], chin["z"])
+        )
+
+        if face_scale < 0.01:
+            # log_info(f"[facial_contact] Invalid face scale: {face_scale:.4f}")
+            return None
+
+        # Get face center (nose) for 2D proximity check
+        nose = (nose_tip["x"], nose_tip["y"])
+
+        # log_info(f"[facial_contact] Face scale: {face_scale:.4f}, nose=({nose[0]:.3f}, {nose[1]:.3f}), checking {len(hands)} hand(s)")
+
+        # Check each hand
+        for hand_idx, hand_data in enumerate(hands):
+            landmarks = hand_data.get("landmarks", [])
+            if len(landmarks) != 21:
+                # log_info(f"[facial_contact] Hand {hand_idx}: invalid landmark count {len(landmarks)}")
+                continue
+
+            lm = [(l["x"], l["y"], l["z"]) for l in landmarks]
+            hand_scale = self._get_hand_scale(lm)
+
+            # CHECK 1: Depth check via scale ratio
+            # When hand is near face: hand_scale <= face_scale (ratio <= 1.0)
+            # When hand is far from face: hand_scale > face_scale (ratio > 1.0)
+            scale_ratio = hand_scale / face_scale
+            max_ratio = 1.0 + self.facial_contact_distance_threshold  # e.g., 1.0 + 0.2 = 1.2
+
+            # log_info(f"[facial_contact] Hand {hand_idx}: scale_ratio={scale_ratio:.3f}, max_ratio={max_ratio:.3f}")
+
+            if scale_ratio > max_ratio:
+                # log_info(f"[facial_contact] Hand {hand_idx}: FAILED depth check (hand too close to camera)")
+                continue
+
+            # CHECK 2: 2D proximity check - are fingertips near the face?
+            # Check distance from fingertips to nose, normalized by face_scale
+            fingertip_indices = [4, 8, 12] #, 16, 20]  # thumb, index, middle, ring, pinky
+            min_finger_distance = float('inf')
+            closest_finger = None
+
+            for finger_idx in fingertip_indices:
+                fingertip = lm[finger_idx]
+                # 2D distance (ignore z for this check since we already checked depth)
+                dist_2d = np.sqrt((fingertip[0] - nose[0])**2 + (fingertip[1] - nose[1])**2)
+                # Normalize by face scale
+                normalized_dist = dist_2d / face_scale
+
+                if normalized_dist < min_finger_distance:
+                    min_finger_distance = normalized_dist
+                    closest_finger = finger_idx
+
+            # Proximity threshold: fingertip must be within 1.5x face_scale of nose
+            proximity_threshold = 1.5
+            # log_info(f"[facial_contact] Hand {hand_idx}: min_finger_dist={min_finger_distance:.3f}, proximity_threshold={proximity_threshold:.3f}, closest_finger={closest_finger}")
+
+            if min_finger_distance > proximity_threshold:
+                # log_info(f"[facial_contact] Hand {hand_idx}: FAILED proximity check (fingers not near face)")
+                continue
+
+            # Both checks passed - hand is touching face
+            # Confidence based on both scale ratio and proximity
+            depth_confidence = max(0.0, 1.0 - (scale_ratio - 1.0) / self.facial_contact_distance_threshold) if scale_ratio > 1.0 else 1.0
+            proximity_confidence = max(0.0, 1.0 - min_finger_distance / proximity_threshold)
+            confidence = (depth_confidence + proximity_confidence) / 2.0
+
+            # log_info(f"[facial_contact] DETECTED! confidence={confidence:.3f}, scale_ratio={scale_ratio:.3f}, finger_dist={min_finger_distance:.3f}")
+
+            return ("facial_contact", confidence, {
+                "scale_ratio": scale_ratio,
+                "face_scale": face_scale,
+                "hand_scale": hand_scale,
+                "finger_distance": min_finger_distance,
+                "closest_finger": closest_finger
+            })
+
+        # log_info("[facial_contact] No hand touching face")
+        return None
+
+    def _check_sustained_habit(
+        self,
+        habit_name: str,
+        detected: bool,
+        duration_threshold: float
+    ) -> Optional[tuple[str, float, dict]]:
+        """
+        Check if habit sustained for minimum duration.
+
+        Uses rolling window to track detection history.
+        Returns gesture only if detected in X% of recent frames.
+
+        Args:
+            habit_name: Name of the habit ("facial_contact")
+            detected: Whether the habit was detected in current frame
+            duration_threshold: Proportion of frames required (0.0 to 1.0)
+
+        Returns:
+            (gesture_name, confidence, metadata) or None
+        """
+        if habit_name not in self.habit_history:
+            # log_info(f"[sustained_habit] Unknown habit: {habit_name}")
+            return None
+
+        history = self.habit_history[habit_name]
+        history.append(detected)
+
+        # Need minimum history
+        if len(history) < 10:
+            # log_info(f"[sustained_habit] {habit_name}: building history {len(history)}/10")
+            return None
+
+        # Calculate proportion of positive detections
+        positive_count = sum(history)
+        proportion = positive_count / len(history)
+
+        # log_info(f"[sustained_habit] {habit_name}: {positive_count}/{len(history)} frames ({proportion:.1%}), threshold={duration_threshold:.1%}")
+
+        # Require sustained detection
+        if proportion >= duration_threshold:
+            confidence = proportion
+            # log_info(f"[sustained_habit] {habit_name}: SUSTAINED! confidence={confidence:.3f}")
+
+            return (habit_name, confidence, {
+                "sustained_frames": positive_count,
+                "total_frames": len(history),
+                "proportion": proportion
+            })
+
+        return None
+
+    def detect_habit_gestures(self, features: dict[str, Any]) -> list[tuple[str, float, dict]]:
+        """
+        Detect habit awareness gestures (facial contact).
+
+        Called separately from detect_gestures() to allow habit monitoring
+        to be enabled/disabled independently.
+
+        Args:
+            features: Feature dict with 'hands' and 'face' lists
+
+        Returns:
+            List of (gesture_name, confidence, metadata) tuples
+        """
+        gestures = []
+
+        # log_info(f"[habit_gestures] Checking habits: face_detected={features.get('face_detected')}, hands={len(features.get('hands', []))}")
+
+        # Facial contact detection
+        facial_contact_raw = self._detect_facial_contact(features)
+        # log_info(f"[habit_gestures] facial_contact_raw: {facial_contact_raw is not None}")
+        facial_contact = self._check_sustained_habit(
+            "facial_contact",
+            facial_contact_raw is not None,
+            self.facial_contact_duration_threshold
+        )
+        if facial_contact:
+            # Merge metadata from raw detection if available
+            if facial_contact_raw:
+                facial_contact[2].update(facial_contact_raw[2])
+            gestures.append(facial_contact)
+            # log_info(f"[habit_gestures] Added facial_contact gesture")
+
+        # log_info(f"[habit_gestures] Returning {len(gestures)} gesture(s)")
+        return gestures

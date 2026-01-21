@@ -824,6 +824,39 @@ body {
     justify-content: flex-end;
 }
 
+/* === Habit Alert Banner === */
+.habit-alert-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+    color: white;
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    font-weight: 600;
+    font-size: 16px;
+    z-index: 9999;
+    box-shadow: 0 2px 10px rgba(220, 38, 38, 0.5);
+    animation: alertPulse 1s ease-in-out infinite;
+}
+
+.habit-alert-banner.hidden {
+    display: none;
+}
+
+.habit-alert-icon {
+    font-size: 20px;
+}
+
+@keyframes alertPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.8; }
+}
+
 /* === Utility === */
 .hidden {
     display: none !important;

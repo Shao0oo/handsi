@@ -43,8 +43,7 @@ class TrackingConfig(BaseModel):
     fps_attentive: float = Field(default=10.0, ge=1.0, le=60.0)
     fps_active: float = Field(default=20.0, ge=1.0, le=120.0)
 
-    # Holistic tracking (face + pose + hands)
-    enable_holistic: bool = Field(default=False)
+    # Holistic tracking settings (always uses MediaPipe Holistic for hands + face + pose)
     holistic_model_complexity: int = Field(default=1, ge=0, le=2)
     holistic_min_detection_confidence: float = Field(default=0.5, ge=0.0, le=1.0)
     holistic_min_tracking_confidence: float = Field(default=0.5, ge=0.0, le=1.0)
@@ -116,9 +115,8 @@ class VolumeConfig(BaseModel):
 class AlertConfig(BaseModel):
     """Alert notification preferences for habit monitoring."""
     visual_enabled: bool = Field(default=True)
-    audio_enabled: bool = Field(default=False)
-    notification_enabled: bool = Field(default=False)
-    alert_cooldown_seconds: float = Field(default=30.0, ge=5.0, le=300.0)
+    audio_enabled: bool = Field(default=True)
+    alert_cooldown_seconds: float = Field(default=3.0, ge=1.0, le=60.0)
 
 
 class HabitAwarenessConfig(BaseModel):
@@ -129,11 +127,6 @@ class HabitAwarenessConfig(BaseModel):
     facial_contact_enabled: bool = Field(default=True)
     facial_contact_distance_threshold: float = Field(default=0.3, ge=0.1, le=1.0)
     facial_contact_duration_threshold: float = Field(default=0.7, ge=0.5, le=1.0)
-
-    # Phone scrolling settings
-    phone_scrolling_enabled: bool = Field(default=True)
-    phone_scroll_tilt_threshold: float = Field(default=0.2, ge=0.1, le=0.5)
-    phone_scroll_duration_threshold: float = Field(default=0.8, ge=0.5, le=1.0)
 
 
 class ActionConfig(BaseModel):

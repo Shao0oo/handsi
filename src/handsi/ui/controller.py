@@ -116,7 +116,8 @@ class HandsiController:
                     config=self.config.gestures,
                     feature_queue=feature_queue,
                     gesture_queue=gesture_queue,
-                    runtime_state=self.runtime_state
+                    runtime_state=self.runtime_state,
+                    habit_config=self.config.habit_awareness
                 )
 
                 self.action_thread = ActionExecutorThread(
@@ -217,6 +218,32 @@ class HandsiController:
                         "frames_captured": self.runtime_state.frames_captured,
                         "frames_processed": self.runtime_state.frames_processed,
                         "latch_enabled": self.runtime_state.latch_active
+                    }
+                }
+
+    def get_habit_alert(self) -> dict:
+        """
+        Get current habit alert state (real-time).
+
+        Returns:
+            dict: Alert state with active flag and message
+        """
+        with self._lock:
+            if not self._running or not self.runtime_state:
+                return {
+                    "success": True,
+                    "data": {
+                        "active": False,
+                        "message": ""
+                    }
+                }
+
+            with self.runtime_state.lock:
+                return {
+                    "success": True,
+                    "data": {
+                        "active": self.runtime_state.habit_alert_active,
+                        "message": self.runtime_state.habit_alert_message
                     }
                 }
 

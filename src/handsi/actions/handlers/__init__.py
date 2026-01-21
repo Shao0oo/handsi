@@ -5,6 +5,11 @@ Each handler implements a specific action type (click, scroll, zoom, etc.)
 following the ActionHandler interface.
 """
 
+from handsi.actions.handlers.alert import (
+    AudioAlertHandler,
+    CompositeAlertHandler,
+    VisualAlertHandler,
+)
 from handsi.actions.handlers.base import (
     ActionHandler,
     ContinuousActionHandler,
@@ -48,4 +53,8 @@ __all__ = [
     # Latch handlers
     "EnableLatchHandler",
     "DisableLatchHandler",
+    # Alert handlers
+    "CompositeAlertHandler",
+    "VisualAlertHandler",
+    "AudioAlertHandler",
 ]

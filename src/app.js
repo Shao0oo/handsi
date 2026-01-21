@@ -179,6 +179,25 @@ async function getStatus() {
     }
 }
 
+async function checkHabitAlert() {
+    try {
+        const result = await invoke('get_habit_alert');
+        const banner = document.getElementById('habitAlertBanner');
+        const message = document.getElementById('habitAlertMessage');
+
+        if (result.success && result.data && result.data.active) {
+            // Show alert while contact is active
+            message.textContent = result.data.message || 'Habit Detected';
+            banner.classList.remove('hidden');
+        } else {
+            // Hide when contact ends
+            banner.classList.add('hidden');
+        }
+    } catch (e) {
+        // Silently ignore - alert polling is non-critical
+    }
+}
+
 async function getSettings() {
     try {
         const result = await invoke('get_settings');
@@ -868,9 +887,11 @@ function startStatusPolling() {
         const result = await getStatus();
         if (result.success) {
             updateStatusUI(result.data);
-            setConnectionStatus(true);
+            setConnectionStatus('connected');
+            // Check for habit alerts (real-time)
+            checkHabitAlert();
         } else {
-            setConnectionStatus(false);
+            setConnectionStatus('disconnected');
         }
     }, STATUS_POLL_INTERVAL);
 }
@@ -899,7 +920,7 @@ async function init() {
         console.log('✓ [JS] Tauri API ready, invoke type:', typeof invoke);
     } catch (error) {
         console.error('❌ [JS] Failed to load Tauri API:', error);
-        setConnectionStatus(false);
+        setConnectionStatus("disconnected");
         showMessage(elements.controlMessage, 'error', 'Failed to initialize: ' + error.message);
         // Add visible error on page
         alert('CRITICAL ERROR: Tauri API failed to load!\n\n' + error.message + '\n\nCheck browser console (Cmd+Option+I) for details.');

@@ -13,6 +13,7 @@ from typing import Dict, Optional, Union
 
 from handsi.actions.adapters.base import ActionAdapter
 from handsi.actions.adapters.factory import AdapterFactory
+from handsi.actions.handlers.alert import CompositeAlertHandler
 from handsi.actions.handlers.base import ActionHandler
 from handsi.core.types import ActionName
 from handsi.actions.handlers.click import ClickHandler, DoubleClickHandler, RightClickHandler
@@ -233,6 +234,13 @@ class ActionExecutorThread(threading.Thread):
                 self.adapter,
                 self.runtime_state,
                 self.state_machine
+            ),
+
+            # Habit awareness alerts
+            ActionName.ALERT_FACIAL_CONTACT: CompositeAlertHandler(
+                self.adapter,
+                self.runtime_state,
+                self.action_config.habit_alerts
             ),
         }
 

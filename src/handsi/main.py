@@ -193,7 +193,8 @@ def main() -> int:
         config=config.gestures,
         feature_queue=feature_queue,
         gesture_queue=gesture_queue,
-        runtime_state=runtime_state
+        runtime_state=runtime_state,
+        habit_config=config.habit_awareness
     )
 
     action_thread = ActionExecutorThread(
