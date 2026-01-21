@@ -120,7 +120,7 @@ class GestureStateMachine:
         """
         Check if action is allowed based on latch state.
 
-        When latch is OFF: Only enable_latch is allowed
+        When latch is OFF: Only enable_latch and alert actions are allowed
         When latch is ON: All actions are allowed
 
         Args:
@@ -132,7 +132,15 @@ class GestureStateMachine:
         with self.runtime_state.lock:
             latch_active = self.runtime_state.latch_active
 
-        if not latch_active and action_name != ActionName.ENABLE_LATCH:
+        # Always allow these actions regardless of latch state:
+        # - ENABLE_LATCH: to re-enable gesture control
+        # - Alert actions: habit awareness should work even when gestures disabled
+        latch_exempt_actions = {
+            ActionName.ENABLE_LATCH,
+            ActionName.ALERT_FACIAL_CONTACT,
+        }
+
+        if not latch_active and action_name not in latch_exempt_actions:
             log_debug(f"Action {action_name} blocked: latch inactive")
             return False
 
