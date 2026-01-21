@@ -130,7 +130,7 @@ macos:
 # Habit Awareness - detect and alert on negative habits
 # Requires MediaPipe Holistic tracking (face)
 habit_awareness:
-  enabled: true                            # Master toggle for habit monitoring
+  enabled: false                            # Default to false - enable in Settings panel
 
   # Facial contact detection (hand near face)
   facial_contact_enabled: true

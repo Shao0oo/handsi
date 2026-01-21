@@ -80,6 +80,7 @@ function getElements() {
         deadZone: document.getElementById('deadZone'),
         deadZoneValue: document.getElementById('deadZoneValue'),
         mirrorX: document.getElementById('mirrorX'),
+        habitAwareness: document.getElementById('habitAwareness'),
 
         // Settings - Scroll
         scrollSensitivity: document.getElementById('scrollSensitivity'),
@@ -320,6 +321,7 @@ function updateSettingsUI(result) {
     elements.deadZoneValue.textContent = settings.dead_zone;
 
     elements.mirrorX.checked = settings.mirror_x;
+    elements.habitAwareness.checked = settings.habit_awareness_enabled;
 
     // Scroll settings
     elements.scrollSensitivity.value = settings.scroll_sensitivity;
@@ -434,6 +436,7 @@ async function handleSaveSettings() {
         smoothing: parseFloat(elements.smoothing.value),
         dead_zone: parseFloat(elements.deadZone.value),
         mirror_x: elements.mirrorX.checked,
+        habit_awareness_enabled: elements.habitAwareness.checked,
         scroll_sensitivity: parseFloat(elements.scrollSensitivity.value),
         scroll_dead_zone: parseFloat(elements.scrollDeadZone.value),
         invert_scroll: elements.invertScroll.checked,

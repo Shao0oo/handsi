@@ -272,7 +272,8 @@ class HandsiController:
                 "latch_cooldown_ms": self.config.gestures.latch_cooldown_ms,
                 "smoothing_window": self.config.gestures.smoothing_window,
                 "mirror_x": self.config.actions.mouse.mirror_x,
-                "invert_scroll": self.config.actions.scroll.invert
+                "invert_scroll": self.config.actions.scroll.invert,
+                "habit_awareness_enabled": self.config.habit_awareness.enabled
             }
         }
 
@@ -315,6 +316,8 @@ class HandsiController:
                 "smoothing_window": ("gestures.smoothing_window", int, True),
                 # Camera settings (require restart)
                 "device_id": ("camera.device_id", int, True),
+                # Habit awareness (requires restart)
+                "habit_awareness_enabled": ("habit_awareness.enabled", bool, True),
             }
 
             # Track which fields changed and if restart is needed
