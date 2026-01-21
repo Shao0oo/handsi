@@ -64,6 +64,10 @@ class GestureDetector:
         self.habit_history = {
             "facial_contact": deque(maxlen=30),  # ~1-2 seconds at 20 fps
         }
+        # Per-frame confidence history for averaging with proportion
+        self.habit_confidence_history = {
+            "facial_contact": deque(maxlen=30),
+        }
 
     def detect_gestures(self, features: dict[str, Any]) -> list[tuple[str, float, dict]]:
         """
@@ -955,10 +959,7 @@ class GestureDetector:
             # log_info(f"[facial_contact] Invalid face scale: {face_scale:.4f}")
             return None
 
-        # Get face center (nose) for 2D proximity check
-        nose = (nose_tip["x"], nose_tip["y"])
-
-        # log_info(f"[facial_contact] Face scale: {face_scale:.4f}, nose=({nose[0]:.3f}, {nose[1]:.3f}), checking {len(hands)} hand(s)")
+        # log_info(f"[facial_contact] Face scale: {face_scale:.4f}, checking {len(hands)} hand(s)")
 
         # Check each hand
         for hand_idx, hand_data in enumerate(hands):
@@ -976,51 +977,45 @@ class GestureDetector:
             scale_ratio = hand_scale / face_scale
             max_ratio = 1.0 + self.facial_contact_distance_threshold  # e.g., 1.0 + 0.2 = 1.2
 
-            # log_info(f"[facial_contact] Hand {hand_idx}: scale_ratio={scale_ratio:.3f}, max_ratio={max_ratio:.3f}")
+            # # log_info(f"[facial_contact] Hand {hand_idx}: scale_ratio={scale_ratio:.3f}, max_ratio={max_ratio:.3f}")
 
             if scale_ratio > max_ratio:
                 # log_info(f"[facial_contact] Hand {hand_idx}: FAILED depth check (hand too close to camera)")
                 continue
 
-            # CHECK 2: 2D proximity check - are fingertips near the face?
-            # Check distance from fingertips to nose, normalized by face_scale
-            fingertip_indices = [4, 8, 12] #, 16, 20]  # thumb, index, middle, ring, pinky
-            min_finger_distance = float('inf')
-            closest_finger = None
+            # CHECK 2: Is fingertip inside face bounding box?
+            # Face mesh key points: 10=forehead, 152=chin, 234=right cheek, 454=left cheek
+            forehead = face_landmarks[10]
+            left_cheek = face_landmarks[454]
+            right_cheek = face_landmarks[234]
 
-            for finger_idx in fingertip_indices:
-                fingertip = lm[finger_idx]
-                # 2D distance (ignore z for this check since we already checked depth)
-                dist_2d = np.sqrt((fingertip[0] - nose[0])**2 + (fingertip[1] - nose[1])**2)
-                # Normalize by face scale
-                normalized_dist = dist_2d / face_scale
+            # Build bounding box with margin
+            margin = 0.1 * face_scale
+            min_x = min(forehead["x"], chin["x"], left_cheek["x"], right_cheek["x"]) - margin
+            max_x = max(forehead["x"], chin["x"], left_cheek["x"], right_cheek["x"]) + margin
+            min_y = min(forehead["y"], chin["y"], left_cheek["y"], right_cheek["y"]) - margin
+            max_y = max(forehead["y"], chin["y"], left_cheek["y"], right_cheek["y"]) + margin
 
-                if normalized_dist < min_finger_distance:
-                    min_finger_distance = normalized_dist
-                    closest_finger = finger_idx
+            # Check if index (8) or middle (12) fingertip is inside face bbox
+            finger_in_face = False
+            for finger_idx in [8, 12]:
+                fx, fy = lm[finger_idx][0], lm[finger_idx][1]
+                if min_x <= fx <= max_x and min_y <= fy <= max_y:
+                    finger_in_face = True
+                    break
 
-            # Proximity threshold: fingertip must be within 1.5x face_scale of nose
-            proximity_threshold = 1.5
-            # log_info(f"[facial_contact] Hand {hand_idx}: min_finger_dist={min_finger_distance:.3f}, proximity_threshold={proximity_threshold:.3f}, closest_finger={closest_finger}")
-
-            if min_finger_distance > proximity_threshold:
-                # log_info(f"[facial_contact] Hand {hand_idx}: FAILED proximity check (fingers not near face)")
+            if not finger_in_face:
                 continue
 
             # Both checks passed - hand is touching face
-            # Confidence based on both scale ratio and proximity
-            depth_confidence = max(0.0, 1.0 - (scale_ratio - 1.0) / self.facial_contact_distance_threshold) if scale_ratio > 1.0 else 1.0
-            proximity_confidence = max(0.0, 1.0 - min_finger_distance / proximity_threshold)
-            confidence = (depth_confidence + proximity_confidence) / 2.0
+            confidence = max(0.0, 1.0 - (scale_ratio - 1.0) / self.facial_contact_distance_threshold) if scale_ratio > 1.0 else 1.0
 
+            # if confidence < self.confidence_threshold:
+            #     continue
             # log_info(f"[facial_contact] DETECTED! confidence={confidence:.3f}, scale_ratio={scale_ratio:.3f}, finger_dist={min_finger_distance:.3f}")
 
             return ("facial_contact", confidence, {
-                "scale_ratio": scale_ratio,
-                "face_scale": face_scale,
-                "hand_scale": hand_scale,
-                "finger_distance": min_finger_distance,
-                "closest_finger": closest_finger
+                "hand_scale": hand_scale
             })
 
         # log_info("[facial_contact] No hand touching face")
@@ -1030,6 +1025,7 @@ class GestureDetector:
         self,
         habit_name: str,
         detected: bool,
+        frame_confidence: float,
         duration_threshold: float
     ) -> Optional[tuple[str, float, dict]]:
         """
@@ -1041,6 +1037,7 @@ class GestureDetector:
         Args:
             habit_name: Name of the habit ("facial_contact")
             detected: Whether the habit was detected in current frame
+            frame_confidence: Per-frame confidence (0.0 if not detected)
             duration_threshold: Proportion of frames required (0.0 to 1.0)
 
         Returns:
@@ -1052,6 +1049,9 @@ class GestureDetector:
 
         history = self.habit_history[habit_name]
         history.append(detected)
+
+        confidence_history = self.habit_confidence_history[habit_name]
+        confidence_history.append(frame_confidence)
 
         # Need minimum history
         if len(history) < 10:
@@ -1066,7 +1066,10 @@ class GestureDetector:
 
         # Require sustained detection
         if proportion >= duration_threshold:
-            confidence = proportion
+            # Average proportion with mean per-frame confidence
+            positive_confidences = [c for c in confidence_history if c > 0]
+            mean_frame_confidence = sum(positive_confidences) / len(positive_confidences) if positive_confidences else 0.0
+            confidence = (proportion + mean_frame_confidence) / 2.0
             # log_info(f"[sustained_habit] {habit_name}: SUSTAINED! confidence={confidence:.3f}")
 
             return (habit_name, confidence, {
@@ -1097,9 +1100,11 @@ class GestureDetector:
         # Facial contact detection
         facial_contact_raw = self._detect_facial_contact(features)
         # log_info(f"[habit_gestures] facial_contact_raw: {facial_contact_raw is not None}")
+        frame_confidence = facial_contact_raw[1] if facial_contact_raw else 0.0
         facial_contact = self._check_sustained_habit(
             "facial_contact",
             facial_contact_raw is not None,
+            frame_confidence,
             self.facial_contact_duration_threshold
         )
         if facial_contact:

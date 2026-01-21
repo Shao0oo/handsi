@@ -134,5 +134,5 @@ habit_awareness:
 
   # Facial contact detection (hand near face)
   facial_contact_enabled: true
-  facial_contact_distance_threshold: 0.3    # Max distance from face (fraction of face size)
+  facial_contact_distance_threshold: 0.2    # Max distance from face (fraction of face size)
   facial_contact_duration_threshold: 0.7    # Must be detected in 70% of frames
