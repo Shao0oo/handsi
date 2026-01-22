@@ -173,6 +173,8 @@ def main() -> int:
 
     # Create shared state and queues
     runtime_state = RuntimeState()
+    # Set initial latch state from config (same as controller.py for Tauri mode)
+    runtime_state.latch_active = config.gestures.latch_active
     frame_queue, feature_queue, gesture_queue = create_queues()
 
     # Create threads

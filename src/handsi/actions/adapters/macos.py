@@ -40,7 +40,6 @@ try:
         kCGHIDEventTap,
         kCGScrollEventUnitPixel,
         kCGScrollEventUnitLine,
-        kCGEventFlagMaskControl,
         kCGEventFlagMaskCommand,
         kCGEventKeyDown,
         kCGEventKeyUp,
@@ -730,8 +729,9 @@ class MacOSAdapter(ActionAdapter):
         """
         Switch to adjacent virtual desktop using Mission Control.
 
-        Uses CGEvent keyboard API to send Control+Arrow key combinations.
-        This only requires Accessibility permission (no AppleScript/System Events permission needed).
+        Uses osascript subprocess to send Control+Arrow key combinations via System Events.
+        This requires Automation permission for System Events but is the only reliable way
+        to trigger Mission Control (CGEvent at HID level doesn't reach the Dock/WindowServer).
 
         Args:
             direction: Direction to switch ('left'/'prev', 'right'/'next', 'up', or 'down')
@@ -760,28 +760,29 @@ class MacOSAdapter(ActionAdapter):
                 log_error("ACT-003", f"Invalid desktop switch direction: {direction}")
                 return False
 
-            # Use NSAppleScript to send keyboard shortcut to System Events
-            # This runs in-process (not as subprocess) so it inherits Handsi.app's permissions
-            # and can send system-level keyboard shortcuts (unlike CGEventPost which targets foreground app)
+            # Use osascript subprocess instead of in-process NSAppleScript
+            # This avoids potential blocking/deadlock in daemon thread context
+            # and properly triggers Mission Control via System Events
+            import subprocess
+            script = f'tell application "System Events" to key code {key_code} using control down'
 
-            script_source = f'''
-            tell application "System Events"
-                key code {key_code} using control down
-            end tell
-            '''
+            result = subprocess.run(
+                ['osascript', '-e', script],
+                capture_output=True,
+                text=True,
+                timeout=1.0  # 2 second timeout
+            )
 
-            # Create and execute AppleScript in-process
-            script = NSAppleScript.alloc().initWithSource_(script_source)
-            result, error = script.executeAndReturnError_(None)
-
-            if error:
-                error_desc = error.get('NSAppleScriptErrorMessage', str(error))
-                log_error("ACT-001", f"Desktop switch failed: {error_desc}")
+            if result.returncode != 0:
+                log_error("ACT-001", f"Desktop switch failed: {result.stderr}")
                 return False
 
-            log_info(f"Desktop switch executed via NSAppleScript: Control+{direction} (key_code={key_code})")
+            log_info(f"Desktop switch executed via osascript: Control+{direction} (key_code={key_code})")
             return True
 
+        except subprocess.TimeoutExpired:
+            log_error("ACT-001", "Desktop switch timed out (System Events not responding)")
+            return False
         except Exception as e:
             log_error("ACT-001", f"Desktop switch failed: {e}")
             return False
