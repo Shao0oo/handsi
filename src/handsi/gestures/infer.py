@@ -2,7 +2,7 @@
 Thread 3: Gesture inference thread.
 
 Pops features from FeatureQueue, detects gestures, applies temporal smoothing,
-and pushes to GestureQueue.
+and pushes to GestureQueue. Also handles habit awareness detection when enabled.
 """
 
 import threading
@@ -15,7 +15,7 @@ from handsi.core.bus import (
     GestureQueue,
     RuntimeState,
 )
-from handsi.core.config import GestureConfig
+from handsi.core.config import ActionConfig, GestureConfig, HabitAwarenessConfig
 from handsi.core.logging import log_debug, log_error, log_info, log_warning
 from handsi.gestures.rules import GestureDetector
 from handsi.gestures.smoothing import TemporalSmoother
@@ -28,6 +28,7 @@ class GestureInferenceThread(threading.Thread):
     Responsibilities:
     - Pop features from FeatureQueue
     - Detect gestures using rule-based detector
+    - Detect habit gestures when habit awareness is enabled
     - Apply temporal smoothing
     - Push confirmed gestures to GestureQueue
     - Update RuntimeState with latest gesture
@@ -39,6 +40,8 @@ class GestureInferenceThread(threading.Thread):
         feature_queue: FeatureQueue,
         gesture_queue: GestureQueue,
         runtime_state: RuntimeState,
+        habit_config: Optional[HabitAwarenessConfig] = None,
+        action_config: Optional[ActionConfig] = None,
         name: str = "GestureInferenceThread"
     ):
         super().__init__(name=name, daemon=True)
@@ -46,17 +49,36 @@ class GestureInferenceThread(threading.Thread):
         self.feature_queue = feature_queue
         self.gesture_queue = gesture_queue
         self.runtime_state = runtime_state
+        self.habit_config = habit_config
 
-        # Gesture detector
-        self.detector = GestureDetector(
-            pinch_threshold=config.pinch_threshold,
-            fist_threshold=config.fist_threshold,
-            open_hand_distance_threshold=config.open_hand_distance_threshold,
-            open_hand_spread_threshold=config.open_hand_spread_threshold,
-            swipe_velocity_threshold=config.swipe_velocity_threshold,
-            thumbs_vertical_threshold=config.thumbs_vertical_threshold,
-            confidence_threshold=config.confidence_threshold
-        )
+        # Performance optimization: only detect gestures that have action mappings
+        enabled_gestures: Optional[set[str]] = None
+        if action_config and action_config.mappings:
+            enabled_gestures = set(action_config.mappings.keys())
+            # Also enable facial_contact if habit awareness is enabled
+            if habit_config and habit_config.enabled and habit_config.facial_contact_enabled:
+                enabled_gestures.add("facial_contact")
+
+        # Gesture detector with habit awareness thresholds
+        detector_kwargs = {
+            "pinch_threshold": config.pinch_threshold,
+            "fist_threshold": config.fist_threshold,
+            "open_hand_distance_threshold": config.open_hand_distance_threshold,
+            "open_hand_spread_threshold": config.open_hand_spread_threshold,
+            "swipe_velocity_threshold": config.swipe_velocity_threshold,
+            "thumbs_vertical_threshold": config.thumbs_vertical_threshold,
+            "confidence_threshold": config.confidence_threshold,
+            "enabled_gestures": enabled_gestures,
+        }
+
+        # Add habit awareness thresholds if config provided
+        if habit_config:
+            detector_kwargs.update({
+                "facial_contact_distance_threshold": habit_config.facial_contact_distance_threshold,
+                "facial_contact_duration_threshold": habit_config.facial_contact_duration_threshold,
+            })
+
+        self.detector = GestureDetector(**detector_kwargs)
 
         # Temporal smoother
         self.smoother = TemporalSmoother(
@@ -93,6 +115,17 @@ class GestureInferenceThread(threading.Thread):
 
             # Detect gestures from features
             gestures = self.detector.detect_gestures(feature_vector.features)
+
+            # Detect habit gestures if habit awareness is enabled
+            if self.habit_config and self.habit_config.enabled:
+                # log_info("Detecting habit gestures...")
+                habit_gestures = self.detector.detect_habit_gestures(feature_vector.features)
+
+                # Filter habit gestures based on individual toggles
+                for habit in habit_gestures:
+                    habit_name = habit[0]
+                    if habit_name == "facial_contact" and self.habit_config.facial_contact_enabled:
+                        gestures.append(habit)
 
             if gestures:
                 log_debug(

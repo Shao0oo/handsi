@@ -13,10 +13,12 @@ from typing import Dict, Optional, Union
 
 from handsi.actions.adapters.base import ActionAdapter
 from handsi.actions.adapters.factory import AdapterFactory
+from handsi.actions.handlers.alert import CompositeAlertHandler
 from handsi.actions.handlers.base import ActionHandler
 from handsi.core.types import ActionName
 from handsi.actions.handlers.click import ClickHandler, DoubleClickHandler, RightClickHandler
 from handsi.actions.handlers.desktop import SwitchDesktopHandler
+from handsi.actions.handlers.keyboard import CopyHandler, PasteHandler, UndoHandler
 from handsi.actions.handlers.latch import DisableLatchHandler, EnableLatchHandler
 from handsi.actions.handlers.mouse import MouseMoveHandler
 from handsi.actions.handlers.scroll import ContinuousScrollHandler, ScrollStepHandler
@@ -223,6 +225,20 @@ class ActionExecutorThread(threading.Thread):
                 self.runtime_state
             ),
 
+            # Keyboard actions
+            ActionName.COPY: CopyHandler(
+                self.adapter,
+                self.runtime_state
+            ),
+            ActionName.PASTE: PasteHandler(
+                self.adapter,
+                self.runtime_state
+            ),
+            ActionName.UNDO: UndoHandler(
+                self.adapter,
+                self.runtime_state
+            ),
+
             # Latch control
             ActionName.ENABLE_LATCH: EnableLatchHandler(
                 self.adapter,
@@ -233,6 +249,13 @@ class ActionExecutorThread(threading.Thread):
                 self.adapter,
                 self.runtime_state,
                 self.state_machine
+            ),
+
+            # Habit awareness alerts
+            ActionName.ALERT_FACIAL_CONTACT: CompositeAlertHandler(
+                self.adapter,
+                self.runtime_state,
+                self.action_config.habit_alerts
             ),
         }
 

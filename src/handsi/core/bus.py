@@ -66,6 +66,11 @@ class RuntimeState:
     hand_scale: float = 0.0  # Current hand size (wrist to MCP distance)
     cursor_position: tuple[float, float] = (0.0, 0.0)  # Normalized hand position
 
+    # NEW: Habit alert state (for preview overlay)
+    habit_alert_active: bool = False
+    habit_alert_message: str = ""
+    habit_alert_time: float = 0.0
+
     def update_activity_level(
         self,
         hands_detected: bool,
@@ -131,6 +136,8 @@ class FeatureVector:
     frame_number: int
     hands_detected: bool
     hand_count: int
+    face_detected: bool = False  # NEW: For holistic tracking
+    pose_detected: bool = False  # NEW: For holistic tracking
 
 
 @dataclass

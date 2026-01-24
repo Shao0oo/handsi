@@ -149,6 +149,19 @@ class ActionAdapter(ABC):
         """
         pass
 
+    @abstractmethod
+    def keyboard_shortcut(self, shortcut: str) -> bool:
+        """
+        Execute keyboard shortcut using Command key combinations.
+
+        Args:
+            shortcut: Shortcut string like 'cmd+c', 'cmd+v', 'cmd+z'
+
+        Returns:
+            True if shortcut executed successfully, False otherwise
+        """
+        pass
+
     def cleanup(self) -> None:
         """
         Clean up adapter resources.

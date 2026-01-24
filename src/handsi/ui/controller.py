@@ -116,7 +116,9 @@ class HandsiController:
                     config=self.config.gestures,
                     feature_queue=feature_queue,
                     gesture_queue=gesture_queue,
-                    runtime_state=self.runtime_state
+                    runtime_state=self.runtime_state,
+                    habit_config=self.config.habit_awareness,
+                    action_config=self.config.actions
                 )
 
                 self.action_thread = ActionExecutorThread(
@@ -220,6 +222,32 @@ class HandsiController:
                     }
                 }
 
+    def get_habit_alert(self) -> dict:
+        """
+        Get current habit alert state (real-time).
+
+        Returns:
+            dict: Alert state with active flag and message
+        """
+        with self._lock:
+            if not self._running or not self.runtime_state:
+                return {
+                    "success": True,
+                    "data": {
+                        "active": False,
+                        "message": ""
+                    }
+                }
+
+            with self.runtime_state.lock:
+                return {
+                    "success": True,
+                    "data": {
+                        "active": self.runtime_state.habit_alert_active,
+                        "message": self.runtime_state.habit_alert_message
+                    }
+                }
+
     def get_settings(self) -> dict:
         """
         Get current configuration settings.
@@ -245,7 +273,8 @@ class HandsiController:
                 "latch_cooldown_ms": self.config.gestures.latch_cooldown_ms,
                 "smoothing_window": self.config.gestures.smoothing_window,
                 "mirror_x": self.config.actions.mouse.mirror_x,
-                "invert_scroll": self.config.actions.scroll.invert
+                "invert_scroll": self.config.actions.scroll.invert,
+                "habit_awareness_enabled": self.config.habit_awareness.enabled
             }
         }
 
@@ -288,6 +317,8 @@ class HandsiController:
                 "smoothing_window": ("gestures.smoothing_window", int, True),
                 # Camera settings (require restart)
                 "device_id": ("camera.device_id", int, True),
+                # Habit awareness (requires restart)
+                "habit_awareness_enabled": ("habit_awareness.enabled", bool, True),
             }
 
             # Track which fields changed and if restart is needed

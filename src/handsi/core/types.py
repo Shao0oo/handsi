@@ -25,6 +25,11 @@ class ActionName(str, Enum):
     DOUBLE_CLICK = "double_click"
     RIGHT_CLICK = "right_click"
 
+    # Keyboard actions
+    COPY = "copy"
+    PASTE = "paste"
+    UNDO = "undo"
+
     # Scroll actions
     SCROLL_UP = "scroll_up"
     SCROLL_DOWN = "scroll_down"
@@ -44,6 +49,9 @@ class ActionName(str, Enum):
     # Latch control
     ENABLE_LATCH = "enable_latch"
     DISABLE_LATCH = "disable_latch"
+
+    # Habit awareness alerts
+    ALERT_FACIAL_CONTACT = "alert_facial_contact"
 
     @classmethod
     def continuous_actions(cls) -> set["ActionName"]:
@@ -101,3 +109,9 @@ class GestureMetadata(TypedDict, total=False):
     extended_count: int  # Number of extended fingers
     direction: str  # Direction for swipe gestures ("left", "right", "up", "down")
     velocity: float  # Movement velocity for swipe detection
+
+    # Habit awareness fields
+    face_distance: NotRequired[float]  # Distance from hand to face (normalized by face scale)
+    face_scale: NotRequired[float]  # Face scale reference (nose-to-chin distance)
+    sustained_frames: NotRequired[int]  # Number of frames habit was sustained
+    proportion: NotRequired[float]  # Proportion of frames with habit detected (0-1)

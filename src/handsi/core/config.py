@@ -43,6 +43,11 @@ class TrackingConfig(BaseModel):
     fps_attentive: float = Field(default=10.0, ge=1.0, le=60.0)
     fps_active: float = Field(default=20.0, ge=1.0, le=120.0)
 
+    # Holistic tracking settings (always uses MediaPipe Holistic for hands + face + pose)
+    holistic_model_complexity: int = Field(default=1, ge=0, le=2)
+    holistic_min_detection_confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    holistic_min_tracking_confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+
 
 class GestureConfig(BaseModel):
     """Gesture recognition settings."""
@@ -107,6 +112,23 @@ class VolumeConfig(BaseModel):
     dead_zone_min_damping: float = Field(default=0.1, ge=0.0, le=0.5)
 
 
+class AlertConfig(BaseModel):
+    """Alert notification preferences for habit monitoring."""
+    visual_enabled: bool = Field(default=True)
+    audio_enabled: bool = Field(default=True)
+    alert_cooldown_seconds: float = Field(default=3.0, ge=1.0, le=60.0)
+
+
+class HabitAwarenessConfig(BaseModel):
+    """Habit awareness settings (main toggle)."""
+    enabled: bool = Field(default=False, description="Enable habit monitoring")
+
+    # Facial contact settings
+    facial_contact_enabled: bool = Field(default=True)
+    facial_contact_distance_threshold: float = Field(default=0.3, ge=0.1, le=1.0)
+    facial_contact_duration_threshold: float = Field(default=0.7, ge=0.5, le=1.0)
+
+
 class ActionConfig(BaseModel):
     """Action execution settings."""
     mappings: dict[str, Union[str, ActionName]] = Field(default_factory=dict)
@@ -114,6 +136,7 @@ class ActionConfig(BaseModel):
     scroll: ScrollConfig = Field(default_factory=ScrollConfig)
     zoom: ZoomConfig = Field(default_factory=ZoomConfig)
     volume: VolumeConfig = Field(default_factory=VolumeConfig)
+    habit_alerts: AlertConfig = Field(default_factory=AlertConfig)
 
     @field_validator("mappings")
     @classmethod
@@ -210,7 +233,7 @@ class HandsiConfig(BaseModel):
     actions: ActionConfig = Field(default_factory=ActionConfig)
     system: SystemConfig = Field(default_factory=SystemConfig)
     macos: MacOSConfig = Field(default_factory=MacOSConfig)
-    still_mode: StillModeConfig = Field(default_factory=StillModeConfig)
+    habit_awareness: HabitAwarenessConfig = Field(default_factory=HabitAwarenessConfig)
 
 
 def clamp_nested_dict(data: dict, model_class) -> dict:

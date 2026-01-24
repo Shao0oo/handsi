@@ -88,6 +88,8 @@ class IpcServer:
                 result = self.controller.update_mappings(mappings)
             elif command == "get_available_gestures_and_actions":
                 result = self.controller.get_available_gestures_and_actions()
+            elif command == "get_habit_alert":
+                result = self.controller.get_habit_alert()
             else:
                 result = {
                     "success": False,
