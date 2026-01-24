@@ -12,9 +12,31 @@ Handsi is a local, privacy-first gesture control system that tracks your hands v
 
 **[Installation Guide](INSTALLATION.md)** - Download the DMG and start using Handsi in 2 minutes
 
+**Connecting might take a minute** - initializing backend takes a long time.
+
 #### For Developers:
 
 **[Developer Installation](docs/dev/DEVELOPER_INSTALLATION.md)** - Build from source or contribute
+
+#### Usage:
+
+**[Usage Guide](docs/USAGE.md)** — guide to using Handsi
+
+---
+
+## Use Cases
+
+### Reading papers away from the desk
+Stand or walk around while reading on your screen. Control scrolling, zooming, and page navigation without being tethered to your desk.
+
+### Watching videos while eating
+Keep both hands free to eat while controlling playback, volume, and navigation with simple gestures.
+
+### Hybrid control: one hand on trackpad, one hand gesturing
+Use your trackpad for precise work with one hand, while your other hand handles clicking, scrolling, or switching desktops via gestures.
+
+### Getting Handsi
+Perfect for when you want to get handsi!
 
 ---
 
@@ -29,7 +51,7 @@ Handsi is a local, privacy-first gesture control system that tracks your hands v
   - Scroll (vertical/horizontal)
   - Zoom in/out
   - Desktop switching (next/previous workspace)
-  - Window management (minimize/maximize/app switcher)
+  - Window management (view all windows)
   - Volume control
 
 **Planned:**
@@ -38,14 +60,6 @@ Handsi is a local, privacy-first gesture control system that tracks your hands v
 - Voice + motion labeling
 - Onboarding and calibration
 - Gesture combos (temporal and physical grammar)
-
----
-
-## Goals
-
-- **Mobility-first:** Control the screen while walking/standing
-- **Low cognitive load:** Small set of reliable gestures with clear activation
-- **Adaptable signals:** Use voice + motion to program personalized gestures over time
 
 ---
 
@@ -63,6 +77,7 @@ Handsi is a local, privacy-first gesture control system that tracks your hands v
 
 ### User Documentation
 - **[Installation Guide](INSTALLATION.md)** — Download DMG and install
+- **[Usage Guide](docs/USAGE.md)** — How to use gestures and configure settings
 
 ### Developer Documentation
 - **[Developer Installation](docs/dev/DEVELOPER_INSTALLATION.md)** — Set up dev environment
@@ -86,7 +101,7 @@ Handsi is a local, privacy-first gesture control system that tracks your hands v
 
 ---
 
-## Screenshots
+## Visualization and UI
 
 *Coming soon*
 

@@ -2,6 +2,8 @@
 
 Control your Mac using hand gestures — no mouse, no keyboard needed.
 
+Connecting might take a minute - initializing backend takes a long time.
+
 ---
 
 ## Download and Install

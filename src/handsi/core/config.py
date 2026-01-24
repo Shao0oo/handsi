@@ -217,6 +217,14 @@ class StillModeConfig(BaseModel):
         return validated
 
 
+class StillModeConfig(BaseModel):
+    """Still Mode settings for presentation/focused use."""
+    enabled: bool = Field(default=False)
+    disabled_actions: list[str] = Field(
+        default_factory=lambda: ["mouse_move", "continuous_zoom", "double_click", "swipe"]
+    )
+
+
 class HandsiConfig(BaseModel):
     """Root configuration model."""
     camera: CameraConfig = Field(default_factory=CameraConfig)

@@ -188,6 +188,8 @@ body {
     font-weight: 400;
     text-transform: uppercase;
     letter-spacing: 2px;
+    min-width: 110px;
+    text-align: center;
 }
 
 /* === Cards === */
