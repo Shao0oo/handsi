@@ -343,6 +343,12 @@ async fn get_available_gestures_and_actions(state: tauri::State<'_, AppState>) -
     python.send_command("get_available_gestures_and_actions", serde_json::json!({}))
 }
 
+#[tauri::command]
+async fn get_habit_alert(state: tauri::State<'_, AppState>) -> Result<IpcResponse, String> {
+    let mut python = state.python.lock().unwrap();
+    python.send_command("get_habit_alert", serde_json::json!({}))
+}
+
 fn main() {
     eprintln!("[Rust] ============================================");
     eprintln!("[Rust] Handsi Tauri Application Starting");
@@ -389,7 +395,8 @@ fn main() {
             get_mappings,
             update_mapping,
             update_mappings,
-            get_available_gestures_and_actions
+            get_available_gestures_and_actions,
+            get_habit_alert
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

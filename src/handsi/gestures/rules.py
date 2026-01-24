@@ -1,9 +1,10 @@
 """
-Rule-based gesture detection using MediaPipe hand landmarks.
+Rule-based gesture detection using MediaPipe Holistic landmarks.
 
-Detects 11 gestures:
+Detects gestures:
 - Single hand: index/middle/ring/pinky pinch, fist, open_hand, thumbs_up/down, swipe (with direction)
 - Two hands: two_hands_pinch, two_hands_open
+- Habit awareness: facial_contact (hand near face)
 """
 
 import time
@@ -37,7 +38,12 @@ class GestureDetector:
         swipe_velocity_threshold: float = 0.5,
         thumbs_vertical_threshold: float = 1.3,
         confidence_threshold: float = 0.7,
-        history_length: int = 10
+        history_length: int = 10,
+        # Habit awareness thresholds
+        facial_contact_distance_threshold: float = 0.3,
+        facial_contact_duration_threshold: float = 0.7,
+        # Performance optimization: only detect these gestures (None = all)
+        enabled_gestures: Optional[set[str]] = None
     ):
         self.pinch_threshold = pinch_threshold
         self.fist_threshold = fist_threshold
@@ -51,6 +57,31 @@ class GestureDetector:
         self.wrist_history: dict[int, deque] = {}  # hand_idx -> deque of (x, y, t)
         self.hand_distance_history = deque(maxlen=history_length)  # two-hand distance
         self.history_length = history_length
+
+        # Habit awareness thresholds
+        self.facial_contact_distance_threshold = facial_contact_distance_threshold
+        self.facial_contact_duration_threshold = facial_contact_duration_threshold
+
+        # Habit history for temporal smoothing (require sustained behavior)
+        self.habit_history = {
+            "facial_contact": deque(maxlen=30),  # ~1-2 seconds at 20 fps
+        }
+        # Per-frame confidence history for averaging with proportion
+        self.habit_confidence_history = {
+            "facial_contact": deque(maxlen=30),
+        }
+
+        # Performance optimization: only detect enabled gestures
+        # None = detect all gestures (backward compatibility)
+        self.enabled_gestures = enabled_gestures
+        if enabled_gestures:
+            log_info(f"Gesture detection optimized: only detecting {len(enabled_gestures)} gesture(s): {sorted(enabled_gestures)}")
+
+    def _is_gesture_enabled(self, gesture_name: str) -> bool:
+        """Check if a gesture should be detected (for performance optimization)."""
+        if self.enabled_gestures is None:
+            return True  # No filter = detect all
+        return gesture_name in self.enabled_gestures
 
     def detect_gestures(self, features: dict[str, Any]) -> list[tuple[str, float, dict]]:
         """
@@ -77,22 +108,28 @@ class GestureDetector:
             # Convert to list of (x, y, z) tuples for easier access
             lm = [(lm["x"], lm["y"], lm["z"]) for lm in landmarks]
 
-            # Check each single-hand gesture
-            gesture_checks = [
-                self._detect_index_pinch(lm),
-                self._detect_two_finger_pinch(lm),
-                self._detect_middle_pinch(lm),
-                self._detect_ring_pinch(lm),
-                self._detect_pinky_pinch(lm),
-                self._two_fingers_point(lm),
-                self._detect_fist(lm),
-                self._detect_open_hand(lm),
-                self._detect_thumbs_up(lm),
-                self._detect_thumbs_down(lm),
-                self._detect_swipe(lm, hand_idx)
+            # Only run detection for enabled gestures (performance optimization)
+            # Map gesture names to their detection methods
+            single_hand_detectors = [
+                ("index_pinch", lambda: self._detect_index_pinch(lm)),
+                ("two_finger_pinch", lambda: self._detect_two_finger_pinch(lm)),
+                ("middle_pinch", lambda: self._detect_middle_pinch(lm)),
+                ("ring_pinch", lambda: self._detect_ring_pinch(lm)),
+                ("pinky_pinch", lambda: self._detect_pinky_pinch(lm)),
+                ("two_fingers_point", lambda: self._two_fingers_point(lm)),
+                ("fist", lambda: self._detect_fist(lm)),
+                ("open_hand", lambda: self._detect_open_hand(lm)),
+                ("thumbs_up", lambda: self._detect_thumbs_up(lm)),
+                ("thumbs_down", lambda: self._detect_thumbs_down(lm)),
+                ("swipe", lambda: self._detect_swipe(lm, hand_idx)),
             ]
 
-            for result in gesture_checks:
+            for gesture_name, detector in single_hand_detectors:
+                # Skip detection if gesture is not enabled
+                if not self._is_gesture_enabled(gesture_name):
+                    continue
+
+                result = detector()
                 if result is not None:
                     name, conf, meta = result
                     if conf >= self.confidence_threshold:
@@ -105,15 +142,17 @@ class GestureDetector:
             lm_left = [(lm["x"], lm["y"], lm["z"]) for lm in hands[0]["landmarks"]]
             lm_right = [(lm["x"], lm["y"], lm["z"]) for lm in hands[1]["landmarks"]]
 
-            two_hand_checks = [
-                self._detect_two_hands_pinch(lm_left, lm_right),
-                self._detect_two_hands_open(lm_left, lm_right),
-                # TODO: Implement spread detection using _detect_swipe
-                # self._detect_two_hands_spread(lm_left, lm_right), 
-                # self._detect_two_hands_close(lm_left, lm_right)
+            two_hand_detectors = [
+                ("two_hands_pinch", lambda: self._detect_two_hands_pinch(lm_left, lm_right)),
+                ("two_hands_open", lambda: self._detect_two_hands_open(lm_left, lm_right)),
             ]
 
-            for result in two_hand_checks:
+            for gesture_name, detector in two_hand_detectors:
+                # Skip detection if gesture is not enabled
+                if not self._is_gesture_enabled(gesture_name):
+                    continue
+
+                result = detector()
                 if result is not None:
                     name, conf, meta = result
                     if conf >= self.confidence_threshold:
@@ -426,7 +465,7 @@ class GestureDetector:
         pinky_tip = lm[20]
         distance = self._normalized_distance(thumb_tip, pinky_tip, hand_scale)
 
-        if distance >= self.pinch_threshold:
+        if distance >= self.pinch_threshold + 0.1:
             return None
 
         # Check that other fingers (index, middle, ring) are extended
@@ -895,3 +934,207 @@ class GestureDetector:
             })
 
         return None
+
+    # === Habit Awareness Gestures ===
+
+    def _detect_facial_contact(self, features: dict) -> Optional[tuple[str, float, dict]]:
+        """
+        Detect hand touching face using two checks:
+        1. Depth check: hand_scale <= face_scale (hand at same depth as face)
+        2. Proximity check: fingertips are within 2D distance of face center
+
+        Logic:
+        - When hand is far from face (normal use): hand appears larger (closer to camera)
+        - When hand is near face: hand appears similar size to face (same depth)
+        - Additionally, fingertips must be close to the face in 2D space
+
+        Args:
+            features: Feature dict with 'hands' and 'face' lists
+
+        Returns:
+            (gesture_name, confidence, metadata) or None
+        """
+        if not features.get("face_detected"):
+            # log_info("[facial_contact] No face detected")
+            return None
+
+        hands = features.get("hands", [])
+        if not hands:
+            # log_info("[facial_contact] No hands detected")
+            return None
+
+        face_landmarks = features.get("face", [])
+        if len(face_landmarks) < 200:  # Need enough face landmarks
+            # log_info(f"[facial_contact] Insufficient face landmarks: {len(face_landmarks)} < 200")
+            return None
+
+        # Get face scale for normalization (nose tip to chin)
+        # MediaPipe face mesh indices: 1 = nose tip, 152 = chin
+        nose_tip = face_landmarks[1]
+        chin = face_landmarks[152]
+        face_scale = self._euclidean_distance(
+            (nose_tip["x"], nose_tip["y"], nose_tip["z"]),
+            (chin["x"], chin["y"], chin["z"])
+        )
+
+        if face_scale < 0.01:
+            # log_info(f"[facial_contact] Invalid face scale: {face_scale:.4f}")
+            return None
+
+        # log_info(f"[facial_contact] Face scale: {face_scale:.4f}, checking {len(hands)} hand(s)")
+
+        # Check each hand
+        for hand_idx, hand_data in enumerate(hands):
+            landmarks = hand_data.get("landmarks", [])
+            if len(landmarks) != 21:
+                # log_info(f"[facial_contact] Hand {hand_idx}: invalid landmark count {len(landmarks)}")
+                continue
+
+            lm = [(l["x"], l["y"], l["z"]) for l in landmarks]
+            hand_scale = self._get_hand_scale(lm)
+
+            # CHECK 1: Depth check via scale ratio
+            # When hand is near face: hand_scale <= face_scale (ratio <= 1.0)
+            # When hand is far from face: hand_scale > face_scale (ratio > 1.0)
+            scale_ratio = hand_scale / face_scale
+            max_ratio = 1.0 + self.facial_contact_distance_threshold  # e.g., 1.0 + 0.2 = 1.2
+
+            # # log_info(f"[facial_contact] Hand {hand_idx}: scale_ratio={scale_ratio:.3f}, max_ratio={max_ratio:.3f}")
+
+            if scale_ratio > max_ratio:
+                # log_info(f"[facial_contact] Hand {hand_idx}: FAILED depth check (hand too close to camera)")
+                continue
+
+            # CHECK 2: Is fingertip inside face bounding box?
+            # Face mesh key points: 10=forehead, 152=chin, 234=right cheek, 454=left cheek
+            forehead = face_landmarks[10]
+            left_cheek = face_landmarks[454]
+            right_cheek = face_landmarks[234]
+
+            # Build bounding box with margin
+            margin = 0.1 * face_scale
+            min_x = min(forehead["x"], chin["x"], left_cheek["x"], right_cheek["x"]) - margin
+            max_x = max(forehead["x"], chin["x"], left_cheek["x"], right_cheek["x"]) + margin
+            min_y = min(forehead["y"], chin["y"], left_cheek["y"], right_cheek["y"]) - margin
+            max_y = max(forehead["y"], chin["y"], left_cheek["y"], right_cheek["y"]) + margin
+
+            # Check if index (8) or middle (12) fingertip is inside face bbox
+            finger_in_face = False
+            for finger_idx in [8, 12]:
+                fx, fy = lm[finger_idx][0], lm[finger_idx][1]
+                if min_x <= fx <= max_x and min_y <= fy <= max_y:
+                    finger_in_face = True
+                    break
+
+            if not finger_in_face:
+                continue
+
+            # Both checks passed - hand is touching face
+            confidence = max(0.0, 1.0 - (scale_ratio - 1.0) / self.facial_contact_distance_threshold) if scale_ratio > 1.0 else 1.0
+
+            # if confidence < self.confidence_threshold:
+            #     continue
+            # log_info(f"[facial_contact] DETECTED! confidence={confidence:.3f}, scale_ratio={scale_ratio:.3f}, finger_dist={min_finger_distance:.3f}")
+
+            return ("facial_contact", confidence, {
+                "hand_scale": hand_scale
+            })
+
+        # log_info("[facial_contact] No hand touching face")
+        return None
+
+    def _check_sustained_habit(
+        self,
+        habit_name: str,
+        detected: bool,
+        frame_confidence: float,
+        duration_threshold: float
+    ) -> Optional[tuple[str, float, dict]]:
+        """
+        Check if habit sustained for minimum duration.
+
+        Uses rolling window to track detection history.
+        Returns gesture only if detected in X% of recent frames.
+
+        Args:
+            habit_name: Name of the habit ("facial_contact")
+            detected: Whether the habit was detected in current frame
+            frame_confidence: Per-frame confidence (0.0 if not detected)
+            duration_threshold: Proportion of frames required (0.0 to 1.0)
+
+        Returns:
+            (gesture_name, confidence, metadata) or None
+        """
+        if habit_name not in self.habit_history:
+            # log_info(f"[sustained_habit] Unknown habit: {habit_name}")
+            return None
+
+        history = self.habit_history[habit_name]
+        history.append(detected)
+
+        confidence_history = self.habit_confidence_history[habit_name]
+        confidence_history.append(frame_confidence)
+
+        # Need minimum history
+        if len(history) < 10:
+            # log_info(f"[sustained_habit] {habit_name}: building history {len(history)}/10")
+            return None
+
+        # Calculate proportion of positive detections
+        positive_count = sum(history)
+        proportion = positive_count / len(history)
+
+        # log_info(f"[sustained_habit] {habit_name}: {positive_count}/{len(history)} frames ({proportion:.1%}), threshold={duration_threshold:.1%}")
+
+        # Require sustained detection
+        if proportion >= duration_threshold:
+            # Average proportion with mean per-frame confidence
+            positive_confidences = [c for c in confidence_history if c > 0]
+            mean_frame_confidence = sum(positive_confidences) / len(positive_confidences) if positive_confidences else 0.0
+            confidence = (proportion + mean_frame_confidence) / 2.0
+            # log_info(f"[sustained_habit] {habit_name}: SUSTAINED! confidence={confidence:.3f}")
+
+            return (habit_name, confidence, {
+                "sustained_frames": positive_count,
+                "total_frames": len(history),
+                "proportion": proportion
+            })
+
+        return None
+
+    def detect_habit_gestures(self, features: dict[str, Any]) -> list[tuple[str, float, dict]]:
+        """
+        Detect habit awareness gestures (facial contact).
+
+        Called separately from detect_gestures() to allow habit monitoring
+        to be enabled/disabled independently.
+
+        Args:
+            features: Feature dict with 'hands' and 'face' lists
+
+        Returns:
+            List of (gesture_name, confidence, metadata) tuples
+        """
+        gestures = []
+
+        # log_info(f"[habit_gestures] Checking habits: face_detected={features.get('face_detected')}, hands={len(features.get('hands', []))}")
+
+        # Facial contact detection
+        facial_contact_raw = self._detect_facial_contact(features)
+        # log_info(f"[habit_gestures] facial_contact_raw: {facial_contact_raw is not None}")
+        frame_confidence = facial_contact_raw[1] if facial_contact_raw else 0.0
+        facial_contact = self._check_sustained_habit(
+            "facial_contact",
+            facial_contact_raw is not None,
+            frame_confidence,
+            self.facial_contact_duration_threshold
+        )
+        if facial_contact:
+            # Merge metadata from raw detection if available
+            if facial_contact_raw:
+                facial_contact[2].update(facial_contact_raw[2])
+            gestures.append(facial_contact)
+            # log_info(f"[habit_gestures] Added facial_contact gesture")
+
+        # log_info(f"[habit_gestures] Returning {len(gestures)} gesture(s)")
+        return gestures

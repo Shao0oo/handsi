@@ -29,6 +29,12 @@ tracking:
   fps_attentive: 24   # Hz when hands present, no gesture
   fps_active: 60      # Hz during/after gesture execution
 
+  # MediaPipe Holistic settings (hands + face + pose tracking)
+  # Used for hand tracking and habit awareness features
+  holistic_model_complexity: 1      # 0=lite, 1=medium (default), 2=heavy
+  holistic_min_detection_confidence: 0.5
+  holistic_min_tracking_confidence: 0.5
+
 gestures:
   # Debouncing: cooldown after gesture fires
   debounce_ms: 500          # ignore same gesture for 300ms after firing
@@ -64,6 +70,14 @@ actions:
     two_fingers_point: continuous_scroll
     two_hands_pinch: continuous_zoom
     ring_pinch: continuous_volume
+    # Habit awareness mappings (only triggered when habit_awareness.enabled = true)
+    facial_contact: alert_facial_contact
+
+  # Habit awareness alert settings
+  habit_alerts:
+    visual_enabled: true              # Show red banner in Tauri GUI (real-time)
+    audio_enabled: true               # Play system beep sound
+    alert_cooldown_seconds: 30.0      # Min time between audio alerts (prevents spam)
 
   # Mouse movement settings
   mouse:
@@ -112,3 +126,13 @@ system:
 macos:
   # macOS-specific settings
   accessibility_check: true  # verify permissions on startup
+
+# Habit Awareness - detect and alert on negative habits
+# Requires MediaPipe Holistic tracking (face)
+habit_awareness:
+  enabled: false                            # Default to false - enable in Settings panel
+
+  # Facial contact detection (hand near face)
+  facial_contact_enabled: true
+  facial_contact_distance_threshold: 0.2    # Max distance from face (fraction of face size)
+  facial_contact_duration_threshold: 0.7    # Must be detected in 70% of frames

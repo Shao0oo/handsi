@@ -136,6 +136,9 @@ def main() -> int:
         print("To run in CLI mode (background service):")
         print("  handsi --cli")
         print("")
+        print("To run in preview mode (background service):")
+        print("  handsi --cli --preview")
+        print("")
         print("See docs/TAURI_MIGRATION.md for more info.")
         print("=" * 60)
         return 1
@@ -170,6 +173,8 @@ def main() -> int:
 
     # Create shared state and queues
     runtime_state = RuntimeState()
+    # Set initial latch state from config (same as controller.py for Tauri mode)
+    runtime_state.latch_active = config.gestures.latch_active
     frame_queue, feature_queue, gesture_queue = create_queues()
 
     # Create threads
@@ -190,7 +195,9 @@ def main() -> int:
         config=config.gestures,
         feature_queue=feature_queue,
         gesture_queue=gesture_queue,
-        runtime_state=runtime_state
+        runtime_state=runtime_state,
+        habit_config=config.habit_awareness,
+        action_config=config.actions
     )
 
     action_thread = ActionExecutorThread(

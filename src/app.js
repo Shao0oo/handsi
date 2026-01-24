@@ -80,6 +80,7 @@ function getElements() {
         deadZone: document.getElementById('deadZone'),
         deadZoneValue: document.getElementById('deadZoneValue'),
         mirrorX: document.getElementById('mirrorX'),
+        habitAwareness: document.getElementById('habitAwareness'),
 
         // Settings - Scroll
         scrollSensitivity: document.getElementById('scrollSensitivity'),
@@ -176,6 +177,25 @@ async function getStatus() {
     } catch (error) {
         console.error('[JS] getStatus() failed:', error);
         return { success: false, error: String(error) };
+    }
+}
+
+async function checkHabitAlert() {
+    try {
+        const result = await invoke('get_habit_alert');
+        const banner = document.getElementById('habitAlertBanner');
+        const message = document.getElementById('habitAlertMessage');
+
+        if (result.success && result.data && result.data.active) {
+            // Show alert while contact is active
+            message.textContent = result.data.message || 'Habit Detected';
+            banner.classList.remove('hidden');
+        } else {
+            // Hide when contact ends
+            banner.classList.add('hidden');
+        }
+    } catch (e) {
+        // Silently ignore - alert polling is non-critical
     }
 }
 
@@ -301,6 +321,7 @@ function updateSettingsUI(result) {
     elements.deadZoneValue.textContent = settings.dead_zone;
 
     elements.mirrorX.checked = settings.mirror_x;
+    elements.habitAwareness.checked = settings.habit_awareness_enabled;
 
     // Scroll settings
     elements.scrollSensitivity.value = settings.scroll_sensitivity;
@@ -415,6 +436,7 @@ async function handleSaveSettings() {
         smoothing: parseFloat(elements.smoothing.value),
         dead_zone: parseFloat(elements.deadZone.value),
         mirror_x: elements.mirrorX.checked,
+        habit_awareness_enabled: elements.habitAwareness.checked,
         scroll_sensitivity: parseFloat(elements.scrollSensitivity.value),
         scroll_dead_zone: parseFloat(elements.scrollDeadZone.value),
         invert_scroll: elements.invertScroll.checked,
@@ -869,6 +891,8 @@ function startStatusPolling() {
         if (result.success) {
             updateStatusUI(result.data);
             setConnectionStatus('connected');
+            // Check for habit alerts (real-time)
+            checkHabitAlert();
         } else {
             setConnectionStatus('disconnected');
         }
@@ -899,7 +923,7 @@ async function init() {
         console.log('✓ [JS] Tauri API ready, invoke type:', typeof invoke);
     } catch (error) {
         console.error('❌ [JS] Failed to load Tauri API:', error);
-        setConnectionStatus(false);
+        setConnectionStatus("disconnected");
         showMessage(elements.controlMessage, 'error', 'Failed to initialize: ' + error.message);
         // Add visible error on page
         alert('CRITICAL ERROR: Tauri API failed to load!\n\n' + error.message + '\n\nCheck browser console (Cmd+Option+I) for details.');
