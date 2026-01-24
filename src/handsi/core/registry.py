@@ -24,7 +24,8 @@ AVAILABLE_GESTURES = [
     "two_hands_pinch",
 ]
 
-# All available actions (alphabetically sorted)
+# All available actions (alphabetically sorted, case-insensitive)
+# alert_facial_contact is a special action that is not in executor.py
 # Update this list when adding new actions to executor.py
 AVAILABLE_ACTIONS = [
     "alert_facial_contact",
@@ -32,14 +33,17 @@ AVAILABLE_ACTIONS = [
     "continuous_scroll",
     "continuous_volume",
     "continuous_zoom",
+    "copy",
     "disable_latch",
     "double_click",
     "enable_latch",
     "mouse_move",
+    "paste",
     "right_click",
     "scroll_down",
     "scroll_up",
     "switch_desktop",
+    "undo",
     "zoom_in",
     "zoom_out",
 ]

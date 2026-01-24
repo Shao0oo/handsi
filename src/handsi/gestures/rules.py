@@ -443,7 +443,7 @@ class GestureDetector:
         pinky_tip = lm[20]
         distance = self._normalized_distance(thumb_tip, pinky_tip, hand_scale)
 
-        if distance >= self.pinch_threshold:
+        if distance >= self.pinch_threshold + 0.1:
             return None
 
         # Check that other fingers (index, middle, ring) are extended

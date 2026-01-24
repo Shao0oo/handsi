@@ -787,6 +787,62 @@ class MacOSAdapter(ActionAdapter):
             log_error("ACT-001", f"Desktop switch failed: {e}")
             return False
 
+    def keyboard_shortcut(self, shortcut: str) -> bool:
+        """
+        Execute keyboard shortcut using Command key combinations.
+
+        Uses CGEvent for keyboard simulation, which works reliably for
+        application-level shortcuts like copy/paste/undo (unlike system-level
+        shortcuts like Mission Control which require AppleScript).
+
+        Args:
+            shortcut: Shortcut string like 'cmd+c', 'cmd+v', 'cmd+z'
+
+        Returns:
+            True if shortcut executed successfully, False otherwise
+        """
+        if not self._initialized:
+            log_error("ACT-001", "Adapter not initialized")
+            return False
+
+        # Map shortcuts to key codes
+        # Key codes: C=8, V=9, Z=6
+        shortcut_map = {
+            'cmd+c': (8, 'copy'),
+            'cmd+v': (9, 'paste'),
+            'cmd+z': (6, 'undo'),
+        }
+
+        shortcut_lower = shortcut.lower()
+        if shortcut_lower not in shortcut_map:
+            log_error("ACT-001", f"Unknown keyboard shortcut: {shortcut}")
+            return False
+
+        key_code, action_name = shortcut_map[shortcut_lower]
+
+        try:
+            # Create event source
+            source = CGEventSourceCreate(kCGEventSourceStateHIDSystemState)
+
+            # Create key down event with Command modifier
+            key_down_event = CGEventCreateKeyboardEvent(source, key_code, True)
+            CGEventSetFlags(key_down_event, kCGEventFlagMaskCommand)
+
+            # Create key up event with Command modifier
+            key_up_event = CGEventCreateKeyboardEvent(source, key_code, False)
+            CGEventSetFlags(key_up_event, kCGEventFlagMaskCommand)
+
+            # Post events (down then up = key press)
+            CGEventPost(kCGHIDEventTap, key_down_event)
+            CGEventPost(kCGHIDEventTap, key_up_event)
+
+            log_debug(f"Keyboard shortcut executed: {shortcut} ({action_name})")
+            return True
+
+        except Exception as e:
+            log_error("ACT-001", f"Keyboard shortcut failed: {e}")
+            return False
+
     def cleanup(self) -> None:
         """Clean up macOS adapter resources."""
         log_info("macOS adapter cleaned up")

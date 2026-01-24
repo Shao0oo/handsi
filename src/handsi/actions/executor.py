@@ -18,6 +18,7 @@ from handsi.actions.handlers.base import ActionHandler
 from handsi.core.types import ActionName
 from handsi.actions.handlers.click import ClickHandler, DoubleClickHandler, RightClickHandler
 from handsi.actions.handlers.desktop import SwitchDesktopHandler
+from handsi.actions.handlers.keyboard import CopyHandler, PasteHandler, UndoHandler
 from handsi.actions.handlers.latch import DisableLatchHandler, EnableLatchHandler
 from handsi.actions.handlers.mouse import MouseMoveHandler
 from handsi.actions.handlers.scroll import ContinuousScrollHandler, ScrollStepHandler
@@ -220,6 +221,20 @@ class ActionExecutorThread(threading.Thread):
 
             # Desktop switching
             ActionName.SWITCH_DESKTOP: SwitchDesktopHandler(
+                self.adapter,
+                self.runtime_state
+            ),
+
+            # Keyboard actions
+            ActionName.COPY: CopyHandler(
+                self.adapter,
+                self.runtime_state
+            ),
+            ActionName.PASTE: PasteHandler(
+                self.adapter,
+                self.runtime_state
+            ),
+            ActionName.UNDO: UndoHandler(
                 self.adapter,
                 self.runtime_state
             ),

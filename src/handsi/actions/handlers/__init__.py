@@ -22,6 +22,7 @@ from handsi.actions.handlers.click import (
     SingleClickHandler,
 )
 from handsi.actions.handlers.desktop import SwitchDesktopHandler
+from handsi.actions.handlers.keyboard import CopyHandler, PasteHandler, UndoHandler
 from handsi.actions.handlers.latch import DisableLatchHandler, EnableLatchHandler
 from handsi.actions.handlers.mouse import MouseMoveHandler
 from handsi.actions.handlers.scroll import ContinuousScrollHandler, ScrollStepHandler
@@ -50,6 +51,10 @@ __all__ = [
     "ContinuousVolumeHandler",
     # Desktop handler
     "SwitchDesktopHandler",
+    # Keyboard handlers
+    "CopyHandler",
+    "PasteHandler",
+    "UndoHandler",
     # Latch handlers
     "EnableLatchHandler",
     "DisableLatchHandler",

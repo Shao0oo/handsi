@@ -25,6 +25,11 @@ class ActionName(str, Enum):
     DOUBLE_CLICK = "double_click"
     RIGHT_CLICK = "right_click"
 
+    # Keyboard actions
+    COPY = "copy"
+    PASTE = "paste"
+    UNDO = "undo"
+
     # Scroll actions
     SCROLL_UP = "scroll_up"
     SCROLL_DOWN = "scroll_down"
