@@ -15,7 +15,7 @@ from handsi.core.bus import (
     GestureQueue,
     RuntimeState,
 )
-from handsi.core.config import GestureConfig, HabitAwarenessConfig
+from handsi.core.config import ActionConfig, GestureConfig, HabitAwarenessConfig
 from handsi.core.logging import log_debug, log_error, log_info, log_warning
 from handsi.gestures.rules import GestureDetector
 from handsi.gestures.smoothing import TemporalSmoother
@@ -41,6 +41,7 @@ class GestureInferenceThread(threading.Thread):
         gesture_queue: GestureQueue,
         runtime_state: RuntimeState,
         habit_config: Optional[HabitAwarenessConfig] = None,
+        action_config: Optional[ActionConfig] = None,
         name: str = "GestureInferenceThread"
     ):
         super().__init__(name=name, daemon=True)
@@ -49,6 +50,14 @@ class GestureInferenceThread(threading.Thread):
         self.gesture_queue = gesture_queue
         self.runtime_state = runtime_state
         self.habit_config = habit_config
+
+        # Performance optimization: only detect gestures that have action mappings
+        enabled_gestures: Optional[set[str]] = None
+        if action_config and action_config.mappings:
+            enabled_gestures = set(action_config.mappings.keys())
+            # Also enable facial_contact if habit awareness is enabled
+            if habit_config and habit_config.enabled and habit_config.facial_contact_enabled:
+                enabled_gestures.add("facial_contact")
 
         # Gesture detector with habit awareness thresholds
         detector_kwargs = {
@@ -59,6 +68,7 @@ class GestureInferenceThread(threading.Thread):
             "swipe_velocity_threshold": config.swipe_velocity_threshold,
             "thumbs_vertical_threshold": config.thumbs_vertical_threshold,
             "confidence_threshold": config.confidence_threshold,
+            "enabled_gestures": enabled_gestures,
         }
 
         # Add habit awareness thresholds if config provided

@@ -225,7 +225,6 @@ class HandsiConfig(BaseModel):
     actions: ActionConfig = Field(default_factory=ActionConfig)
     system: SystemConfig = Field(default_factory=SystemConfig)
     macos: MacOSConfig = Field(default_factory=MacOSConfig)
-    still_mode: StillModeConfig = Field(default_factory=StillModeConfig)
     habit_awareness: HabitAwarenessConfig = Field(default_factory=HabitAwarenessConfig)
 
 

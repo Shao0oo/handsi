@@ -41,7 +41,9 @@ class GestureDetector:
         history_length: int = 10,
         # Habit awareness thresholds
         facial_contact_distance_threshold: float = 0.3,
-        facial_contact_duration_threshold: float = 0.7
+        facial_contact_duration_threshold: float = 0.7,
+        # Performance optimization: only detect these gestures (None = all)
+        enabled_gestures: Optional[set[str]] = None
     ):
         self.pinch_threshold = pinch_threshold
         self.fist_threshold = fist_threshold
@@ -69,6 +71,18 @@ class GestureDetector:
             "facial_contact": deque(maxlen=30),
         }
 
+        # Performance optimization: only detect enabled gestures
+        # None = detect all gestures (backward compatibility)
+        self.enabled_gestures = enabled_gestures
+        if enabled_gestures:
+            log_info(f"Gesture detection optimized: only detecting {len(enabled_gestures)} gesture(s): {sorted(enabled_gestures)}")
+
+    def _is_gesture_enabled(self, gesture_name: str) -> bool:
+        """Check if a gesture should be detected (for performance optimization)."""
+        if self.enabled_gestures is None:
+            return True  # No filter = detect all
+        return gesture_name in self.enabled_gestures
+
     def detect_gestures(self, features: dict[str, Any]) -> list[tuple[str, float, dict]]:
         """
         Detect all gestures from feature vector.
@@ -94,22 +108,28 @@ class GestureDetector:
             # Convert to list of (x, y, z) tuples for easier access
             lm = [(lm["x"], lm["y"], lm["z"]) for lm in landmarks]
 
-            # Check each single-hand gesture
-            gesture_checks = [
-                self._detect_index_pinch(lm),
-                self._detect_two_finger_pinch(lm),
-                self._detect_middle_pinch(lm),
-                self._detect_ring_pinch(lm),
-                self._detect_pinky_pinch(lm),
-                self._two_fingers_point(lm),
-                self._detect_fist(lm),
-                self._detect_open_hand(lm),
-                self._detect_thumbs_up(lm),
-                self._detect_thumbs_down(lm),
-                self._detect_swipe(lm, hand_idx)
+            # Only run detection for enabled gestures (performance optimization)
+            # Map gesture names to their detection methods
+            single_hand_detectors = [
+                ("index_pinch", lambda: self._detect_index_pinch(lm)),
+                ("two_finger_pinch", lambda: self._detect_two_finger_pinch(lm)),
+                ("middle_pinch", lambda: self._detect_middle_pinch(lm)),
+                ("ring_pinch", lambda: self._detect_ring_pinch(lm)),
+                ("pinky_pinch", lambda: self._detect_pinky_pinch(lm)),
+                ("two_fingers_point", lambda: self._two_fingers_point(lm)),
+                ("fist", lambda: self._detect_fist(lm)),
+                ("open_hand", lambda: self._detect_open_hand(lm)),
+                ("thumbs_up", lambda: self._detect_thumbs_up(lm)),
+                ("thumbs_down", lambda: self._detect_thumbs_down(lm)),
+                ("swipe", lambda: self._detect_swipe(lm, hand_idx)),
             ]
 
-            for result in gesture_checks:
+            for gesture_name, detector in single_hand_detectors:
+                # Skip detection if gesture is not enabled
+                if not self._is_gesture_enabled(gesture_name):
+                    continue
+
+                result = detector()
                 if result is not None:
                     name, conf, meta = result
                     if conf >= self.confidence_threshold:
@@ -122,15 +142,17 @@ class GestureDetector:
             lm_left = [(lm["x"], lm["y"], lm["z"]) for lm in hands[0]["landmarks"]]
             lm_right = [(lm["x"], lm["y"], lm["z"]) for lm in hands[1]["landmarks"]]
 
-            two_hand_checks = [
-                self._detect_two_hands_pinch(lm_left, lm_right),
-                self._detect_two_hands_open(lm_left, lm_right),
-                # TODO: Implement spread detection using _detect_swipe
-                # self._detect_two_hands_spread(lm_left, lm_right), 
-                # self._detect_two_hands_close(lm_left, lm_right)
+            two_hand_detectors = [
+                ("two_hands_pinch", lambda: self._detect_two_hands_pinch(lm_left, lm_right)),
+                ("two_hands_open", lambda: self._detect_two_hands_open(lm_left, lm_right)),
             ]
 
-            for result in two_hand_checks:
+            for gesture_name, detector in two_hand_detectors:
+                # Skip detection if gesture is not enabled
+                if not self._is_gesture_enabled(gesture_name):
+                    continue
+
+                result = detector()
                 if result is not None:
                     name, conf, meta = result
                     if conf >= self.confidence_threshold:

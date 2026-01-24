@@ -117,7 +117,8 @@ class HandsiController:
                     feature_queue=feature_queue,
                     gesture_queue=gesture_queue,
                     runtime_state=self.runtime_state,
-                    habit_config=self.config.habit_awareness
+                    habit_config=self.config.habit_awareness,
+                    action_config=self.config.actions
                 )
 
                 self.action_thread = ActionExecutorThread(
