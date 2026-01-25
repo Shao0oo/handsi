@@ -94,8 +94,6 @@ class HandsiController:
                 self.runtime_state = RuntimeState()
                 # Set initial latch state from config
                 self.runtime_state.latch_active = self.config.gestures.latch_active
-                # Set initial still mode state from config
-                self.runtime_state.still_mode_enabled = self.config.still_mode.enabled
                 frame_queue, feature_queue, gesture_queue = create_queues()
 
                 # Create threads
