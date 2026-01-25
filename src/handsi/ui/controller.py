@@ -199,7 +199,7 @@ class HandsiController:
                     "data": {
                         "running": False,
                         "fps": 0,
-                        "activity": "IDLE",
+                        "activity": "Inactive",
                         "frames_captured": 0,
                         "frames_processed": 0,
                         "latch_enabled": False
