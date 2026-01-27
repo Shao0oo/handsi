@@ -43,6 +43,9 @@ class ActionName(str, Enum):
     # Volume control
     CONTINUOUS_VOLUME = "continuous_volume"
 
+    # Tab switching
+    CONTINUOUS_TAB = "continuous_tab"
+
     # Desktop switching
     SWITCH_DESKTOP = "switch_desktop"
 
@@ -61,7 +64,7 @@ class ActionName(str, Enum):
         Continuous actions track state over time (scroll, zoom, volume)
         and don't use standard debouncing.
         """
-        return {cls.MOUSE_MOVE, cls.CONTINUOUS_SCROLL, cls.CONTINUOUS_ZOOM, cls.CONTINUOUS_VOLUME}
+        return {cls.MOUSE_MOVE, cls.CONTINUOUS_SCROLL, cls.CONTINUOUS_ZOOM, cls.CONTINUOUS_VOLUME, cls.CONTINUOUS_TAB}
 
     @classmethod
     def from_string(cls, value: str) -> "ActionName":

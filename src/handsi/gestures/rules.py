@@ -54,7 +54,7 @@ class GestureDetector:
         self.confidence_threshold = confidence_threshold
 
         # History for temporal gestures (swipe, spread, close)
-        self.wrist_history: dict[int, deque] = {}  # hand_idx -> deque of (x, y, t)
+        self.wrist_history: dict[str, deque] = {}  # handedness -> deque of (x, y, t)
         self.hand_distance_history = deque(maxlen=history_length)  # two-hand distance
         self.history_length = history_length
 
@@ -107,9 +107,12 @@ class GestureDetector:
 
             # Convert to list of (x, y, z) tuples for easier access
             lm = [(lm["x"], lm["y"], lm["z"]) for lm in landmarks]
+            handedness = hand_data.get("handedness", "unknown")
 
             # Only run detection for enabled gestures (performance optimization)
             # Map gesture names to their detection methods
+            # Note: swipe uses handedness (not hand_idx) to key position history,
+            # preventing false swipes when a second hand enters the frame
             single_hand_detectors = [
                 ("index_pinch", lambda: self._detect_index_pinch(lm)),
                 ("two_finger_pinch", lambda: self._detect_two_finger_pinch(lm)),
@@ -117,11 +120,12 @@ class GestureDetector:
                 ("ring_pinch", lambda: self._detect_ring_pinch(lm)),
                 ("pinky_pinch", lambda: self._detect_pinky_pinch(lm)),
                 ("two_fingers_point", lambda: self._two_fingers_point(lm)),
+                ("index_point", lambda: self._index_point(lm)),
                 ("fist", lambda: self._detect_fist(lm)),
                 ("open_hand", lambda: self._detect_open_hand(lm)),
                 ("thumbs_up", lambda: self._detect_thumbs_up(lm)),
                 ("thumbs_down", lambda: self._detect_thumbs_down(lm)),
-                ("swipe", lambda: self._detect_swipe(lm, hand_idx)),
+                ("swipe", lambda h=handedness: self._detect_swipe(lm, h)),
             ]
 
             for gesture_name, detector in single_hand_detectors:
@@ -535,6 +539,43 @@ class GestureDetector:
             "hand_scale": hand_scale
         })
 
+    def _index_point(self, lm: list) -> Optional[tuple[str, float, dict]]:
+        """Detect index finger pointing (index extended, others closed)."""
+        # Get hand scale for normalization
+        hand_scale = self._get_hand_scale(lm)
+
+        # Index finger landmarks
+        index_tip_idx = 8
+        index_mcp_idx = 5
+
+        # Check if index finger is extended
+        if not self._is_finger_extended(lm, index_tip_idx, index_mcp_idx, extension_ratio=1.6):
+            return None
+
+        # Check if other fingers (middle, ring, pinky) are closed
+        closed_fingers = [
+            (12, 9),   # Middle
+            (16, 13),  # Ring
+            (20, 17)   # Pinky
+        ]
+
+        closed_count = 0
+        for tip_idx, mcp_idx in closed_fingers:
+            if self._is_finger_closed(lm, tip_idx, mcp_idx, curl_ratio=1.3):
+                closed_count += 1
+
+        # Require at least 2 of 3 other fingers to be closed
+        if closed_count < 2:
+            return None
+
+        confidence = 0.85 + (closed_count / 3) * 0.15  # 0.85-1.0 based on closure
+
+        return ("index_point", confidence, {
+            "position": lm[0],  # Wrist position
+            "hand_scale": hand_scale,
+            "closed_count": closed_count
+        })
+
     def _detect_fist(self, lm: list) -> Optional[tuple[str, float, dict]]:
         """Detect closed fist (all fingers curled/closed)."""
         # Get hand scale for normalization
@@ -710,12 +751,16 @@ class GestureDetector:
             "hand_scale": hand_scale
         })
 
-    def _detect_swipe(self, lm: list, hand_idx: int) -> Optional[tuple[str, float, dict]]:
+    def _detect_swipe(self, lm: list, handedness: str) -> Optional[tuple[str, float, dict]]:
         """
         Detect swipe (left/right/up/down) with open hand.
 
         Swipe requires an open hand as prerequisite. If detected, swipe takes
         precedence over open_hand to avoid competing detections.
+
+        Args:
+            lm: List of (x, y, z) tuples for hand landmarks
+            handedness: "Left" or "Right" - used to key position history
         """
         # PREREQUISITE: Check if hand is open
         open_hand_result = self._detect_open_hand(lm)
@@ -728,18 +773,18 @@ class GestureDetector:
         wrist = lm[0]
         current_time = time.time()
 
-        # Initialize history for this hand if needed
-        if hand_idx not in self.wrist_history:
-            self.wrist_history[hand_idx] = deque(maxlen=self.history_length)
+        # Initialize history for this hand if needed (keyed by handedness, not index)
+        if handedness not in self.wrist_history:
+            self.wrist_history[handedness] = deque(maxlen=self.history_length)
 
         # Add current position with hand scale
-        self.wrist_history[hand_idx].append((wrist[0], wrist[1], current_time, hand_scale))
+        self.wrist_history[handedness].append((wrist[0], wrist[1], current_time, hand_scale))
 
         # Need enough history to detect swipe
-        if len(self.wrist_history[hand_idx]) < 3:
+        if len(self.wrist_history[handedness]) < 3:
             return open_hand_result
 
-        history = list(self.wrist_history[hand_idx])
+        history = list(self.wrist_history[handedness])
 
         # Calculate average velocity over last 3 frames
         n = min(3, len(history))

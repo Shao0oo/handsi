@@ -70,6 +70,7 @@ actions:
     two_fingers_point: continuous_scroll
     two_hands_pinch: continuous_zoom
     ring_pinch: continuous_volume
+    # index_point: continuous_tab        # Point with index finger to switch tabs
     # Habit awareness mappings (only triggered when habit_awareness.enabled = true)
     facial_contact: alert_facial_contact
 
@@ -91,30 +92,35 @@ actions:
 
   # Continuous scroll settings (fist gesture)
   scroll:
-    sensitivity: 6.0                # Scroll speed multiplier (higher = faster scroll)
+    sensitivity: 5.0                # Scroll speed multiplier (higher = faster scroll)
     dead_zone: 0.02                 # Ignore hand movements smaller than 1% of screen height
     dead_zone_curve: 3.0            # Power curve for smooth dead zone (1.0=linear, 2.0=quadratic, 3.0=cubic)
     dead_zone_min_damping: 0.01      # Minimum damping factor at zero movement (0.1 = 10% of input)
     max_scroll_per_frame: 1000       # Clamp maximum scroll amount per frame (pixels)
     invert: true                    # Invert scroll (only for vertical scroll)
     momentum_enabled: true          # Enable kinetic scrolling (momentum continues after gesture ends)
-    momentum_decay: 0.90             # Velocity decay per frame (0.95 = 5% reduction, higher = longer momentum)
+    momentum_decay: 0.95             # Velocity decay per frame (0.95 = 5% reduction, higher = longer momentum)
     momentum_min_velocity: 150.0    # Min velocity to trigger momentum (pixels/frame)
     momentum_stop_threshold: 100.0  # Stop momentum when velocity drops below this
 
   zoom:
-    sensitivity: 1.0      # Higher = faster zoom (more frequent steps)
-    dead_zone: 0.02       # Ignore small hand movements
-    dead_zone_curve: 2.0  # Smooth dead zone transition
+    sensitivity: 0.1
+    dead_zone: 0.05
+    dead_zone_curve: 2.0
     dead_zone_min_damping: 0.1
 
-  # Volume control settings
   volume:
-    mirror_x: true                  # Mirror X-coordinate (flip horizontally) for natural camera movement
-    sensitivity: 3.0                # Higher = faster volume changes (more frequent steps)
-    dead_zone: 0.02                 # Ignore small hand movements
-    dead_zone_curve: 2.0            # Power curve for smooth dead zone (1.0=linear, 2.0=quadratic, 3.0=cubic)
-    dead_zone_min_damping: 0.1      # Minimum damping factor at zero movement
+    mirror_x: true
+    sensitivity: 1.0
+    dead_zone: 0.05
+    dead_zone_curve: 2.0
+    dead_zone_min_damping: 0.1
+
+  tab:
+    sensitivity: 0.1
+    dead_zone: 0.05
+    dead_zone_curve: 3.0
+    dead_zone_min_damping: 0.1
 
 system:
   log_level: INFO           # DEBUG | INFO | WARN | ERROR

@@ -112,6 +112,14 @@ class VolumeConfig(BaseModel):
     dead_zone_min_damping: float = Field(default=0.1, ge=0.0, le=0.5)
 
 
+class TabConfig(BaseModel):
+    """Tab switching control settings."""
+    sensitivity: float = Field(default=3.0, ge=0.1, le=10.0)  # Higher = more frequent tab switches
+    dead_zone: float = Field(default=0.02, ge=0.0, le=0.05)
+    dead_zone_curve: float = Field(default=2.0, ge=1.0, le=3.0)
+    dead_zone_min_damping: float = Field(default=0.1, ge=0.0, le=0.5)
+
+
 class AlertConfig(BaseModel):
     """Alert notification preferences for habit monitoring."""
     visual_enabled: bool = Field(default=True)
@@ -136,6 +144,7 @@ class ActionConfig(BaseModel):
     scroll: ScrollConfig = Field(default_factory=ScrollConfig)
     zoom: ZoomConfig = Field(default_factory=ZoomConfig)
     volume: VolumeConfig = Field(default_factory=VolumeConfig)
+    tab: TabConfig = Field(default_factory=TabConfig)
     habit_alerts: AlertConfig = Field(default_factory=AlertConfig)
 
     @field_validator("mappings")

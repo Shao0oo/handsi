@@ -22,6 +22,7 @@ from handsi.actions.handlers.keyboard import CopyHandler, PasteHandler, UndoHand
 from handsi.actions.handlers.latch import DisableLatchHandler, EnableLatchHandler
 from handsi.actions.handlers.mouse import MouseMoveHandler
 from handsi.actions.handlers.scroll import ContinuousScrollHandler, ScrollStepHandler
+from handsi.actions.handlers.tab import ContinuousTabHandler
 from handsi.actions.handlers.volume import ContinuousVolumeHandler
 from handsi.actions.handlers.zoom import ContinuousZoomHandler, ZoomStepHandler
 from handsi.actions.interpolation import CursorInterpolator
@@ -219,6 +220,13 @@ class ActionExecutorThread(threading.Thread):
                 self.action_config.volume
             ),
 
+            # Tab switching
+            ActionName.CONTINUOUS_TAB: ContinuousTabHandler(
+                self.adapter,
+                self.runtime_state,
+                self.action_config.tab
+            ),
+
             # Desktop switching
             ActionName.SWITCH_DESKTOP: SwitchDesktopHandler(
                 self.adapter,
@@ -349,6 +357,8 @@ class ActionExecutorThread(threading.Thread):
             if action and action in self.handlers:
                 dummy_event.gesture_name = new_gesture
                 self.handlers[action].on_gesture_start(dummy_event)
+                # Mark gesture detected to trigger active FPS
+                self.runtime_state.mark_gesture_detected()
 
     def _handle_gesture_continue(self, gesture_name: str) -> None:
         """Handle gesture continuation."""
@@ -360,6 +370,8 @@ class ActionExecutorThread(threading.Thread):
                 timestamp=time.time()
             )
             self.handlers[action].on_gesture_continue(dummy_event)
+            # Keep active FPS while gesture continues
+            self.runtime_state.mark_gesture_detected()
 
     def _map_gesture_to_action(self, gesture_name: str) -> Optional[ActionName]:
         """Map gesture name to action name via config."""
