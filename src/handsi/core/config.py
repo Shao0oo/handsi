@@ -17,6 +17,7 @@ from handsi.core.types import ActionName
 class CameraConfig(BaseModel):
     """Camera capture settings."""
     device_id: int = Field(default=0, ge=0)
+    device_name: str | None = Field(default=None)  # Camera name for validation
     resolution: tuple[int, int] = Field(default=(640, 480))
     fps_idle: int = Field(default=2, ge=1, le=30)
     fps_attentive: int = Field(default=5, ge=1, le=120)

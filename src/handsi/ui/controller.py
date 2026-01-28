@@ -257,6 +257,7 @@ class HandsiController:
             "success": True,
             "data": {
                 "device_id": self.config.camera.device_id,
+                "device_name": self.config.camera.device_name,
                 "sensitivity": self.config.actions.mouse.sensitivity,
                 "smoothing": self.config.actions.mouse.smoothing_factor,
                 "dead_zone": self.config.actions.mouse.dead_zone,
@@ -315,6 +316,7 @@ class HandsiController:
                 "smoothing_window": ("gestures.smoothing_window", int, True),
                 # Camera settings (require restart)
                 "device_id": ("camera.device_id", int, True),
+                "device_name": ("camera.device_name", str, True),
                 # Habit awareness (requires restart)
                 "habit_awareness_enabled": ("habit_awareness.enabled", bool, True),
             }
@@ -683,3 +685,25 @@ class HandsiController:
                 "actions": AVAILABLE_ACTIONS
             }
         }
+
+    def get_cameras(self) -> dict:
+        """
+        Get list of available cameras with names.
+
+        Enumerates cameras using platform-specific detection
+        (system_profiler on macOS, fallback on other platforms).
+
+        Returns:
+            dict: IPC response with camera list
+        """
+        try:
+            from handsi.core.camera_utils import get_available_cameras
+            cameras = get_available_cameras()
+            log_info(f"Controller: Found {len(cameras)} cameras")
+            return {
+                "success": True,
+                "data": {"cameras": cameras}
+            }
+        except Exception as e:
+            log_info(f"Controller: Failed to enumerate cameras - {e}")
+            return {"success": False, "error": str(e)}

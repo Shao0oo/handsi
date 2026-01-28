@@ -71,6 +71,7 @@ function getElements() {
 
         // Settings - General
         cameraDevice: document.getElementById('cameraDevice'),
+        refreshCamerasBtn: document.getElementById('refreshCamerasBtn'),
 
         // Settings - Mouse
         sensitivity: document.getElementById('sensitivity'),
@@ -272,8 +273,79 @@ async function getSystemInfo() {
     }
 }
 
+async function getCameras() {
+    try {
+        const result = await invoke('get_cameras');
+        console.log('[JS] getCameras() response:', result);
+        return result;
+    } catch (error) {
+        console.error('getCameras() failed:', error);
+        return { success: false, error: error };
+    }
+}
+
 // Removed: getAvailableGesturesAndActions, resetToDefaults, restart, checkFirstRun
 // These functions were Qt-specific and may need to be re-implemented if needed
+
+// === Camera Loading ===
+
+let camerasLoading = false;  // Guard against multiple simultaneous loads
+let camerasLoaded = false;   // Track if cameras have been loaded once
+
+async function loadAvailableCameras(forceRefresh = false) {
+    // Skip if already loading or already loaded (unless force refresh)
+    if (camerasLoading) {
+        console.log('[JS] Camera loading already in progress, skipping');
+        return;
+    }
+    if (camerasLoaded && !forceRefresh) {
+        console.log('[JS] Cameras already loaded, skipping (use refresh to reload)');
+        return;
+    }
+
+    camerasLoading = true;
+    const select = elements.cameraDevice;
+    select.innerHTML = '<option value="">Scanning cameras...</option>';
+
+    const result = await getCameras();
+
+    if (result.success && result.data && result.data.cameras) {
+        select.innerHTML = '';
+        const cameras = result.data.cameras;
+
+        if (cameras.length === 0) {
+            select.innerHTML = '<option value="">No cameras found</option>';
+            return;
+        }
+
+        cameras.forEach(cam => {
+            const option = document.createElement('option');
+            option.value = cam.index;
+            option.textContent = cam.name;
+            option.disabled = !cam.available;
+            select.appendChild(option);
+        });
+
+        // Select current device_id if it exists in list
+        if (currentSettings.device_id !== undefined) {
+            select.value = currentSettings.device_id;
+        }
+
+        console.log('[JS] Loaded', cameras.length, 'cameras');
+        camerasLoaded = true;
+    } else {
+        // Fallback to hardcoded list if camera detection fails
+        console.warn('[JS] Camera detection failed, using fallback list');
+        select.innerHTML = `
+            <option value="0">Camera 0</option>
+            <option value="1">Camera 1</option>
+            <option value="2">Camera 2</option>
+            <option value="3">Camera 3</option>
+        `;
+    }
+
+    camerasLoading = false;
+}
 
 // === UI Update Functions ===
 
@@ -307,8 +379,34 @@ function updateSettingsUI(result) {
     const settings = result.data || result;
     currentSettings = settings;
 
-    // General settings
-    elements.cameraDevice.value = settings.device_id;
+    // Camera settings - show saved camera name/id without triggering a scan
+    const select = elements.cameraDevice;
+    const deviceId = settings.device_id;
+    const deviceName = settings.device_name;
+
+    // Check if the current dropdown has this device_id
+    let optionExists = false;
+    for (const option of select.options) {
+        if (option.value === String(deviceId)) {
+            optionExists = true;
+            // Update the text if we have a saved name
+            if (deviceName && option.textContent !== deviceName) {
+                option.textContent = deviceName;
+            }
+            break;
+        }
+    }
+
+    // If option doesn't exist, add it
+    if (!optionExists) {
+        select.innerHTML = '';  // Clear default options
+        const option = document.createElement('option');
+        option.value = deviceId;
+        option.textContent = deviceName || `Camera ${deviceId}`;
+        select.appendChild(option);
+    }
+
+    select.value = deviceId;
 
     // Mouse settings
     elements.sensitivity.value = settings.sensitivity;
@@ -430,8 +528,10 @@ async function handleStop() {
 
 async function handleSaveSettings() {
     // Collect current settings from UI
+    const selectedCameraOption = elements.cameraDevice.selectedOptions[0];
     const settings = {
         device_id: parseInt(elements.cameraDevice.value),
+        device_name: selectedCameraOption ? selectedCameraOption.textContent : null,
         sensitivity: parseFloat(elements.sensitivity.value),
         smoothing: parseFloat(elements.smoothing.value),
         dead_zone: parseFloat(elements.deadZone.value),
@@ -944,6 +1044,10 @@ async function init() {
     elements.stopBtn.addEventListener('click', handleStop);
     elements.saveSettingsBtn.addEventListener('click', handleSaveSettings);
     elements.resetSettingsBtn.addEventListener('click', handleResetSettings);
+    elements.refreshCamerasBtn.addEventListener('click', async () => {
+        await loadAvailableCameras(true);  // Force refresh
+        showMessage(elements.settingsMessage, 'info', 'Camera list refreshed');
+    });
     console.log('[JS] Button event listeners attached successfully');
 
     setupSliderListeners();

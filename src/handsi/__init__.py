@@ -4,7 +4,7 @@ Handsi - Contactless Desktop Control
 Phase 1: Hand tracking with adaptive FPS control.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.2"
 __author__ = "Alex Shao"
 
 # Expose main components for easier imports
