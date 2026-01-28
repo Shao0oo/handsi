@@ -21,9 +21,9 @@ from handsi.core.types import GestureMetadata
 
 class ActivityLevel(Enum):
     """System activity level for adaptive FPS control."""
-    IDLE = "idle"           # No hands detected for >3s → 1-2 Hz
-    ATTENTIVE = "attentive" # Hands present, no gesture → 5 Hz
-    ACTIVE = "active"       # Gesture detected/executing → 10 Hz
+    IDLE = "Idle"           # No hands detected for >3s → 1-2 Hz
+    ATTENTIVE = "Attentive" # Hands present, no gesture → 5 Hz
+    ACTIVE = "Active"       # Gesture detected/executing → 10 Hz
 
 
 @dataclass

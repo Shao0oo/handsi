@@ -41,6 +41,8 @@ try:
         kCGScrollEventUnitPixel,
         kCGScrollEventUnitLine,
         kCGEventFlagMaskCommand,
+        kCGEventFlagMaskControl,
+        kCGEventFlagMaskShift,
         kCGEventKeyDown,
         kCGEventKeyUp,
     )
@@ -723,6 +725,64 @@ class MacOSAdapter(ActionAdapter):
 
         except Exception as e:
             log_error("ACT-001", f"Volume control failed: {e}")
+            return False
+
+    def continuous_tab(self, direction: int) -> bool:
+        """
+        Switch browser tabs using Ctrl+Tab (next) or Ctrl+Shift+Tab (previous).
+
+        Uses keyboard shortcuts that work in most browsers and tabbed applications.
+
+        Args:
+            direction: Positive = next tab (Ctrl+Tab), Negative = previous tab (Ctrl+Shift+Tab)
+
+        Returns:
+            True if tab switch successful, False otherwise
+        """
+        if not self._initialized:
+            log_error("ACT-001", "Adapter not initialized")
+            return False
+
+        try:
+            if direction == 0:
+                return True  # No tab switch needed
+
+            # Tab key code is 48
+            key_code = 48
+            tab_direction = "next" if direction > 0 else "previous"
+
+            # Create event source
+            source = CGEventSourceCreate(kCGEventSourceStateHIDSystemState)
+
+            # Create key down event
+            key_down_event = CGEventCreateKeyboardEvent(source, key_code, True)
+
+            # Set modifier flags: Ctrl for next tab, Ctrl+Shift for previous tab
+            if direction > 0:
+                # Ctrl+Tab for next tab
+                CGEventSetFlags(key_down_event, kCGEventFlagMaskControl)
+            else:
+                # Ctrl+Shift+Tab for previous tab
+                CGEventSetFlags(key_down_event, kCGEventFlagMaskControl | kCGEventFlagMaskShift)
+
+            # Create key up event
+            key_up_event = CGEventCreateKeyboardEvent(source, key_code, False)
+
+            # Set same modifier flags for key up
+            if direction > 0:
+                CGEventSetFlags(key_up_event, kCGEventFlagMaskControl)
+            else:
+                CGEventSetFlags(key_up_event, kCGEventFlagMaskControl | kCGEventFlagMaskShift)
+
+            # Post events (down then up = key press)
+            CGEventPost(kCGHIDEventTap, key_down_event)
+            CGEventPost(kCGHIDEventTap, key_up_event)
+
+            log_debug(f"Tab switch executed: {tab_direction} tab (direction={direction})")
+            return True
+
+        except Exception as e:
+            log_error("ACT-001", f"Tab switch failed: {e}")
             return False
 
     def switch_desktop(self, direction: Literal['left', 'right', 'up', 'down', 'next', 'prev']) -> bool:

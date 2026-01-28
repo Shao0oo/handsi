@@ -287,7 +287,7 @@ function updateStatusUI(status) {
     elements.fpsValue.textContent = status.fps || 0;
 
     // Activity
-    elements.activityValue.textContent = status.activity || 'IDLE';
+    elements.activityValue.textContent = status.activity || 'Inactive';
 
     // Latch status
     elements.latchStatus.textContent = status.latch_enabled ? 'Enabled' : 'Disabled';
@@ -417,7 +417,7 @@ async function handleStop() {
         updateStatusUI({
             running: false,
             fps: 0,
-            activity: 'IDLE',
+            activity: 'Inactive',
             frames_captured: 0,
             frames_processed: 0,
             latch_enabled: false

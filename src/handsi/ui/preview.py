@@ -370,9 +370,9 @@ class PreviewWindow:
 
         # Draw activity level indicator (color-coded circle)
         color_map = {
-            "idle": (100, 100, 100),      # Gray
-            "attentive": (0, 255, 255),   # Yellow
-            "active": (0, 255, 0)         # Green
+            "Idle": (100, 100, 100),      # Gray
+            "Attentive": (0, 255, 255),   # Yellow
+            "Active": (0, 255, 0)         # Green
         }
         indicator_color = color_map.get(activity_level, (255, 255, 255))
 
