@@ -349,6 +349,12 @@ async fn get_habit_alert(state: tauri::State<'_, AppState>) -> Result<IpcRespons
     python.send_command("get_habit_alert", serde_json::json!({}))
 }
 
+#[tauri::command]
+async fn get_cameras(state: tauri::State<'_, AppState>) -> Result<IpcResponse, String> {
+    let mut python = state.python.lock().unwrap();
+    python.send_command("get_cameras", serde_json::json!({}))
+}
+
 fn main() {
     eprintln!("[Rust] ============================================");
     eprintln!("[Rust] Handsi Tauri Application Starting");
@@ -396,7 +402,8 @@ fn main() {
             update_mapping,
             update_mappings,
             get_available_gestures_and_actions,
-            get_habit_alert
+            get_habit_alert,
+            get_cameras
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

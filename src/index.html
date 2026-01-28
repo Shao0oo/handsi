@@ -112,14 +112,16 @@
                 <!-- General Settings (Always Visible) -->
                 <div class="settings-section">
                     <h3 class="settings-subtitle">General</h3>
-                    <div class="setting-item">
+                    <div class="setting-item camera-select-container">
                         <label for="cameraDevice">Camera Device:</label>
-                        <select id="cameraDevice">
-                            <option value="0">Camera 0 (Default)</option>
-                            <option value="1">Camera 1</option>
-                            <option value="2">Camera 2</option>
-                            <option value="3">Camera 3</option>
-                        </select>
+                        <div class="camera-select-row">
+                            <select id="cameraDevice">
+                                <option value="0">Camera 0</option>
+                            </select>
+                            <button id="refreshCamerasBtn" class="btn btn-icon" type="button" title="Refresh camera list">
+                                &#x27F3;
+                            </button>
+                        </div>
                     </div>
                     <div class="setting-item">
                         <label for="sensitivity">

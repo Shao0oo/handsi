@@ -90,6 +90,8 @@ class IpcServer:
                 result = self.controller.get_available_gestures_and_actions()
             elif command == "get_habit_alert":
                 result = self.controller.get_habit_alert()
+            elif command == "get_cameras":
+                result = self.controller.get_cameras()
             else:
                 result = {
                     "success": False,
