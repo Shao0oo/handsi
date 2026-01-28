@@ -29,20 +29,20 @@ Make sure the version is synced across these files:
 **`package.json`:**
 ```json
 {
-  "version": "0.1.0"
+  "version": "0.1.x"
 }
 ```
 
 **`pyproject.toml`:**
 ```toml
 [project]
-version = "0.1.0"
+version = "0.1.x"
 ```
 
 **`src-tauri/tauri.conf.json`:**
 ```json
 {
-  "version": "0.1.0"
+  "version": "0.1.x"
 }
 ```
 
@@ -50,7 +50,7 @@ version = "0.1.0"
 
 ```bash
 git add .
-git commit -m "Prepare for v0.1.0 release"
+git commit -m "Prepare for v0.1.x release"
 git push
 ```
 
@@ -58,7 +58,7 @@ git push
 
 ```bash
 # Create a version tag
-git tag v0.1.0
+git tag v0.1.x
 
 # Push the tag to GitHub (triggers the workflow)
 git push --tags
@@ -75,7 +75,7 @@ git push --tags
 
 Once complete:
 1. Click **Releases** (right sidebar)
-2. You'll see `v0.1.0` with the DMG attached
+2. You'll see `v0.1.x` with the DMG attached
 3. Share the release URL with users
 
 ---
@@ -83,7 +83,7 @@ Once complete:
 ## What Gets Released
 
 The workflow creates:
-- **DMG Installer**: `Handsi_0.1.0_aarch64.dmg` (Apple Silicon)
+- **DMG Installer**: `Handsi_0.1.x_aarch64.dmg` (Apple Silicon)
 - **Source Code**: Automatic GitHub archive (zip/tar.gz)
 
 **Currently supported:**
@@ -149,8 +149,7 @@ Currently, releases are **not code-signed**. Users will see:
 > "Handsi.app cannot be opened because it is from an unidentified developer"
 
 **Workaround for users:**
-- Right-click → Open (instead of double-click)
-- Or: `xattr -cr /Applications/Handsi.app`
+- Run `xattr -cr /Applications/Handsi.app`
 
 **To add code signing:**
 1. Get Apple Developer Account ($99/year)
