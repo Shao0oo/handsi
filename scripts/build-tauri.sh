@@ -100,7 +100,9 @@ npm run build
 echo ""
 echo "Step 4: Creating DMG..."
 APP_PATH="src-tauri/target/release/bundle/macos/Handsi.app"
-DMG_PATH="src-tauri/target/release/bundle/macos/Handsi_0.1.0_aarch64.dmg"
+# Extract version from package.json
+VERSION=$(grep -o '"version": *"[^"]*"' package.json | head -1 | sed 's/.*"\([^"]*\)"/\1/')
+DMG_PATH="src-tauri/target/release/bundle/macos/Handsi_${VERSION}_aarch64.dmg"
 
 if [ -f "$APP_PATH/Contents/MacOS/Handsi" ]; then
     # Remove old DMG if exists

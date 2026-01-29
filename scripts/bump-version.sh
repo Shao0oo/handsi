@@ -131,8 +131,11 @@ update_file() {
             sed -i '' "s/^version *= *\"$old_version\"/version = \"$new_version\"/" "$file"
             ;;
         src-tauri/Cargo.toml)
-            # Cargo.toml: update first version = "X.Y.Z" (package version)
-            sed -i '' "0,/^version *= *\"$old_version\"/{s/^version *= *\"$old_version\"/version = \"$new_version\"/}" "$file"
+            # Cargo.toml: update first version = "X.Y.Z" (package version, line 3)
+            awk -v old="$old_version" -v new="$new_version" '
+                /^version *= *"/ && !done { sub(old, new); done=1 }
+                { print }
+            ' "$file" > "$file.tmp" && mv "$file.tmp" "$file"
             ;;
         src/handsi/__init__.py)
             # Python: update __version__ = "X.Y.Z"

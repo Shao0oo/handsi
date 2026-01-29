@@ -1,6 +1,6 @@
 [package]
 name = "handsi"
-version = "0.1.2"
+version = "0.2.0"
 description = "Contactless desktop control using hand tracking"
 authors = ["Handsi Team"]
 license = ""
