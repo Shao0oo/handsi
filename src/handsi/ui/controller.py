@@ -14,6 +14,7 @@ from handsi.core.bus import RuntimeState, create_queues
 from handsi.core.config import HandsiConfig, load_config, save_user_config, get_user_config_path
 from handsi.core.logging import log_info, setup_logging
 from handsi.core.registry import AVAILABLE_GESTURES, AVAILABLE_ACTIONS
+from handsi.core.utils import needs_holistic_mode
 from handsi.gestures.infer import GestureInferenceThread
 from handsi.vision.capture import CaptureThread
 from handsi.vision.tracking import TrackingThread
@@ -96,6 +97,9 @@ class HandsiController:
                 self.runtime_state.latch_active = self.config.gestures.latch_active
                 frame_queue, feature_queue, gesture_queue = create_queues()
 
+                # Determine tracker mode based on enabled features
+                use_holistic = needs_holistic_mode(self.config)
+
                 # Create threads
                 self.capture_thread = CaptureThread(
                     config=self.config.camera,
@@ -107,7 +111,8 @@ class HandsiController:
                     config=self.config.tracking,
                     frame_queue=frame_queue,
                     feature_queue=feature_queue,
-                    runtime_state=self.runtime_state
+                    runtime_state=self.runtime_state,
+                    use_holistic=use_holistic
                 )
 
                 self.gesture_thread = GestureInferenceThread(
@@ -325,6 +330,7 @@ class HandsiController:
             changed_fields: dict[str, Any] = {}
             gesture_settings_changed = False
             device_id_changed = False
+            tracker_mode_changed = False
 
             # Build list of changes
             for key, value in settings.items():
@@ -339,6 +345,10 @@ class HandsiController:
                                 device_id_changed = True
                                 self._previous_device_id = converted_value
                                 log_info(f"Controller: Camera device changed to {converted_value}")
+                        elif key == "habit_awareness_enabled":
+                            # Habit awareness affects tracker mode (holistic vs hands-only)
+                            tracker_mode_changed = True
+                            log_info(f"Controller: Habit awareness changed to {converted_value} (tracker mode change)")
                         else:
                             gesture_settings_changed = True
 
@@ -365,13 +375,16 @@ class HandsiController:
             # Determine if restart is needed
             # - Camera device change requires restart to reopen camera
             # - Gesture settings changes require restart because GestureDetector copies values at init
-            restart_needed = self.is_running() and (device_id_changed or gesture_settings_changed)
+            # - Tracker mode change requires restart to switch between Holistic and Hands-only
+            restart_needed = self.is_running() and (device_id_changed or gesture_settings_changed or tracker_mode_changed)
 
             # Determine restart reason for user feedback
-            if device_id_changed and gesture_settings_changed:
+            if device_id_changed and (gesture_settings_changed or tracker_mode_changed):
                 restart_reason = "camera_and_gesture_changes"
             elif device_id_changed:
                 restart_reason = "camera_change"
+            elif tracker_mode_changed:
+                restart_reason = "tracker_mode_change"
             elif gesture_settings_changed:
                 restart_reason = "gesture_settings_change"
             else:
