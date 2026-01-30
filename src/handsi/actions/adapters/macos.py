@@ -1,66 +1,53 @@
 """
 macOS-specific action adapter using Quartz Core Graphics.
 
-Implements ActionAdapter interface using PyObjC bindings to CGEvent APIs
-for mouse/keyboard control and system-level actions.
+Implements ActionAdapter interface. On macOS Tahoe+, CGEvent calls are routed
+to the Rust frontend via IPC (fire-and-forget) because the Python sidecar
+doesn't inherit TCC permissions from the parent app.
+
+Screen dimension queries still use Quartz directly (no permission needed).
+AppleScript-based actions (desktop switch, volume) stay in Python.
 """
 
+import json
 import subprocess
+import sys
 import time
-from typing import Literal
-
-from typing import Optional
+from typing import Literal, Optional
 
 from handsi.actions.adapters.base import ActionAdapter
 from handsi.core.logging import log_debug, log_error, log_info, log_warning
 
+# Quartz imports for screen dimension queries (doesn't require PostEvent permission)
 try:
     from Quartz import (
-        CGEventCreateMouseEvent,
-        CGEventCreateScrollWheelEvent,
-        CGEventCreateKeyboardEvent,
-        CGEventPost,
         CGMainDisplayID,
         CGDisplayBounds,
         CGGetActiveDisplayList,
-        CGEventSourceCreate,
-        CGEventSetIntegerValueField,
-        CGEventSetFlags,
-        kCGEventSourceStateHIDSystemState,
-        kCGEventMouseMoved,
-        kCGEventLeftMouseDown,
-        kCGEventLeftMouseUp,
-        kCGEventLeftMouseDragged,
-        kCGEventRightMouseDown,
-        kCGEventRightMouseUp,
-        kCGEventRightMouseDragged,
-        kCGEventOtherMouseDown,
-        kCGEventOtherMouseUp,
-        kCGMouseEventClickState,
-        kCGHIDEventTap,
-        kCGScrollEventUnitPixel,
-        kCGScrollEventUnitLine,
-        kCGEventFlagMaskCommand,
-        kCGEventFlagMaskControl,
-        kCGEventFlagMaskShift,
-        kCGEventKeyDown,
-        kCGEventKeyUp,
     )
     from AppKit import NSEvent
-    from Foundation import NSAppleScript
     QUARTZ_AVAILABLE = True
 except ImportError:
     QUARTZ_AVAILABLE = False
     log_warning("ACT-004", "PyObjC Quartz not available - macOS adapter will not function")
 
+# CGEvent modifier flags (used when sending key_press to Rust)
+CG_EVENT_FLAG_MASK_COMMAND = 0x100000  # 1048576
+CG_EVENT_FLAG_MASK_CONTROL = 0x40000   # 262144
+CG_EVENT_FLAG_MASK_SHIFT = 0x20000     # 131072
+
 
 class MacOSAdapter(ActionAdapter):
     """
-    macOS action adapter using Quartz Core Graphics.
+    macOS action adapter using IPC to Rust for CGEvent-based actions.
+
+    On macOS Tahoe+, the Python sidecar doesn't inherit TCC permissions from the
+    parent Tauri app. CGEvent calls are routed to Rust via fire-and-forget IPC.
 
     Requires:
-    - pyobjc-framework-Quartz
-    - Accessibility permissions granted in System Preferences
+    - pyobjc-framework-Quartz (for screen dimension queries only)
+    - Tauri frontend running (for CGEvent execution)
+    - Accessibility permissions granted to Handsi.app
     """
 
     def __init__(self):
@@ -72,6 +59,20 @@ class MacOSAdapter(ActionAdapter):
         self._main_display_height = 0  # Height of main display (for Cocoa coordinate conversion)
         self._double_click_threshold = 0.5  # Default 500ms, will be queried from system
         self._held_button: Optional[str] = None  # Track which button is currently held for drag events
+
+    def _send_action(self, action: dict) -> None:
+        """
+        Send action request to Rust frontend (fire-and-forget).
+
+        The Rust frontend has TCC permission and will execute the CGEvent.
+        This is a non-blocking call - we don't wait for a response.
+
+        Args:
+            action: Action dictionary with 'action' key and relevant parameters
+        """
+        action["type"] = "action"
+        # Write to stdout (which Rust reads) - flush immediately
+        print(json.dumps(action), flush=True)
 
     def initialize(self) -> bool:
         """
@@ -147,35 +148,9 @@ class MacOSAdapter(ActionAdapter):
             # # Check zoom scroll gesture settings
             # self.check_zoom_settings()
 
-            # Check Accessibility/PostEvent permission (required for CGEventPost on macOS Tahoe+)
-            try:
-                import objc
-                from Foundation import NSBundle
-
-                # Load ApplicationServices framework for AXIsProcessTrustedWithOptions
-                app_services = NSBundle.bundleWithPath_('/System/Library/Frameworks/ApplicationServices.framework')
-
-                # Load the function with correct signature: Boolean AXIsProcessTrustedWithOptions(CFDictionaryRef options)
-                objc.loadBundleFunctions(app_services, globals(), [
-                    ('AXIsProcessTrustedWithOptions', b'Z@')
-                ])
-
-                # kAXTrustedCheckOptionPrompt key - when True, shows the permission dialog
-                kAXTrustedCheckOptionPrompt = "AXTrustedCheckOptionPrompt"
-
-                # Check and prompt if not trusted
-                is_trusted = AXIsProcessTrustedWithOptions({kAXTrustedCheckOptionPrompt: True})
-
-                if is_trusted:
-                    log_info("Accessibility permission granted")
-                else:
-                    log_warning(
-                        "ACT-004",
-                        "Accessibility permission required. After granting permission in System Settings, "
-                        "please RESTART the app for changes to take effect."
-                    )
-            except Exception as e:
-                log_warning("ACT-004", f"Could not check Accessibility permission: {e}")
+            # Note: Permission check removed - Rust frontend handles TCC permissions
+            # The Python sidecar sends actions via IPC, and Rust executes CGEvents
+            log_info("CGEvent actions will be routed to Rust frontend via IPC")
 
             log_info(
                 f"macOS adapter initialized (combined screen: {self._screen_width}x{self._screen_height}, "
@@ -323,7 +298,7 @@ class MacOSAdapter(ActionAdapter):
         """
         Move mouse cursor to specified position.
 
-        Automatically uses drag events when a button is held down.
+        Sends action to Rust frontend via IPC for CGEvent execution.
         For multi-monitor setups, coordinates span the combined display area.
 
         Args:
@@ -352,56 +327,39 @@ class MacOSAdapter(ActionAdapter):
             pixel_x = max(self._screen_x_offset, min(self._screen_x_offset + self._screen_width - 1, pixel_x))
             pixel_y = max(self._screen_y_offset, min(self._screen_y_offset + self._screen_height - 1, pixel_y))
 
-            # Create event source for proper mouse control
-            source = CGEventSourceCreate(kCGEventSourceStateHIDSystemState)
+            # Send action to Rust frontend (Rust tracks held button state for drag events)
+            self._send_action({
+                "action": "mouse_move",
+                "x": float(pixel_x),
+                "y": float(pixel_y)
+            })
 
-            # Determine event type based on whether button is held (drag vs move)
-            if self._held_button == 'left':
-                event_type = kCGEventLeftMouseDragged
-                button_num = 0
-            elif self._held_button == 'right':
-                event_type = kCGEventRightMouseDragged
-                button_num = 1
-            else:
-                # No button held, regular move
-                event_type = kCGEventMouseMoved
-                button_num = 0
-
-            # Create and post mouse move/drag event
-            event = CGEventCreateMouseEvent(
-                source,
-                event_type,
-                (pixel_x, pixel_y),
-                button_num
-            )
-            CGEventPost(kCGHIDEventTap, event)
-
-            log_debug(f"Mouse {'dragged' if self._held_button else 'moved'} to ({pixel_x}, {pixel_y})")
+            log_debug(f"Mouse move sent to Rust: ({pixel_x}, {pixel_y})")
             return True
 
         except Exception as e:
             log_error("ACT-001", f"Mouse move failed: {e}")
             return False
 
-    def _get_button_event_types(self, button: str) -> tuple[int, int, int]:
+    def _get_button_num(self, button: str) -> int:
         """
-        Get CGEvent constants for a mouse button.
+        Get button number for IPC action.
 
         Args:
             button: 'left', 'right', or 'middle'
 
         Returns:
-            Tuple of (down_event_type, up_event_type, button_num)
+            Button number (0=left, 1=right, 2=middle)
 
         Raises:
             ValueError: If button is invalid
         """
         if button == 'left':
-            return (kCGEventLeftMouseDown, kCGEventLeftMouseUp, 0)
+            return 0
         elif button == 'right':
-            return (kCGEventRightMouseDown, kCGEventRightMouseUp, 1)
+            return 1
         elif button == 'middle':
-            return (kCGEventOtherMouseDown, kCGEventOtherMouseUp, 2)
+            return 2
         else:
             raise ValueError(f"Invalid mouse button: {button}")
 
@@ -420,24 +378,22 @@ class MacOSAdapter(ActionAdapter):
             return False
 
         try:
-            down_event_type, _, button_num = self._get_button_event_types(button)
+            button_num = self._get_button_num(button)
 
             # Query current mouse position in Cocoa coordinates, convert to Quartz
             mouse_loc = NSEvent.mouseLocation()
-            quartz_x = int(mouse_loc.x)
-            quartz_y = int(self._main_display_height - mouse_loc.y)
-            pos = (quartz_x, quartz_y)
+            quartz_x = float(mouse_loc.x)
+            quartz_y = float(self._main_display_height - mouse_loc.y)
 
-            # Create and post mouse down event (hold button)
-            down_event = CGEventCreateMouseEvent(
-                None,
-                down_event_type,
-                pos,
-                button_num
-            )
-            CGEventPost(kCGHIDEventTap, down_event)
+            # Send action to Rust frontend
+            self._send_action({
+                "action": "mouse_down",
+                "x": quartz_x,
+                "y": quartz_y,
+                "button": button_num
+            })
 
-            # Track held button for drag events
+            # Track held button locally for drag state awareness
             self._held_button = button
 
             log_debug(f"Mouse {button} button pressed (held)")
@@ -462,22 +418,20 @@ class MacOSAdapter(ActionAdapter):
             return False
 
         try:
-            _, up_event_type, button_num = self._get_button_event_types(button)
+            button_num = self._get_button_num(button)
 
             # Query current mouse position in Cocoa coordinates, convert to Quartz
             mouse_loc = NSEvent.mouseLocation()
-            quartz_x = int(mouse_loc.x)
-            quartz_y = int(self._main_display_height - mouse_loc.y)
-            pos = (quartz_x, quartz_y)
+            quartz_x = float(mouse_loc.x)
+            quartz_y = float(self._main_display_height - mouse_loc.y)
 
-            # Create and post mouse up event (release button)
-            up_event = CGEventCreateMouseEvent(
-                None,
-                up_event_type,
-                pos,
-                button_num
-            )
-            CGEventPost(kCGHIDEventTap, up_event)
+            # Send action to Rust frontend
+            self._send_action({
+                "action": "mouse_up",
+                "x": quartz_x,
+                "y": quartz_y,
+                "button": button_num
+            })
 
             # Clear held button state
             self._held_button = None
@@ -519,37 +473,22 @@ class MacOSAdapter(ActionAdapter):
             return False
 
         try:
-            down_event_type, up_event_type, button_num = self._get_button_event_types(button)
+            button_num = self._get_button_num(button)
 
             # Get current mouse position in Cocoa coordinates, convert to Quartz
             mouse_loc = NSEvent.mouseLocation()
-            quartz_x = int(mouse_loc.x)
-            quartz_y = int(self._main_display_height - mouse_loc.y)
-            pos = (quartz_x, quartz_y)
+            quartz_x = float(mouse_loc.x)
+            quartz_y = float(self._main_display_height - mouse_loc.y)
 
-            # First click (clickCount=1)
-            down_event = CGEventCreateMouseEvent(None, down_event_type, pos, button_num)
-            CGEventSetIntegerValueField(down_event, kCGMouseEventClickState, 1)
-            CGEventPost(kCGHIDEventTap, down_event)
+            # Send double-click action to Rust (Rust handles click count and timing)
+            self._send_action({
+                "action": "double_click",
+                "x": quartz_x,
+                "y": quartz_y,
+                "button": button_num
+            })
 
-            up_event = CGEventCreateMouseEvent(None, up_event_type, pos, button_num)
-            CGEventSetIntegerValueField(up_event, kCGMouseEventClickState, 1)
-            CGEventPost(kCGHIDEventTap, up_event)
-
-            # Wait between clicks (use 50% of system threshold for reliable detection)
-            delay = self._double_click_threshold * 0.25
-            time.sleep(delay)
-
-            # Second click (clickCount=2)
-            down_event = CGEventCreateMouseEvent(None, down_event_type, pos, button_num)
-            CGEventSetIntegerValueField(down_event, kCGMouseEventClickState, 2)
-            CGEventPost(kCGHIDEventTap, down_event)
-
-            up_event = CGEventCreateMouseEvent(None, up_event_type, pos, button_num)
-            CGEventSetIntegerValueField(up_event, kCGMouseEventClickState, 2)
-            CGEventPost(kCGHIDEventTap, up_event)
-
-            log_debug(f"Double-click executed: {button} button (delay: {delay:.3f}s)")
+            log_debug(f"Double-click sent to Rust: {button} button")
             return True
 
         except Exception as e:
@@ -573,50 +512,14 @@ class MacOSAdapter(ActionAdapter):
             return False
 
         try:
-            # CGEventCreateScrollWheelEvent uses scroll lines, not pixels
-            # We'll convert pixels to lines (rough approximation)
-            scroll_lines_y = dy // 10  # Approximate: 10 pixels = 1 line
-            scroll_lines_x = dx // 10
+            # Send scroll action to Rust (Rust handles scroll inversion)
+            self._send_action({
+                "action": "scroll",
+                "dx": dx,
+                "dy": dy
+            })
 
-            # Handle small movements (less than 10 pixels)
-            if scroll_lines_y == 0 and dy != 0:
-                scroll_lines_y = 1 if dy > 0 else -1
-            if scroll_lines_x == 0 and dx != 0:
-                scroll_lines_x = 1 if dx > 0 else -1
-
-            # Determine if we need 1D or 2D scrolling
-            if dx != 0 and dy != 0:
-                # 2D scrolling: both horizontal and vertical
-                # Note: macOS scroll is inverted (negative = down/right for natural scrolling)
-                event = CGEventCreateScrollWheelEvent(
-                    None,
-                    kCGScrollEventUnitPixel,
-                    2,  # Number of wheels (2 for both axes)
-                    -scroll_lines_y,  # Vertical (wheel 1)
-                    -scroll_lines_x   # Horizontal (wheel 2)
-                )
-                log_debug(f"Scroll executed: dx={dx}, dy={dy} (lines: x={scroll_lines_x}, y={scroll_lines_y})")
-            elif dx != 0:
-                # Horizontal scrolling only
-                event = CGEventCreateScrollWheelEvent(
-                    None,
-                    kCGScrollEventUnitPixel,
-                    2,  # Need 2 wheels for horizontal
-                    0,              # Vertical = 0
-                    -scroll_lines_x # Horizontal (wheel 2)
-                )
-                log_debug(f"Scroll executed: dx={dx} (lines={scroll_lines_x})")
-            else:
-                # Vertical scrolling only (dy != 0 or both zero)
-                event = CGEventCreateScrollWheelEvent(
-                    None,
-                    kCGScrollEventUnitPixel,
-                    1,  # Number of wheels (1 for vertical only)
-                    -scroll_lines_y  # Vertical
-                )
-                log_debug(f"Scroll executed: dy={dy} (lines={scroll_lines_y})")
-
-            CGEventPost(kCGHIDEventTap, event)
+            log_debug(f"Scroll sent to Rust: dx={dx}, dy={dy}")
             return True
 
         except Exception as e:
@@ -652,22 +555,14 @@ class MacOSAdapter(ActionAdapter):
             key_code = 24 if dy > 0 else 27
             zoom_direction = "in" if dy > 0 else "out"
 
-            # Create event source
-            source = CGEventSourceCreate(kCGEventSourceStateHIDSystemState)
+            # Send key press to Rust with Command modifier
+            self._send_action({
+                "action": "key_press",
+                "key_code": key_code,
+                "modifiers": CG_EVENT_FLAG_MASK_COMMAND
+            })
 
-            # Create key down event
-            key_down_event = CGEventCreateKeyboardEvent(source, key_code, True)
-            CGEventSetFlags(key_down_event, kCGEventFlagMaskCommand)
-
-            # Create key up event
-            key_up_event = CGEventCreateKeyboardEvent(source, key_code, False)
-            CGEventSetFlags(key_up_event, kCGEventFlagMaskCommand)
-
-            # Post events (down then up = key press)
-            CGEventPost(kCGHIDEventTap, key_down_event)
-            CGEventPost(kCGHIDEventTap, key_up_event)
-
-            log_debug(f"Continuous zoom executed: zoom {zoom_direction} (dy={dy})")
+            log_debug(f"Continuous zoom sent to Rust: zoom {zoom_direction} (dy={dy})")
             return True
 
         except Exception as e:
@@ -781,34 +676,20 @@ class MacOSAdapter(ActionAdapter):
             key_code = 48
             tab_direction = "next" if direction > 0 else "previous"
 
-            # Create event source
-            source = CGEventSourceCreate(kCGEventSourceStateHIDSystemState)
-
-            # Create key down event
-            key_down_event = CGEventCreateKeyboardEvent(source, key_code, True)
-
             # Set modifier flags: Ctrl for next tab, Ctrl+Shift for previous tab
             if direction > 0:
-                # Ctrl+Tab for next tab
-                CGEventSetFlags(key_down_event, kCGEventFlagMaskControl)
+                modifiers = CG_EVENT_FLAG_MASK_CONTROL
             else:
-                # Ctrl+Shift+Tab for previous tab
-                CGEventSetFlags(key_down_event, kCGEventFlagMaskControl | kCGEventFlagMaskShift)
+                modifiers = CG_EVENT_FLAG_MASK_CONTROL | CG_EVENT_FLAG_MASK_SHIFT
 
-            # Create key up event
-            key_up_event = CGEventCreateKeyboardEvent(source, key_code, False)
+            # Send key press to Rust
+            self._send_action({
+                "action": "key_press",
+                "key_code": key_code,
+                "modifiers": modifiers
+            })
 
-            # Set same modifier flags for key up
-            if direction > 0:
-                CGEventSetFlags(key_up_event, kCGEventFlagMaskControl)
-            else:
-                CGEventSetFlags(key_up_event, kCGEventFlagMaskControl | kCGEventFlagMaskShift)
-
-            # Post events (down then up = key press)
-            CGEventPost(kCGHIDEventTap, key_down_event)
-            CGEventPost(kCGHIDEventTap, key_up_event)
-
-            log_debug(f"Tab switch executed: {tab_direction} tab (direction={direction})")
+            log_debug(f"Tab switch sent to Rust: {tab_direction} tab (direction={direction})")
             return True
 
         except Exception as e:
@@ -881,9 +762,7 @@ class MacOSAdapter(ActionAdapter):
         """
         Execute keyboard shortcut using Command key combinations.
 
-        Uses CGEvent for keyboard simulation, which works reliably for
-        application-level shortcuts like copy/paste/undo (unlike system-level
-        shortcuts like Mission Control which require AppleScript).
+        Uses CGEvent for keyboard simulation via Rust IPC.
 
         Args:
             shortcut: Shortcut string like 'cmd+c', 'cmd+v', 'cmd+z'
@@ -911,22 +790,14 @@ class MacOSAdapter(ActionAdapter):
         key_code, action_name = shortcut_map[shortcut_lower]
 
         try:
-            # Create event source
-            source = CGEventSourceCreate(kCGEventSourceStateHIDSystemState)
+            # Send key press to Rust with Command modifier
+            self._send_action({
+                "action": "key_press",
+                "key_code": key_code,
+                "modifiers": CG_EVENT_FLAG_MASK_COMMAND
+            })
 
-            # Create key down event with Command modifier
-            key_down_event = CGEventCreateKeyboardEvent(source, key_code, True)
-            CGEventSetFlags(key_down_event, kCGEventFlagMaskCommand)
-
-            # Create key up event with Command modifier
-            key_up_event = CGEventCreateKeyboardEvent(source, key_code, False)
-            CGEventSetFlags(key_up_event, kCGEventFlagMaskCommand)
-
-            # Post events (down then up = key press)
-            CGEventPost(kCGHIDEventTap, key_down_event)
-            CGEventPost(kCGHIDEventTap, key_up_event)
-
-            log_debug(f"Keyboard shortcut executed: {shortcut} ({action_name})")
+            log_debug(f"Keyboard shortcut sent to Rust: {shortcut} ({action_name})")
             return True
 
         except Exception as e:

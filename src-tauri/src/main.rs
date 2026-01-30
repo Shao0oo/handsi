@@ -5,7 +5,319 @@ use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
+use std::sync::mpsc::{channel, Receiver};
 use tauri::Manager;
+
+// ============================================================================
+// macOS Input Module - CGEvent-based mouse/keyboard control
+// ============================================================================
+#[cfg(target_os = "macos")]
+mod input {
+    use core_graphics::event::{
+        CGEvent, CGEventTapLocation, CGEventType, CGMouseButton,
+        CGEventFlags,
+    };
+    use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
+    use core_graphics::geometry::CGPoint;
+
+    // FFI binding for CGEventCreateScrollWheelEvent (not exposed in core-graphics crate)
+    #[link(name = "CoreGraphics", kind = "framework")]
+    extern "C" {
+        fn CGEventCreateScrollWheelEvent(
+            source: *const std::ffi::c_void,
+            units: u32,
+            wheel_count: u32,
+            wheel1: i32,
+            wheel2: i32,
+            wheel3: i32,
+        ) -> *mut std::ffi::c_void;
+    }
+
+    // Scroll event unit: pixel-based scrolling
+    const K_CG_SCROLL_EVENT_UNIT_PIXEL: u32 = 0;
+
+    /// Current held button for drag events (None = no button held)
+    static HELD_BUTTON: std::sync::Mutex<Option<u8>> = std::sync::Mutex::new(None);
+
+    /// Move mouse cursor to absolute pixel position
+    pub fn mouse_move(x: f64, y: f64) -> Result<(), String> {
+        let source = CGEventSource::new(CGEventSourceStateID::HIDSystemState)
+            .map_err(|_| "Failed to create event source")?;
+
+        // Check if a button is held for drag events
+        let held = HELD_BUTTON.lock().unwrap();
+        let (event_type, button) = match *held {
+            Some(0) => (CGEventType::LeftMouseDragged, CGMouseButton::Left),
+            Some(1) => (CGEventType::RightMouseDragged, CGMouseButton::Right),
+            Some(2) => (CGEventType::OtherMouseDragged, CGMouseButton::Center),
+            _ => (CGEventType::MouseMoved, CGMouseButton::Left),
+        };
+        drop(held);
+
+        let event = CGEvent::new_mouse_event(
+            source,
+            event_type,
+            CGPoint::new(x, y),
+            button,
+        ).map_err(|_| "Failed to create mouse event")?;
+
+        event.post(CGEventTapLocation::HID);
+        Ok(())
+    }
+
+    /// Press mouse button (0=left, 1=right, 2=middle)
+    pub fn mouse_down(x: f64, y: f64, button: u8) -> Result<(), String> {
+        let source = CGEventSource::new(CGEventSourceStateID::HIDSystemState)
+            .map_err(|_| "Failed to create event source")?;
+
+        let (event_type, cg_button) = match button {
+            0 => (CGEventType::LeftMouseDown, CGMouseButton::Left),
+            1 => (CGEventType::RightMouseDown, CGMouseButton::Right),
+            2 => (CGEventType::OtherMouseDown, CGMouseButton::Center),
+            _ => return Err(format!("Invalid button: {}", button)),
+        };
+
+        let event = CGEvent::new_mouse_event(
+            source,
+            event_type,
+            CGPoint::new(x, y),
+            cg_button,
+        ).map_err(|_| "Failed to create mouse event")?;
+
+        event.post(CGEventTapLocation::HID);
+
+        // Track held button for drag events
+        *HELD_BUTTON.lock().unwrap() = Some(button);
+
+        Ok(())
+    }
+
+    /// Release mouse button (0=left, 1=right, 2=middle)
+    pub fn mouse_up(x: f64, y: f64, button: u8) -> Result<(), String> {
+        let source = CGEventSource::new(CGEventSourceStateID::HIDSystemState)
+            .map_err(|_| "Failed to create event source")?;
+
+        let (event_type, cg_button) = match button {
+            0 => (CGEventType::LeftMouseUp, CGMouseButton::Left),
+            1 => (CGEventType::RightMouseUp, CGMouseButton::Right),
+            2 => (CGEventType::OtherMouseUp, CGMouseButton::Center),
+            _ => return Err(format!("Invalid button: {}", button)),
+        };
+
+        let event = CGEvent::new_mouse_event(
+            source,
+            event_type,
+            CGPoint::new(x, y),
+            cg_button,
+        ).map_err(|_| "Failed to create mouse event")?;
+
+        event.post(CGEventTapLocation::HID);
+
+        // Clear held button
+        *HELD_BUTTON.lock().unwrap() = None;
+
+        Ok(())
+    }
+
+    /// Click mouse button (down + up)
+    pub fn mouse_click(x: f64, y: f64, button: u8) -> Result<(), String> {
+        mouse_down(x, y, button)?;
+        mouse_up(x, y, button)
+    }
+
+    /// Double-click with proper click count
+    pub fn mouse_double_click(x: f64, y: f64, button: u8) -> Result<(), String> {
+        let source = CGEventSource::new(CGEventSourceStateID::HIDSystemState)
+            .map_err(|_| "Failed to create event source")?;
+
+        let (down_type, up_type, cg_button) = match button {
+            0 => (CGEventType::LeftMouseDown, CGEventType::LeftMouseUp, CGMouseButton::Left),
+            1 => (CGEventType::RightMouseDown, CGEventType::RightMouseUp, CGMouseButton::Right),
+            2 => (CGEventType::OtherMouseDown, CGEventType::OtherMouseUp, CGMouseButton::Center),
+            _ => return Err(format!("Invalid button: {}", button)),
+        };
+
+        let point = CGPoint::new(x, y);
+
+        // First click (clickCount = 1)
+        let down1 = CGEvent::new_mouse_event(source.clone(), down_type, point, cg_button)
+            .map_err(|_| "Failed to create mouse event")?;
+        down1.set_integer_value_field(core_graphics::event::EventField::MOUSE_EVENT_CLICK_STATE, 1);
+        down1.post(CGEventTapLocation::HID);
+
+        let up1 = CGEvent::new_mouse_event(source.clone(), up_type, point, cg_button)
+            .map_err(|_| "Failed to create mouse event")?;
+        up1.set_integer_value_field(core_graphics::event::EventField::MOUSE_EVENT_CLICK_STATE, 1);
+        up1.post(CGEventTapLocation::HID);
+
+        // Small delay between clicks
+        std::thread::sleep(std::time::Duration::from_millis(50));
+
+        // Second click (clickCount = 2)
+        let down2 = CGEvent::new_mouse_event(source.clone(), down_type, point, cg_button)
+            .map_err(|_| "Failed to create mouse event")?;
+        down2.set_integer_value_field(core_graphics::event::EventField::MOUSE_EVENT_CLICK_STATE, 2);
+        down2.post(CGEventTapLocation::HID);
+
+        let up2 = CGEvent::new_mouse_event(source, up_type, point, cg_button)
+            .map_err(|_| "Failed to create mouse event")?;
+        up2.set_integer_value_field(core_graphics::event::EventField::MOUSE_EVENT_CLICK_STATE, 2);
+        up2.post(CGEventTapLocation::HID);
+
+        Ok(())
+    }
+
+    /// Scroll wheel event
+    pub fn scroll(dx: i32, dy: i32) -> Result<(), String> {
+        // Note: macOS scroll direction is inverted for "natural" scrolling
+        // We invert here so positive dy = scroll down (content moves up)
+        let scroll_dy = -dy;
+        let scroll_dx = -dx;
+
+        // Create scroll event using FFI
+        unsafe {
+            let event_ref = CGEventCreateScrollWheelEvent(
+                std::ptr::null(),  // No event source
+                K_CG_SCROLL_EVENT_UNIT_PIXEL,
+                2,  // wheel_count (2 = both vertical and horizontal)
+                scroll_dy,
+                scroll_dx,
+                0,  // wheel3 (unused)
+            );
+
+            if event_ref.is_null() {
+                return Err("Failed to create scroll event".to_string());
+            }
+
+            // Post the event using CGEventPost FFI
+            extern "C" {
+                fn CGEventPost(tap: u32, event: *mut std::ffi::c_void);
+            }
+            const K_CG_HID_EVENT_TAP: u32 = 0;
+            CGEventPost(K_CG_HID_EVENT_TAP, event_ref);
+
+            // Release the event
+            extern "C" {
+                fn CFRelease(cf: *mut std::ffi::c_void);
+            }
+            CFRelease(event_ref);
+        }
+
+        Ok(())
+    }
+
+    /// Keyboard event (key down + key up)
+    pub fn key_press(key_code: u16, modifiers: u64) -> Result<(), String> {
+        let source = CGEventSource::new(CGEventSourceStateID::HIDSystemState)
+            .map_err(|_| "Failed to create event source")?;
+
+        // Create key down event
+        let key_down = CGEvent::new_keyboard_event(source.clone(), key_code, true)
+            .map_err(|_| "Failed to create key down event")?;
+
+        // Set modifier flags
+        let flags = CGEventFlags::from_bits_truncate(modifiers);
+        key_down.set_flags(flags);
+        key_down.post(CGEventTapLocation::HID);
+
+        // Create key up event
+        let key_up = CGEvent::new_keyboard_event(source, key_code, false)
+            .map_err(|_| "Failed to create key up event")?;
+        key_up.set_flags(flags);
+        key_up.post(CGEventTapLocation::HID);
+
+        Ok(())
+    }
+}
+
+// Stub module for non-macOS platforms
+#[cfg(not(target_os = "macos"))]
+mod input {
+    pub fn mouse_move(_x: f64, _y: f64) -> Result<(), String> {
+        Err("Not supported on this platform".to_string())
+    }
+    pub fn mouse_down(_x: f64, _y: f64, _button: u8) -> Result<(), String> {
+        Err("Not supported on this platform".to_string())
+    }
+    pub fn mouse_up(_x: f64, _y: f64, _button: u8) -> Result<(), String> {
+        Err("Not supported on this platform".to_string())
+    }
+    pub fn mouse_click(_x: f64, _y: f64, _button: u8) -> Result<(), String> {
+        Err("Not supported on this platform".to_string())
+    }
+    pub fn mouse_double_click(_x: f64, _y: f64, _button: u8) -> Result<(), String> {
+        Err("Not supported on this platform".to_string())
+    }
+    pub fn scroll(_dx: i32, _dy: i32) -> Result<(), String> {
+        Err("Not supported on this platform".to_string())
+    }
+    pub fn key_press(_key_code: u16, _modifiers: u64) -> Result<(), String> {
+        Err("Not supported on this platform".to_string())
+    }
+}
+
+// ============================================================================
+// Action Processing - Handle fire-and-forget actions from Python
+// ============================================================================
+fn process_action(msg: &serde_json::Value) {
+    let action = match msg.get("action").and_then(|v| v.as_str()) {
+        Some(a) => a,
+        None => {
+            eprintln!("[Rust] Action message missing 'action' field");
+            return;
+        }
+    };
+
+    let result = match action {
+        "mouse_move" => {
+            let x = msg.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let y = msg.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            input::mouse_move(x, y)
+        }
+        "mouse_down" => {
+            let x = msg.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let y = msg.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let button = msg.get("button").and_then(|v| v.as_u64()).unwrap_or(0) as u8;
+            input::mouse_down(x, y, button)
+        }
+        "mouse_up" => {
+            let x = msg.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let y = msg.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let button = msg.get("button").and_then(|v| v.as_u64()).unwrap_or(0) as u8;
+            input::mouse_up(x, y, button)
+        }
+        "click" => {
+            let x = msg.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let y = msg.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let button = msg.get("button").and_then(|v| v.as_u64()).unwrap_or(0) as u8;
+            input::mouse_click(x, y, button)
+        }
+        "double_click" => {
+            let x = msg.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let y = msg.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let button = msg.get("button").and_then(|v| v.as_u64()).unwrap_or(0) as u8;
+            input::mouse_double_click(x, y, button)
+        }
+        "scroll" => {
+            let dx = msg.get("dx").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+            let dy = msg.get("dy").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+            input::scroll(dx, dy)
+        }
+        "key_press" => {
+            let key_code = msg.get("key_code").and_then(|v| v.as_u64()).unwrap_or(0) as u16;
+            let modifiers = msg.get("modifiers").and_then(|v| v.as_u64()).unwrap_or(0);
+            input::key_press(key_code, modifiers)
+        }
+        _ => {
+            eprintln!("[Rust] Unknown action: {}", action);
+            Ok(())
+        }
+    };
+
+    if let Err(e) = result {
+        eprintln!("[Rust] Action '{}' failed: {}", action, e);
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 struct IpcCommand {
@@ -27,7 +339,8 @@ struct IpcResponse {
 struct PythonProcess {
     child: Option<Child>,
     stdin: Option<std::process::ChildStdin>,
-    stdout: Option<BufReader<std::process::ChildStdout>>,
+    /// Channel receiver for IPC responses (actions are processed separately)
+    response_receiver: Option<Receiver<String>>,
 }
 
 impl PythonProcess {
@@ -35,7 +348,7 @@ impl PythonProcess {
         PythonProcess {
             child: None,
             stdin: None,
-            stdout: None,
+            response_receiver: None,
         }
     }
 
@@ -125,7 +438,50 @@ impl PythonProcess {
         self.stdin = child.stdin.take();
         let stdout = child.stdout.take()
             .ok_or("Failed to capture Python stdout".to_string())?;
-        self.stdout = Some(BufReader::new(stdout));
+
+        // Create channel for IPC responses (actions bypass this channel)
+        let (response_tx, response_rx) = channel::<String>();
+        self.response_receiver = Some(response_rx);
+
+        // Spawn a thread to read Python's stdout
+        // This thread handles both:
+        // 1. Action messages (type: "action") - executed immediately via CGEvent
+        // 2. IPC responses - forwarded to response channel for send_command to receive
+        std::thread::spawn(move || {
+            let reader = BufReader::new(stdout);
+            for line in reader.lines() {
+                if let Ok(line) = line {
+                    if line.trim().is_empty() {
+                        continue;
+                    }
+
+                    // Try to parse as JSON
+                    match serde_json::from_str::<serde_json::Value>(&line) {
+                        Ok(msg) => {
+                            // Check if this is an action message
+                            if msg.get("type").and_then(|v| v.as_str()) == Some("action") {
+                                // Process action immediately (fire-and-forget)
+                                process_action(&msg);
+                            } else {
+                                // Regular IPC response - forward to channel
+                                if let Err(e) = response_tx.send(line) {
+                                    eprintln!("[Rust] Failed to forward IPC response: {}", e);
+                                    break;
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("[Rust] Failed to parse Python output as JSON: {} - line: {}", e, line);
+                            // Still try to forward it in case it's a malformed response
+                            if let Err(_) = response_tx.send(line) {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            eprintln!("[Rust] Python stdout reader thread exiting");
+        });
 
         // Spawn a thread to monitor stderr
         if let Some(stderr) = child.stderr.take() {
@@ -151,7 +507,7 @@ impl PythonProcess {
         }
 
         // Generate unique request ID
-        use std::time::{SystemTime, UNIX_EPOCH};
+        use std::time::{SystemTime, UNIX_EPOCH, Duration};
         let request_id = format!("{}-{}",
             SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis(),
             command
@@ -182,13 +538,13 @@ impl PythonProcess {
 
         eprintln!("[Rust] Waiting for Python response...");
 
-        // Read responses with timeout to prevent hanging forever
-        use std::time::Duration;
-        use std::io::{BufRead as _, ErrorKind};
-
-        let timeout = Duration::from_secs(10); // 10 second timeout
+        // Read responses from the channel (actions are filtered out by the reader thread)
+        let timeout = Duration::from_secs(10);
         let start_time = std::time::Instant::now();
-        let max_attempts = 20;  // Prevent infinite loop
+        let max_attempts = 20;
+
+        let receiver = self.response_receiver.as_ref()
+            .ok_or("Response receiver not available")?;
 
         for attempt in 0..max_attempts {
             // Check if we've exceeded timeout
@@ -196,48 +552,36 @@ impl PythonProcess {
                 return Err(format!("Timeout waiting for Python response after {:?}", timeout));
             }
 
-            if let Some(ref mut stdout) = self.stdout {
-                let mut response_line = String::new();
+            // Try to receive with timeout
+            let remaining = timeout.saturating_sub(start_time.elapsed());
+            match receiver.recv_timeout(remaining.min(Duration::from_millis(500))) {
+                Ok(response_line) => {
+                    eprintln!("[Rust] Python response (attempt {}): {}", attempt + 1, response_line.trim());
 
-                // Try to read line with short timeout
-                match stdout.read_line(&mut response_line) {
-                    Ok(0) => {
-                        // EOF - Python process died
-                        return Err("Python process terminated unexpectedly".to_string());
-                    }
-                    Ok(_) => {
-                        eprintln!("[Rust] Python response (attempt {}): {}", attempt + 1, response_line.trim());
-
-                        // Skip empty lines
-                        if response_line.trim().is_empty() {
-                            eprintln!("[Rust] Warning: Got empty line from Python, continuing...");
-                            std::thread::sleep(Duration::from_millis(100));
-                            continue;
-                        }
-
-                        let response: IpcResponse = serde_json::from_str(&response_line)
-                            .map_err(|e| format!("Failed to parse Python response: {}", e))?;
-
-                        // Check if this response matches our request
-                        if response.request_id.as_ref() == Some(&request_id) {
-                            eprintln!("[Rust] ✓ Response matched request_id, success={}", response.success);
-                            return Ok(response);
-                        } else {
-                            eprintln!("[Rust] ⚠ Response has wrong request_id! Expected '{}', got '{:?}'. Continuing to read...",
-                                request_id, response.request_id);
-                        }
-                    }
-                    Err(e) if e.kind() == ErrorKind::WouldBlock => {
-                        // Non-blocking read, no data available yet
-                        std::thread::sleep(Duration::from_millis(100));
+                    // Skip empty lines
+                    if response_line.trim().is_empty() {
                         continue;
                     }
-                    Err(e) => {
-                        return Err(format!("Failed to read from Python stdout: {}", e));
+
+                    let response: IpcResponse = serde_json::from_str(&response_line)
+                        .map_err(|e| format!("Failed to parse Python response: {}", e))?;
+
+                    // Check if this response matches our request
+                    if response.request_id.as_ref() == Some(&request_id) {
+                        eprintln!("[Rust] ✓ Response matched request_id, success={}", response.success);
+                        return Ok(response);
+                    } else {
+                        eprintln!("[Rust] ⚠ Response has wrong request_id! Expected '{}', got '{:?}'. Continuing to read...",
+                            request_id, response.request_id);
                     }
                 }
-            } else {
-                return Err("Python stdout not available".to_string());
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    // Continue waiting
+                    continue;
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                    return Err("Python process terminated unexpectedly".to_string());
+                }
             }
         }
 
