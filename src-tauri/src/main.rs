@@ -355,10 +355,54 @@ async fn get_cameras(state: tauri::State<'_, AppState>) -> Result<IpcResponse, S
     python.send_command("get_cameras", serde_json::json!({}))
 }
 
+#[cfg(target_os = "macos")]
+fn check_accessibility_permission() {
+    use std::process::Command;
+
+    eprintln!("[Rust] Checking Accessibility permission...");
+
+    // Use osascript to trigger the permission check via AppleScript
+    // This will show the system prompt if permission is not granted
+    let script = r#"
+        use framework "Foundation"
+        use framework "ApplicationServices"
+
+        set options to current application's NSDictionary's dictionaryWithObject:true forKey:"AXTrustedCheckOptionPrompt"
+        set trusted to current application's AXIsProcessTrustedWithOptions(options)
+        return trusted as boolean
+    "#;
+
+    match Command::new("osascript")
+        .args(["-l", "AppleScript", "-e", script])
+        .output()
+    {
+        Ok(output) => {
+            let result = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            eprintln!("[Rust] Accessibility permission check result: {}", result);
+            if result != "true" {
+                eprintln!("[Rust] ⚠ Accessibility permission not granted. Please grant permission and restart the app.");
+            }
+        }
+        Err(e) => {
+            eprintln!("[Rust] Failed to check accessibility permission: {}", e);
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn check_accessibility_permission() {
+    // No-op on non-macOS platforms
+}
+
 fn main() {
     eprintln!("[Rust] ============================================");
     eprintln!("[Rust] Handsi Tauri Application Starting");
     eprintln!("[Rust] ============================================");
+
+    // Check Accessibility permission BEFORE starting Python backend
+    // This ensures the permission is requested for the main app, and child processes can inherit it
+    #[cfg(target_os = "macos")]
+    check_accessibility_permission();
 
     // Find config path
     let config_path = std::env::var("HANDSI_CONFIG")

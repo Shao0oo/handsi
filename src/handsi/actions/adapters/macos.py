@@ -147,6 +147,36 @@ class MacOSAdapter(ActionAdapter):
             # # Check zoom scroll gesture settings
             # self.check_zoom_settings()
 
+            # Check Accessibility/PostEvent permission (required for CGEventPost on macOS Tahoe+)
+            try:
+                import objc
+                from Foundation import NSBundle
+
+                # Load ApplicationServices framework for AXIsProcessTrustedWithOptions
+                app_services = NSBundle.bundleWithPath_('/System/Library/Frameworks/ApplicationServices.framework')
+
+                # Load the function with correct signature: Boolean AXIsProcessTrustedWithOptions(CFDictionaryRef options)
+                objc.loadBundleFunctions(app_services, globals(), [
+                    ('AXIsProcessTrustedWithOptions', b'Z@')
+                ])
+
+                # kAXTrustedCheckOptionPrompt key - when True, shows the permission dialog
+                kAXTrustedCheckOptionPrompt = "AXTrustedCheckOptionPrompt"
+
+                # Check and prompt if not trusted
+                is_trusted = AXIsProcessTrustedWithOptions({kAXTrustedCheckOptionPrompt: True})
+
+                if is_trusted:
+                    log_info("Accessibility permission granted")
+                else:
+                    log_warning(
+                        "ACT-004",
+                        "Accessibility permission required. After granting permission in System Settings, "
+                        "please RESTART the app for changes to take effect."
+                    )
+            except Exception as e:
+                log_warning("ACT-004", f"Could not check Accessibility permission: {e}")
+
             log_info(
                 f"macOS adapter initialized (combined screen: {self._screen_width}x{self._screen_height}, "
                 f"offset: ({self._screen_x_offset}, {self._screen_y_offset}), "
