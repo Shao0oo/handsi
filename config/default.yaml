@@ -124,7 +124,7 @@ actions:
 
 system:
   log_level: INFO           # DEBUG | INFO | WARN | ERROR
-  log_file: logs/handsi.log
+  # log_file: ~/.handsi/logs/handsi.log  # default; override with absolute path
   preview: false            # override with --preview
   preview_show_features: false  # toggle with 'f' key in preview window
   debug: false              # override with --debug

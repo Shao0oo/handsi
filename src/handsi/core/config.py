@@ -170,10 +170,15 @@ class ActionConfig(BaseModel):
         return validated
 
 
+def get_default_log_path() -> str:
+    """Get default log file path in user's .handsi directory."""
+    return str(Path.home() / ".handsi" / "logs" / "handsi.log")
+
+
 class SystemConfig(BaseModel):
     """System-level settings."""
     log_level: str = Field(default="INFO")
-    log_file: str = Field(default="logs/handsi.log")
+    log_file: str = Field(default_factory=get_default_log_path)
     preview: bool = Field(default=False)
     preview_show_features: bool = Field(default=False)
     debug: bool = Field(default=False)
