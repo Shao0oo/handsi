@@ -91,7 +91,7 @@ class ContinuousTabHandler(ContinuousActionHandler):
             movement = -delta.dx
         else:
             # Vertical movement dominant: up = next (negative y), down = prev
-            movement = -delta.dy  # Invert because up is negative in screen coords
+            movement = delta.dy  # Invert because up is negative in screen coords
 
         # Check if accumulated movement crosses threshold
         direction = self._tracker.accumulate(movement)

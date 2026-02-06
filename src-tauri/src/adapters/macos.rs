@@ -26,6 +26,7 @@ extern "C" {
 
     fn CGEventCreate(source: *const std::ffi::c_void) -> *mut std::ffi::c_void;
     fn CGEventGetLocation(event: *const std::ffi::c_void) -> CGPoint;
+    fn CGEventSetIntegerValueField(event: *mut std::ffi::c_void, field: u32, value: i64);
 }
 
 #[link(name = "CoreFoundation", kind = "framework")]
@@ -35,6 +36,8 @@ extern "C" {
 
 // Scroll event unit: pixel-based scrolling
 const K_CG_SCROLL_EVENT_UNIT_PIXEL: u32 = 0;
+// Scroll wheel event field for horizontal axis
+const K_CG_SCROLL_WHEEL_EVENT_DELTA_AXIS_2: u32 = 12;
 
 /// Current held button for drag events (None = no button held)
 static HELD_BUTTON: Mutex<Option<u8>> = Mutex::new(None);
@@ -358,7 +361,7 @@ impl ActionAdapter for MacOSAdapter {
     }
 
     fn scroll(&self, dx: i32, dy: i32) -> Result<(), String> {
-        // Convert pixels to lines (matching Python's approach: 10 pixels = 1 line)
+        // Convert pixels to lines (10 pixels = 1 line)
         let mut scroll_lines_y = dy / 10;
         let mut scroll_lines_x = dx / 10;
 
@@ -374,42 +377,28 @@ impl ActionAdapter for MacOSAdapter {
         let scroll_dy = -scroll_lines_y;
         let scroll_dx = -scroll_lines_x;
 
-        // Create scroll event using FFI with variable wheel_count
         unsafe {
-            let event_ref = if dx != 0 && dy != 0 {
-                // 2D scrolling: both horizontal and vertical
-                CGEventCreateScrollWheelEvent(
-                    std::ptr::null(),
-                    K_CG_SCROLL_EVENT_UNIT_PIXEL,
-                    2,  // wheel_count = 2 for both axes
-                    scroll_dy,
-                    scroll_dx,
-                    0,
-                )
-            } else if dx != 0 {
-                // Horizontal scrolling only
-                CGEventCreateScrollWheelEvent(
-                    std::ptr::null(),
-                    K_CG_SCROLL_EVENT_UNIT_PIXEL,
-                    2,  // wheel_count = 2 needed for horizontal
-                    0,  // vertical = 0
-                    scroll_dx,
-                    0,
-                )
-            } else {
-                // Vertical scrolling only (dy != 0 or both zero)
-                CGEventCreateScrollWheelEvent(
-                    std::ptr::null(),
-                    K_CG_SCROLL_EVENT_UNIT_PIXEL,
-                    1,  // wheel_count = 1 for vertical only (better app compatibility)
-                    scroll_dy,
-                    0,
-                    0,
-                )
-            };
+            // Create scroll event with vertical axis
+            let event_ref = CGEventCreateScrollWheelEvent(
+                std::ptr::null(),
+                K_CG_SCROLL_EVENT_UNIT_PIXEL,
+                1,
+                scroll_dy,
+                0,
+                0,
+            );
 
             if event_ref.is_null() {
                 return Err("Failed to create scroll event".to_string());
+            }
+
+            // Add horizontal axis if needed (bypasses variadic FFI issue)
+            if scroll_dx != 0 {
+                CGEventSetIntegerValueField(
+                    event_ref,
+                    K_CG_SCROLL_WHEEL_EVENT_DELTA_AXIS_2,
+                    scroll_dx as i64,
+                );
             }
 
             // Post the event
@@ -419,10 +408,6 @@ impl ActionAdapter for MacOSAdapter {
             const K_CG_HID_EVENT_TAP: u32 = 0;
             CGEventPost(K_CG_HID_EVENT_TAP, event_ref);
 
-            // Release the event
-            extern "C" {
-                fn CFRelease(cf: *mut std::ffi::c_void);
-            }
             CFRelease(event_ref);
         }
 
