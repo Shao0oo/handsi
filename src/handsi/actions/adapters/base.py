@@ -38,7 +38,7 @@ class ActionAdapter(ABC):
         pass
 
     @abstractmethod
-    def get_mouse_position_normalized(self) -> tuple[float, float]:
+    def move_mouse_relative(self) -> tuple[float, float]:
         """
         Get current mouse cursor position in normalized coordinates.
 

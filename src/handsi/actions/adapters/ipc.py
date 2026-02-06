@@ -34,8 +34,8 @@ class IPCAdapter:
     def __init__(self):
         self._initialized = False
 
-        # Track last mouse position (normalized) for get_mouse_position_normalized()
-        # This avoids querying OS at 60Hz - much more efficient
+        # Track last mouse position (normalized) for button events (click, mouse_down, etc.)
+        # Updated by move_mouse() calls; used to send position with button actions
         self._last_mouse_x = 0.5  # Center of screen
         self._last_mouse_y = 0.5
 
@@ -113,6 +113,41 @@ class IPCAdapter:
                 "x": float(x),
                 "y": float(y)
             })
+
+    def move_mouse_relative(self, dx: float, dy: float) -> bool:
+        """
+        Move mouse cursor by delta (relative movement).
+
+        Rust uses internally tracked position and applies the delta.
+        Call reset_cursor_tracking() at gesture start to sync with actual OS position.
+
+        Args:
+            dx: Delta X in normalized coordinates
+            dy: Delta Y in normalized coordinates
+
+        Returns:
+            True if action was sent successfully
+        """
+        return self._send_action({
+            "action": "mouse_move_relative_normalized",
+            "dx": float(dx),
+            "dy": float(dy)
+        })
+
+    def reset_cursor_tracking(self) -> bool:
+        """
+        Reset Rust's cursor tracking to actual OS position.
+
+        Call at gesture start to prevent teleporting after manual mouse movement.
+        Rust will query the actual OS cursor position and use it as the starting
+        point for subsequent relative moves.
+
+        Returns:
+            True if action was sent successfully
+        """
+        return self._send_action({
+            "action": "reset_cursor_tracking"
+        })
 
     def mouse_down(self, button: Literal['left', 'right', 'middle'] = 'left') -> bool:
         """
@@ -342,19 +377,3 @@ class IPCAdapter:
     def cleanup(self) -> None:
         """Clean up adapter resources."""
         pass
-
-    # =========================================================================
-    # Compatibility methods (for handler interface compatibility)
-    # =========================================================================
-
-    def get_mouse_position_normalized(self) -> tuple[float, float]:
-        """
-        Get current mouse cursor position in normalized coordinates.
-
-        Returns the last known position from move_mouse() calls.
-        This avoids querying the OS at 60Hz (more efficient than old MacOSAdapter).
-
-        Returns:
-            Tuple of (x, y) in normalized coordinates [0, 1]
-        """
-        return (self._last_mouse_x, self._last_mouse_y)

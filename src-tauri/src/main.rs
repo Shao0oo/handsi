@@ -37,6 +37,14 @@ fn process_action(msg: &serde_json::Value, adapter: &dyn ActionAdapter) {
             let y_norm = msg.get("y").and_then(|v| v.as_f64()).unwrap_or(0.5);
             adapter.mouse_move_normalized(x_norm, y_norm)
         }
+        "mouse_move_relative_normalized" => {
+            let dx = msg.get("dx").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let dy = msg.get("dy").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            adapter.mouse_move_relative_normalized(dx, dy)
+        }
+        "reset_cursor_tracking" => {
+            adapter.reset_cursor_tracking()
+        }
         "mouse_down" => {
             let x = msg.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0);
             let y = msg.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0);

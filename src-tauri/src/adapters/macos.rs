@@ -51,6 +51,10 @@ pub struct MacOSAdapter {
     cached_volume: Mutex<Option<i32>>,
     // Double-click time threshold (seconds) for proper click timing
     double_click_threshold: f64,
+    // Tracked cursor position for gesture control (avoids repeated OS queries)
+    // Updated by reset_cursor_tracking() at gesture start, then accumulated by relative moves
+    tracked_cursor_x: Mutex<f64>,
+    tracked_cursor_y: Mutex<f64>,
 }
 
 impl MacOSAdapter {
@@ -63,6 +67,8 @@ impl MacOSAdapter {
             screen_y_offset: 0.0,
             cached_volume: Mutex::new(None),
             double_click_threshold: 0.5,  // Default 500ms (matching Python default)
+            tracked_cursor_x: Mutex::new(0.5),  // Center of screen
+            tracked_cursor_y: Mutex::new(0.5),
         }
     }
 
@@ -323,23 +329,31 @@ impl ActionAdapter for MacOSAdapter {
         Ok(())
     }
 
-    fn mouse_down_normalized(&self, x_norm: f64, y_norm: f64, button: u8) -> Result<(), String> {
-        let (pixel_x, pixel_y) = self.normalized_to_pixels(x_norm, y_norm);
+    fn mouse_down_normalized(&self, _x_norm: f64, _y_norm: f64, button: u8) -> Result<(), String> {
+        // Query actual OS position for accurate clicks (ignore provided coordinates)
+        let (actual_x, actual_y) = self.get_mouse_position_normalized()?;
+        let (pixel_x, pixel_y) = self.normalized_to_pixels(actual_x, actual_y);
         self.mouse_down(pixel_x, pixel_y, button)
     }
 
-    fn mouse_up_normalized(&self, x_norm: f64, y_norm: f64, button: u8) -> Result<(), String> {
-        let (pixel_x, pixel_y) = self.normalized_to_pixels(x_norm, y_norm);
+    fn mouse_up_normalized(&self, _x_norm: f64, _y_norm: f64, button: u8) -> Result<(), String> {
+        // Query actual OS position for accurate clicks (ignore provided coordinates)
+        let (actual_x, actual_y) = self.get_mouse_position_normalized()?;
+        let (pixel_x, pixel_y) = self.normalized_to_pixels(actual_x, actual_y);
         self.mouse_up(pixel_x, pixel_y, button)
     }
 
-    fn mouse_click_normalized(&self, x_norm: f64, y_norm: f64, button: u8) -> Result<(), String> {
-        let (pixel_x, pixel_y) = self.normalized_to_pixels(x_norm, y_norm);
+    fn mouse_click_normalized(&self, _x_norm: f64, _y_norm: f64, button: u8) -> Result<(), String> {
+        // Query actual OS position for accurate clicks (ignore provided coordinates)
+        let (actual_x, actual_y) = self.get_mouse_position_normalized()?;
+        let (pixel_x, pixel_y) = self.normalized_to_pixels(actual_x, actual_y);
         self.mouse_click(pixel_x, pixel_y, button)
     }
 
-    fn mouse_double_click_normalized(&self, x_norm: f64, y_norm: f64, button: u8) -> Result<(), String> {
-        let (pixel_x, pixel_y) = self.normalized_to_pixels(x_norm, y_norm);
+    fn mouse_double_click_normalized(&self, _x_norm: f64, _y_norm: f64, button: u8) -> Result<(), String> {
+        // Query actual OS position for accurate clicks (ignore provided coordinates)
+        let (actual_x, actual_y) = self.get_mouse_position_normalized()?;
+        let (pixel_x, pixel_y) = self.normalized_to_pixels(actual_x, actual_y);
         self.mouse_double_click(pixel_x, pixel_y, button)
     }
 
@@ -412,6 +426,58 @@ impl ActionAdapter for MacOSAdapter {
             CFRelease(event_ref);
         }
 
+        Ok(())
+    }
+
+    fn get_mouse_position_normalized(&self) -> Result<(f64, f64), String> {
+        // Query actual cursor position from OS (not cached)
+        let point = unsafe {
+            let event = CGEventCreate(std::ptr::null());
+            if event.is_null() {
+                return Err("Failed to query mouse position".to_string());
+            }
+            let pos = CGEventGetLocation(event);
+            CFRelease(event);
+            pos
+        };
+
+        // Normalize to [0, 1] range relative to screen bounds
+        let normalized_x = (point.x - self.screen_x_offset) / self.screen_width;
+        let normalized_y = (point.y - self.screen_y_offset) / self.screen_height;
+
+        // Clamp to [0, 1]
+        let clamped_x = normalized_x.max(0.0).min(1.0);
+        let clamped_y = normalized_y.max(0.0).min(1.0);
+
+        Ok((clamped_x, clamped_y))
+    }
+
+    fn mouse_move_relative_normalized(&self, dx: f64, dy: f64) -> Result<(), String> {
+        // Get tracked position (NOT querying OS - avoids jitter)
+        let mut tracked_x = self.tracked_cursor_x.lock().unwrap();
+        let mut tracked_y = self.tracked_cursor_y.lock().unwrap();
+
+        // Apply delta and clamp to screen bounds
+        let new_x = (*tracked_x + dx).clamp(0.0, 1.0);
+        let new_y = (*tracked_y + dy).clamp(0.0, 1.0);
+
+        // Update tracked position
+        *tracked_x = new_x;
+        *tracked_y = new_y;
+
+        // Move cursor to new position
+        self.mouse_move_normalized(new_x, new_y)
+    }
+
+    fn reset_cursor_tracking(&self) -> Result<(), String> {
+        // Query actual OS position
+        let (actual_x, actual_y) = self.get_mouse_position_normalized()?;
+
+        // Update tracked position to actual
+        *self.tracked_cursor_x.lock().unwrap() = actual_x;
+        *self.tracked_cursor_y.lock().unwrap() = actual_y;
+
+        eprintln!("[Rust] Cursor tracking reset to ({:.3}, {:.3})", actual_x, actual_y);
         Ok(())
     }
 

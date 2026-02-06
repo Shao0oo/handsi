@@ -40,6 +40,18 @@ pub trait ActionAdapter: Send {
     /// Double-click mouse button using normalized coordinates [0, 1]
     fn mouse_double_click_normalized(&self, x_norm: f64, y_norm: f64, button: u8) -> Result<(), String>;
 
+    /// Get current mouse cursor position in normalized coordinates [0, 1]
+    /// Queries the actual OS cursor position (not cached)
+    fn get_mouse_position_normalized(&self) -> Result<(f64, f64), String>;
+
+    /// Move mouse cursor by delta using normalized coordinates
+    /// Uses internally tracked position (call reset_cursor_tracking at gesture start)
+    fn mouse_move_relative_normalized(&self, dx: f64, dy: f64) -> Result<(), String>;
+
+    /// Reset cursor tracking to actual OS position
+    /// Call at gesture start to sync with actual cursor location
+    fn reset_cursor_tracking(&self) -> Result<(), String>;
+
     /// Scroll wheel (dx=horizontal, dy=vertical)
     fn scroll(&self, dx: i32, dy: i32) -> Result<(), String>;
 
