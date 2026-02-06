@@ -12,7 +12,7 @@ import time
 from typing import Dict, Optional, Union
 
 from handsi.actions.adapters.base import ActionAdapter
-from handsi.actions.adapters.factory import AdapterFactory
+from handsi.actions.adapters.ipc import IPCAdapter
 from handsi.actions.handlers.alert import CompositeAlertHandler
 from handsi.actions.handlers.base import ActionHandler
 from handsi.core.types import ActionName
@@ -108,23 +108,17 @@ class ActionExecutorThread(threading.Thread):
 
     def _initialize_adapter(self) -> bool:
         """
-        Initialize OS-specific action adapter using factory.
+        Initialize IPC action adapter.
 
         Returns:
             True if initialization successful, False otherwise
         """
-        self.adapter = AdapterFactory.create()
+        # Use IPC adapter to send all actions to Rust
+        self.adapter = IPCAdapter()
 
-        if self.adapter is None:
-            return False
-
-        # Initialize adapter
-        if not self.adapter.initialize():
-            return False
-
-        # Check permissions
-        if self.macos_config.accessibility_check:
-            self.adapter.check_permissions()
+        # IPC adapter doesn't need initialization or permission checks
+        # (Rust side handles all OS-specific operations and has TCC permissions)
+        log_info("Action executor initialized with IPC adapter")
 
         return True
 
@@ -350,6 +344,19 @@ class ActionExecutorThread(threading.Thread):
             action = self._map_gesture_to_action(old_gesture)
             if action and action in self.handlers:
                 self.handlers[action].on_gesture_end(dummy_event)
+
+            # Flush gesture queue to prevent buffered events from executing after gesture ends
+            # This prevents "lag" where volume/zoom/scroll continues after releasing the gesture
+            flushed_count = 0
+            while not self.gesture_queue.empty():
+                try:
+                    self.gesture_queue.get_nowait()
+                    flushed_count += 1
+                except Exception:
+                    break
+
+            if flushed_count > 0:
+                log_debug(f"Flushed {flushed_count} queued gesture events after gesture end")
 
         # Handle gesture START
         if new_gesture is not None:

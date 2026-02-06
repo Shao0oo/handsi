@@ -35,7 +35,12 @@ class MouseMoveHandler(ContinuousActionHandler):
         self.interpolator.reset_anchor()
 
     def on_gesture_start(self, event: GestureEvent) -> None:
-        """Handle mouse_move gesture start."""
+        """
+        Handle mouse_move gesture start.
+
+        Syncs cached position to prevent teleporting after manual mouse movement.
+        The cursor will smoothly move to align with hand position on first movement.
+        """
         self.reset_tracking()
         self.interpolator.enable()
         log_debug("Interpolation enabled (mouse_move started)")

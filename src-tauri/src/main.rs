@@ -9,257 +9,15 @@ use std::sync::mpsc::{channel, Receiver};
 use tauri::Manager;
 
 // ============================================================================
-// macOS Input Module - CGEvent-based mouse/keyboard control
+// Action Adapters - Platform-specific system control
 // ============================================================================
-#[cfg(target_os = "macos")]
-mod input {
-    use core_graphics::event::{
-        CGEvent, CGEventTapLocation, CGEventType, CGMouseButton,
-        CGEventFlags,
-    };
-    use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
-    use core_graphics::geometry::CGPoint;
-
-    // FFI binding for CGEventCreateScrollWheelEvent (not exposed in core-graphics crate)
-    #[link(name = "CoreGraphics", kind = "framework")]
-    extern "C" {
-        fn CGEventCreateScrollWheelEvent(
-            source: *const std::ffi::c_void,
-            units: u32,
-            wheel_count: u32,
-            wheel1: i32,
-            wheel2: i32,
-            wheel3: i32,
-        ) -> *mut std::ffi::c_void;
-    }
-
-    // Scroll event unit: pixel-based scrolling
-    const K_CG_SCROLL_EVENT_UNIT_PIXEL: u32 = 0;
-
-    /// Current held button for drag events (None = no button held)
-    static HELD_BUTTON: std::sync::Mutex<Option<u8>> = std::sync::Mutex::new(None);
-
-    /// Move mouse cursor to absolute pixel position
-    pub fn mouse_move(x: f64, y: f64) -> Result<(), String> {
-        let source = CGEventSource::new(CGEventSourceStateID::HIDSystemState)
-            .map_err(|_| "Failed to create event source")?;
-
-        // Check if a button is held for drag events
-        let held = HELD_BUTTON.lock().unwrap();
-        let (event_type, button) = match *held {
-            Some(0) => (CGEventType::LeftMouseDragged, CGMouseButton::Left),
-            Some(1) => (CGEventType::RightMouseDragged, CGMouseButton::Right),
-            Some(2) => (CGEventType::OtherMouseDragged, CGMouseButton::Center),
-            _ => (CGEventType::MouseMoved, CGMouseButton::Left),
-        };
-        drop(held);
-
-        let event = CGEvent::new_mouse_event(
-            source,
-            event_type,
-            CGPoint::new(x, y),
-            button,
-        ).map_err(|_| "Failed to create mouse event")?;
-
-        event.post(CGEventTapLocation::HID);
-        Ok(())
-    }
-
-    /// Press mouse button (0=left, 1=right, 2=middle)
-    pub fn mouse_down(x: f64, y: f64, button: u8) -> Result<(), String> {
-        let source = CGEventSource::new(CGEventSourceStateID::HIDSystemState)
-            .map_err(|_| "Failed to create event source")?;
-
-        let (event_type, cg_button) = match button {
-            0 => (CGEventType::LeftMouseDown, CGMouseButton::Left),
-            1 => (CGEventType::RightMouseDown, CGMouseButton::Right),
-            2 => (CGEventType::OtherMouseDown, CGMouseButton::Center),
-            _ => return Err(format!("Invalid button: {}", button)),
-        };
-
-        let event = CGEvent::new_mouse_event(
-            source,
-            event_type,
-            CGPoint::new(x, y),
-            cg_button,
-        ).map_err(|_| "Failed to create mouse event")?;
-
-        event.post(CGEventTapLocation::HID);
-
-        // Track held button for drag events
-        *HELD_BUTTON.lock().unwrap() = Some(button);
-
-        Ok(())
-    }
-
-    /// Release mouse button (0=left, 1=right, 2=middle)
-    pub fn mouse_up(x: f64, y: f64, button: u8) -> Result<(), String> {
-        let source = CGEventSource::new(CGEventSourceStateID::HIDSystemState)
-            .map_err(|_| "Failed to create event source")?;
-
-        let (event_type, cg_button) = match button {
-            0 => (CGEventType::LeftMouseUp, CGMouseButton::Left),
-            1 => (CGEventType::RightMouseUp, CGMouseButton::Right),
-            2 => (CGEventType::OtherMouseUp, CGMouseButton::Center),
-            _ => return Err(format!("Invalid button: {}", button)),
-        };
-
-        let event = CGEvent::new_mouse_event(
-            source,
-            event_type,
-            CGPoint::new(x, y),
-            cg_button,
-        ).map_err(|_| "Failed to create mouse event")?;
-
-        event.post(CGEventTapLocation::HID);
-
-        // Clear held button
-        *HELD_BUTTON.lock().unwrap() = None;
-
-        Ok(())
-    }
-
-    /// Click mouse button (down + up)
-    pub fn mouse_click(x: f64, y: f64, button: u8) -> Result<(), String> {
-        mouse_down(x, y, button)?;
-        mouse_up(x, y, button)
-    }
-
-    /// Double-click with proper click count
-    pub fn mouse_double_click(x: f64, y: f64, button: u8) -> Result<(), String> {
-        let source = CGEventSource::new(CGEventSourceStateID::HIDSystemState)
-            .map_err(|_| "Failed to create event source")?;
-
-        let (down_type, up_type, cg_button) = match button {
-            0 => (CGEventType::LeftMouseDown, CGEventType::LeftMouseUp, CGMouseButton::Left),
-            1 => (CGEventType::RightMouseDown, CGEventType::RightMouseUp, CGMouseButton::Right),
-            2 => (CGEventType::OtherMouseDown, CGEventType::OtherMouseUp, CGMouseButton::Center),
-            _ => return Err(format!("Invalid button: {}", button)),
-        };
-
-        let point = CGPoint::new(x, y);
-
-        // First click (clickCount = 1)
-        let down1 = CGEvent::new_mouse_event(source.clone(), down_type, point, cg_button)
-            .map_err(|_| "Failed to create mouse event")?;
-        down1.set_integer_value_field(core_graphics::event::EventField::MOUSE_EVENT_CLICK_STATE, 1);
-        down1.post(CGEventTapLocation::HID);
-
-        let up1 = CGEvent::new_mouse_event(source.clone(), up_type, point, cg_button)
-            .map_err(|_| "Failed to create mouse event")?;
-        up1.set_integer_value_field(core_graphics::event::EventField::MOUSE_EVENT_CLICK_STATE, 1);
-        up1.post(CGEventTapLocation::HID);
-
-        // Small delay between clicks
-        std::thread::sleep(std::time::Duration::from_millis(50));
-
-        // Second click (clickCount = 2)
-        let down2 = CGEvent::new_mouse_event(source.clone(), down_type, point, cg_button)
-            .map_err(|_| "Failed to create mouse event")?;
-        down2.set_integer_value_field(core_graphics::event::EventField::MOUSE_EVENT_CLICK_STATE, 2);
-        down2.post(CGEventTapLocation::HID);
-
-        let up2 = CGEvent::new_mouse_event(source, up_type, point, cg_button)
-            .map_err(|_| "Failed to create mouse event")?;
-        up2.set_integer_value_field(core_graphics::event::EventField::MOUSE_EVENT_CLICK_STATE, 2);
-        up2.post(CGEventTapLocation::HID);
-
-        Ok(())
-    }
-
-    /// Scroll wheel event
-    pub fn scroll(dx: i32, dy: i32) -> Result<(), String> {
-        // Note: macOS scroll direction is inverted for "natural" scrolling
-        // We invert here so positive dy = scroll down (content moves up)
-        let scroll_dy = -dy;
-        let scroll_dx = -dx;
-
-        // Create scroll event using FFI
-        unsafe {
-            let event_ref = CGEventCreateScrollWheelEvent(
-                std::ptr::null(),  // No event source
-                K_CG_SCROLL_EVENT_UNIT_PIXEL,
-                2,  // wheel_count (2 = both vertical and horizontal)
-                scroll_dy,
-                scroll_dx,
-                0,  // wheel3 (unused)
-            );
-
-            if event_ref.is_null() {
-                return Err("Failed to create scroll event".to_string());
-            }
-
-            // Post the event using CGEventPost FFI
-            extern "C" {
-                fn CGEventPost(tap: u32, event: *mut std::ffi::c_void);
-            }
-            const K_CG_HID_EVENT_TAP: u32 = 0;
-            CGEventPost(K_CG_HID_EVENT_TAP, event_ref);
-
-            // Release the event
-            extern "C" {
-                fn CFRelease(cf: *mut std::ffi::c_void);
-            }
-            CFRelease(event_ref);
-        }
-
-        Ok(())
-    }
-
-    /// Keyboard event (key down + key up)
-    pub fn key_press(key_code: u16, modifiers: u64) -> Result<(), String> {
-        let source = CGEventSource::new(CGEventSourceStateID::HIDSystemState)
-            .map_err(|_| "Failed to create event source")?;
-
-        // Create key down event
-        let key_down = CGEvent::new_keyboard_event(source.clone(), key_code, true)
-            .map_err(|_| "Failed to create key down event")?;
-
-        // Set modifier flags
-        let flags = CGEventFlags::from_bits_truncate(modifiers);
-        key_down.set_flags(flags);
-        key_down.post(CGEventTapLocation::HID);
-
-        // Create key up event
-        let key_up = CGEvent::new_keyboard_event(source, key_code, false)
-            .map_err(|_| "Failed to create key up event")?;
-        key_up.set_flags(flags);
-        key_up.post(CGEventTapLocation::HID);
-
-        Ok(())
-    }
-}
-
-// Stub module for non-macOS platforms
-#[cfg(not(target_os = "macos"))]
-mod input {
-    pub fn mouse_move(_x: f64, _y: f64) -> Result<(), String> {
-        Err("Not supported on this platform".to_string())
-    }
-    pub fn mouse_down(_x: f64, _y: f64, _button: u8) -> Result<(), String> {
-        Err("Not supported on this platform".to_string())
-    }
-    pub fn mouse_up(_x: f64, _y: f64, _button: u8) -> Result<(), String> {
-        Err("Not supported on this platform".to_string())
-    }
-    pub fn mouse_click(_x: f64, _y: f64, _button: u8) -> Result<(), String> {
-        Err("Not supported on this platform".to_string())
-    }
-    pub fn mouse_double_click(_x: f64, _y: f64, _button: u8) -> Result<(), String> {
-        Err("Not supported on this platform".to_string())
-    }
-    pub fn scroll(_dx: i32, _dy: i32) -> Result<(), String> {
-        Err("Not supported on this platform".to_string())
-    }
-    pub fn key_press(_key_code: u16, _modifiers: u64) -> Result<(), String> {
-        Err("Not supported on this platform".to_string())
-    }
-}
+mod adapters;
+use adapters::{ActionAdapter, create_adapter};
 
 // ============================================================================
 // Action Processing - Handle fire-and-forget actions from Python
 // ============================================================================
-fn process_action(msg: &serde_json::Value) {
+fn process_action(msg: &serde_json::Value, adapter: &dyn ActionAdapter) {
     let action = match msg.get("action").and_then(|v| v.as_str()) {
         Some(a) => a,
         None => {
@@ -272,45 +30,91 @@ fn process_action(msg: &serde_json::Value) {
         "mouse_move" => {
             let x = msg.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0);
             let y = msg.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0);
-            input::mouse_move(x, y)
+            adapter.mouse_move(x, y)
+        }
+        "mouse_move_normalized" => {
+            let x_norm = msg.get("x").and_then(|v| v.as_f64()).unwrap_or(0.5);
+            let y_norm = msg.get("y").and_then(|v| v.as_f64()).unwrap_or(0.5);
+            adapter.mouse_move_normalized(x_norm, y_norm)
         }
         "mouse_down" => {
             let x = msg.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0);
             let y = msg.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0);
             let button = msg.get("button").and_then(|v| v.as_u64()).unwrap_or(0) as u8;
-            input::mouse_down(x, y, button)
+            adapter.mouse_down(x, y, button)
         }
         "mouse_up" => {
             let x = msg.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0);
             let y = msg.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0);
             let button = msg.get("button").and_then(|v| v.as_u64()).unwrap_or(0) as u8;
-            input::mouse_up(x, y, button)
+            adapter.mouse_up(x, y, button)
         }
         "click" => {
             let x = msg.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0);
             let y = msg.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0);
             let button = msg.get("button").and_then(|v| v.as_u64()).unwrap_or(0) as u8;
-            input::mouse_click(x, y, button)
+            adapter.mouse_click(x, y, button)
         }
         "double_click" => {
             let x = msg.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0);
             let y = msg.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0);
             let button = msg.get("button").and_then(|v| v.as_u64()).unwrap_or(0) as u8;
-            input::mouse_double_click(x, y, button)
+            adapter.mouse_double_click(x, y, button)
+        }
+        "mouse_down_normalized" => {
+            let x_norm = msg.get("x").and_then(|v| v.as_f64()).unwrap_or(0.5);
+            let y_norm = msg.get("y").and_then(|v| v.as_f64()).unwrap_or(0.5);
+            let button = msg.get("button").and_then(|v| v.as_u64()).unwrap_or(0) as u8;
+            adapter.mouse_down_normalized(x_norm, y_norm, button)
+        }
+        "mouse_up_normalized" => {
+            let x_norm = msg.get("x").and_then(|v| v.as_f64()).unwrap_or(0.5);
+            let y_norm = msg.get("y").and_then(|v| v.as_f64()).unwrap_or(0.5);
+            let button = msg.get("button").and_then(|v| v.as_u64()).unwrap_or(0) as u8;
+            adapter.mouse_up_normalized(x_norm, y_norm, button)
+        }
+        "click_normalized" => {
+            let x_norm = msg.get("x").and_then(|v| v.as_f64()).unwrap_or(0.5);
+            let y_norm = msg.get("y").and_then(|v| v.as_f64()).unwrap_or(0.5);
+            let button = msg.get("button").and_then(|v| v.as_u64()).unwrap_or(0) as u8;
+            adapter.mouse_click_normalized(x_norm, y_norm, button)
+        }
+        "double_click_normalized" => {
+            let x_norm = msg.get("x").and_then(|v| v.as_f64()).unwrap_or(0.5);
+            let y_norm = msg.get("y").and_then(|v| v.as_f64()).unwrap_or(0.5);
+            let button = msg.get("button").and_then(|v| v.as_u64()).unwrap_or(0) as u8;
+            adapter.mouse_double_click_normalized(x_norm, y_norm, button)
         }
         "scroll" => {
             let dx = msg.get("dx").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
             let dy = msg.get("dy").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
-            input::scroll(dx, dy)
+            adapter.scroll(dx, dy)
         }
         "key_press" => {
             let key_code = msg.get("key_code").and_then(|v| v.as_u64()).unwrap_or(0) as u16;
             let modifiers = msg.get("modifiers").and_then(|v| v.as_u64()).unwrap_or(0);
-            input::key_press(key_code, modifiers)
+            adapter.key_press(key_code, modifiers)
+        }
+        "switch_desktop" => {
+            let direction = msg.get("direction").and_then(|v| v.as_str()).unwrap_or("right");
+            adapter.switch_desktop(direction)
+        }
+        "set_volume" => {
+            let delta = msg.get("delta").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+            adapter.set_volume(delta)
+        }
+        "keyboard_shortcut" => {
+            let shortcut = msg.get("shortcut").and_then(|v| v.as_str()).unwrap_or("cmd+c");
+            adapter.keyboard_shortcut(shortcut)
+        }
+        "zoom" => {
+            let direction = msg.get("direction").and_then(|v| v.as_str()).unwrap_or("in");
+            let step = msg.get("step").and_then(|v| v.as_f64()).unwrap_or(0.1);
+            adapter.zoom(direction, step)
         }
         _ => {
             eprintln!("[Rust] Unknown action: {}", action);
-            Ok(())
+            return;
         }
     };
 
@@ -352,7 +156,12 @@ impl PythonProcess {
         }
     }
 
-    fn start(&mut self, config_path: &str, app_handle: Option<&tauri::AppHandle>) -> Result<(), String> {
+    fn start(
+        &mut self,
+        config_path: &str,
+        app_handle: Option<&tauri::AppHandle>,
+        adapter: Arc<Mutex<Box<dyn ActionAdapter>>>,
+    ) -> Result<(), String> {
         if self.child.is_some() {
             return Err("Python process already running".to_string());
         }
@@ -443,9 +252,12 @@ impl PythonProcess {
         let (response_tx, response_rx) = channel::<String>();
         self.response_receiver = Some(response_rx);
 
+        // Clone adapter for thread
+        let adapter_clone = adapter.clone();
+
         // Spawn a thread to read Python's stdout
         // This thread handles both:
-        // 1. Action messages (type: "action") - executed immediately via CGEvent
+        // 1. Action messages (type: "action") - executed immediately via adapter
         // 2. IPC responses - forwarded to response channel for send_command to receive
         std::thread::spawn(move || {
             let reader = BufReader::new(stdout);
@@ -461,7 +273,8 @@ impl PythonProcess {
                             // Check if this is an action message
                             if msg.get("type").and_then(|v| v.as_str()) == Some("action") {
                                 // Process action immediately (fire-and-forget)
-                                process_action(&msg);
+                                let adapter = adapter_clone.lock().unwrap();
+                                process_action(&msg, &**adapter);
                             } else {
                                 // Regular IPC response - forward to channel
                                 if let Err(e) = response_tx.send(line) {
@@ -617,6 +430,7 @@ impl Drop for PythonProcess {
 struct AppState {
     python: Arc<Mutex<PythonProcess>>,
     config_path: String,
+    adapter: Arc<Mutex<Box<dyn ActionAdapter>>>,
 }
 
 #[tauri::command]
@@ -757,6 +571,12 @@ fn main() {
         .setup(move |app| {
             eprintln!("[Rust] Running Tauri setup...");
 
+            // Create action adapter
+            eprintln!("[Rust] Creating action adapter...");
+            let adapter = create_adapter()
+                .map_err(|e| format!("Failed to create adapter: {}", e))?;
+            let adapter = Arc::new(Mutex::new(adapter));
+
             // Start Python process
             eprintln!("[Rust] Starting Python IPC process...");
             let mut python = PythonProcess::new();
@@ -768,12 +588,13 @@ fn main() {
                 Some(app.handle())
             };
 
-            python.start(&config_path, app_handle)?;
+            python.start(&config_path, app_handle, adapter.clone())?;
 
             // Store in app state
             app.manage(AppState {
                 python: Arc::new(Mutex::new(python)),
                 config_path: config_path.clone(),
+                adapter,
             });
 
             eprintln!("[Rust] Setup complete!");
