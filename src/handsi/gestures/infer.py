@@ -6,6 +6,7 @@ and pushes to GestureQueue. Also handles habit awareness detection when enabled.
 """
 
 import threading
+import time
 from typing import Optional
 
 from handsi.core.bus import (
@@ -86,6 +87,81 @@ class GestureInferenceThread(threading.Thread):
             consistency_threshold=config.consistency_threshold
         )
 
+    def _update_primary_hand(self, features: dict) -> Optional[str]:
+        """
+        Update primary hand tracking and return primary handedness.
+
+        First hand detected becomes primary. Primary hand persists until:
+        - No hands detected (releases primary)
+        - Primary hand's handedness not seen (reassigns to remaining hand)
+
+        Args:
+            features: Feature dict containing "hands" list
+
+        Returns:
+            Primary hand's handedness ("Left"/"Right") or None if no hands
+        """
+        hands = features.get("hands", [])
+
+        with self.runtime_state.lock:
+            if not hands:
+                # No hands detected - release primary
+                self.runtime_state.primary_hand = None
+                return None
+
+            # Get detected handedness values
+            detected_handedness = {h.get("handedness") for h in hands}
+
+            # Check if primary hand still present
+            if self.runtime_state.primary_hand is not None:
+                if self.runtime_state.primary_hand in detected_handedness:
+                    # Primary hand still visible - keep it
+                    self.runtime_state.primary_hand_last_seen = time.time()
+                    return self.runtime_state.primary_hand
+                else:
+                    # Primary hand disappeared - release and reassign
+                    self.runtime_state.primary_hand = None
+
+            # Assign new primary hand (first detected becomes primary)
+            first_hand = hands[0]
+            self.runtime_state.primary_hand = first_hand.get("handedness", "Unknown")
+            self.runtime_state.primary_hand_last_seen = time.time()
+            return self.runtime_state.primary_hand
+
+    def _filter_by_primary_hand(
+        self,
+        gestures: list[tuple[str, float, dict]],
+        primary_handedness: Optional[str]
+    ) -> list[tuple[str, float, dict]]:
+        """
+        Filter gestures to only include primary hand gestures.
+
+        Two-hand gestures bypass this filter (they require both hands).
+
+        Args:
+            gestures: List of (gesture_name, confidence, metadata) tuples
+            primary_handedness: Primary hand's handedness or None
+
+        Returns:
+            Filtered list of gestures
+        """
+        if primary_handedness is None:
+            return []  # No primary hand = no single-hand gestures
+
+        filtered = []
+        for gesture_name, confidence, metadata in gestures:
+            # Two-hand gestures always pass (they require both hands)
+            if gesture_name.startswith("two_hand"):
+                filtered.append((gesture_name, confidence, metadata))
+                continue
+
+            # Single-hand gestures must match primary hand
+            gesture_handedness = metadata.get("handedness")
+            if gesture_handedness == primary_handedness:
+                filtered.append((gesture_name, confidence, metadata))
+
+        return filtered
+
     def run(self) -> None:
         """Main gesture inference loop."""
         log_info(f"{self.name} started")
@@ -113,6 +189,9 @@ class GestureInferenceThread(threading.Thread):
             if feature_vector is None:
                 return
 
+            # Update primary hand tracking (first hand detected becomes primary)
+            primary_handedness = self._update_primary_hand(feature_vector.features)
+
             # Detect gestures from features
             gestures = self.detector.detect_gestures(feature_vector.features)
 
@@ -133,6 +212,9 @@ class GestureInferenceThread(threading.Thread):
                     f"Detected {len(gestures)} gesture(s): "
                     f"{', '.join(f'{g[0]}({g[1]:.2f})' for g in gestures)}"
                 )
+
+            # Filter gestures by primary hand (prevents teleporting and false swipes)
+            gestures = self._filter_by_primary_hand(gestures, primary_handedness)
 
             # Apply temporal smoothing
             smoothed_gesture = self.smoother.smooth(gestures)
