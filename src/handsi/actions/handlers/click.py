@@ -10,7 +10,7 @@ from handsi.actions.adapters.base import ActionAdapter
 from handsi.actions.handlers.base import ActionHandler, DiscreteActionHandler
 from handsi.actions.interpolation import CursorInterpolator
 from handsi.core.bus import GestureEvent, RuntimeState
-from handsi.core.logging import log_debug, log_info
+from handsi.core.logging import log_debug, log_error, log_info
 
 
 class ClickHandler(ActionHandler):
@@ -43,9 +43,18 @@ class ClickHandler(ActionHandler):
 
     def on_gesture_start(self, event: GestureEvent) -> None:
         """Press and hold mouse button when gesture starts."""
-        self.adapter.mouse_down(self.button)
-        self._held_button = self.button
-        log_info(f"Pressed {self.button} button (gesture started)")
+        # Guard: prevent double-press if button already held
+        if self._held_button is not None:
+            log_debug(f"Ignoring duplicate gesture start, {self._held_button} already held")
+            return
+
+        # Only set state if adapter succeeds
+        if self.adapter.mouse_down(self.button):
+            self._held_button = self.button
+            log_info(f"Pressed {self.button} button (gesture started)")
+        else:
+            log_error("ACT-005", f"mouse_down failed for {self.button}")
+            return  # Don't enable interpolation if press failed
 
         # Enable interpolation for drag movement
         self.interpolator.enable()
@@ -66,8 +75,11 @@ class ClickHandler(ActionHandler):
     def on_gesture_end(self, event: GestureEvent) -> None:
         """Release mouse button when gesture ends."""
         if self._held_button:
-            self.adapter.mouse_up(self._held_button)
-            log_info(f"Released {self._held_button} button (gesture ended)")
+            if self.adapter.mouse_up(self._held_button):
+                log_info(f"Released {self._held_button} button (gesture ended)")
+            else:
+                log_error("ACT-006", f"mouse_up failed for {self._held_button}, button may be stuck")
+            # Clear state regardless - user can re-trigger if needed
             self._held_button = None
 
         # Disable interpolation
@@ -82,6 +94,14 @@ class ClickHandler(ActionHandler):
         fallback single-click behavior if needed.
         """
         return self.adapter.click(button=self.button)
+
+    def cleanup(self) -> None:
+        """Release held button on shutdown."""
+        if self._held_button:
+            log_info(f"Cleanup: releasing {self._held_button} button")
+            self.adapter.mouse_up(self._held_button)
+            self._held_button = None
+        self.interpolator.disable()
 
 
 class SingleClickHandler(DiscreteActionHandler):

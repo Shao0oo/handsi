@@ -34,11 +34,6 @@ class IPCAdapter:
     def __init__(self):
         self._initialized = False
 
-        # Track last mouse position (normalized) for button events (click, mouse_down, etc.)
-        # Updated by move_mouse() calls; used to send position with button actions
-        self._last_mouse_x = 0.5  # Center of screen
-        self._last_mouse_y = 0.5
-
     def initialize(self) -> bool:
         """Initialize the adapter."""
         self._initialized = True
@@ -95,11 +90,8 @@ class IPCAdapter:
         Returns:
             True if action was sent successfully
         """
-        # If normalized, track position and send directly to Rust
-        # Rust handles conversion to pixels based on screen dimensions
+        # Send to Rust - it handles conversion to pixels based on screen dimensions
         if normalized:
-            self._last_mouse_x = x
-            self._last_mouse_y = y
             return self._send_action({
                 "action": "mouse_move_normalized",
                 "x": float(x),
@@ -162,8 +154,6 @@ class IPCAdapter:
         btn_map = {'left': 0, 'right': 1, 'middle': 2}
         return self._send_action({
             "action": "mouse_down_normalized",
-            "x": self._last_mouse_x,  # Use last known normalized position
-            "y": self._last_mouse_y,
             "button": btn_map[button]
         })
 
@@ -180,8 +170,6 @@ class IPCAdapter:
         btn_map = {'left': 0, 'right': 1, 'middle': 2}
         return self._send_action({
             "action": "mouse_up_normalized",
-            "x": self._last_mouse_x,  # Use last known normalized position
-            "y": self._last_mouse_y,
             "button": btn_map[button]
         })
 
@@ -198,8 +186,6 @@ class IPCAdapter:
         btn_map = {'left': 0, 'right': 1, 'middle': 2}
         return self._send_action({
             "action": "click_normalized",
-            "x": self._last_mouse_x,  # Use last known normalized position
-            "y": self._last_mouse_y,
             "button": btn_map[button]
         })
 
@@ -216,8 +202,6 @@ class IPCAdapter:
         btn_map = {'left': 0, 'right': 1, 'middle': 2}
         return self._send_action({
             "action": "double_click_normalized",
-            "x": self._last_mouse_x,  # Use last known normalized position
-            "y": self._last_mouse_y,
             "button": btn_map[button]
         })
 

@@ -102,6 +102,13 @@ class ActionExecutorThread(threading.Thread):
             log_error("ACT-001", f"Unexpected error in action executor loop: {e}")
 
         finally:
+            # Clean up all handlers (releases held buttons, etc.)
+            for handler in self.handlers.values():
+                try:
+                    handler.cleanup()
+                except Exception as e:
+                    log_error("ACT-007", f"Handler cleanup failed: {e}")
+
             if self.adapter:
                 self.adapter.cleanup()
             log_info(f"{self.name} stopped")

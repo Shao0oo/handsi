@@ -494,10 +494,9 @@ impl ActionAdapter for MacOSAdapter {
         key_down.set_flags(flags);
         key_down.post(CGEventTapLocation::HID);
 
-        // Create key up event
+        // Create key up event (no modifier flags - signals modifiers released)
         let key_up = CGEvent::new_keyboard_event(source, key_code, false)
             .map_err(|_| "Failed to create key up event")?;
-        key_up.set_flags(flags);
         key_up.post(CGEventTapLocation::HID);
 
         Ok(())
