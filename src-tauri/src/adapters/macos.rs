@@ -479,10 +479,20 @@ impl ActionAdapter for MacOSAdapter {
         key_down.set_flags(flags);
         key_down.post(CGEventTapLocation::HID);
 
-        // Create key up event (no modifier flags - signals modifiers released)
-        let key_up = CGEvent::new_keyboard_event(source, key_code, false)
+        // Create key up event
+        let key_up = CGEvent::new_keyboard_event(source.clone(), key_code, false)
             .map_err(|_| "Failed to create key up event")?;
         key_up.post(CGEventTapLocation::HID);
+
+        // Post flags changed event with empty flags to release modifiers (Command, Control, etc.)
+        if modifiers != 0 {
+            let flags_event = CGEvent::new_keyboard_event(source, 0, true)
+                .map_err(|_| "Failed to create flags event")?;
+            flags_event.set_type(CGEventType::FlagsChanged);
+            flags_event.set_flags(CGEventFlags::empty());
+            flags_event.post(CGEventTapLocation::HID);
+        }
+
 
         Ok(())
     }
