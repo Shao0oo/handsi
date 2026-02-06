@@ -93,6 +93,7 @@ class GestureStateMachine:
 
         Extracts hand scale and position for mouse movement normalization.
         Handles gesture metadata format (position, hand_scale directly in dict).
+        Only updates cursor_position if gesture is from primary hand or is a two-hand gesture.
 
         Args:
             metadata: Gesture event metadata containing position and hand_scale
@@ -101,6 +102,23 @@ class GestureStateMachine:
             return
 
         with self.runtime_state.lock:
+            # Check if this gesture is from primary hand
+            gesture_handedness = metadata.get('handedness')
+            primary_hand = self.runtime_state.primary_hand
+
+            # Two-hand gestures have special position handling (check for both hand positions)
+            is_two_hand = 'left_position' in metadata and 'right_position' in metadata
+
+            # Only update cursor if:
+            # 1. Two-hand gesture (uses combined position), OR
+            # 2. Gesture is from primary hand
+            if not is_two_hand and gesture_handedness != primary_hand:
+                log_debug(
+                    f"Cursor update skipped: gesture from {gesture_handedness}, "
+                    f"primary hand is {primary_hand}"
+                )
+                return
+
             # Extract hand_scale and position directly from gesture metadata
             # Gesture detector puts these at the top level
             hand_scale = metadata.get('hand_scale', 0.0)

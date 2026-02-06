@@ -5,7 +5,135 @@ use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
+use std::sync::mpsc::{channel, Receiver};
 use tauri::Manager;
+
+// ============================================================================
+// Action Adapters - Platform-specific system control
+// ============================================================================
+mod adapters;
+use adapters::{ActionAdapter, create_adapter};
+
+// ============================================================================
+// Action Processing - Handle fire-and-forget actions from Python
+// ============================================================================
+fn process_action(msg: &serde_json::Value, adapter: &dyn ActionAdapter) {
+    let action = match msg.get("action").and_then(|v| v.as_str()) {
+        Some(a) => a,
+        None => {
+            eprintln!("[Rust] Action message missing 'action' field");
+            return;
+        }
+    };
+
+    let result = match action {
+        "mouse_move" => {
+            let x = msg.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let y = msg.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            adapter.mouse_move(x, y)
+        }
+        "mouse_move_normalized" => {
+            let x_norm = msg.get("x").and_then(|v| v.as_f64()).unwrap_or(0.5);
+            let y_norm = msg.get("y").and_then(|v| v.as_f64()).unwrap_or(0.5);
+            adapter.mouse_move_normalized(x_norm, y_norm)
+        }
+        "mouse_move_relative_normalized" => {
+            let dx = msg.get("dx").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let dy = msg.get("dy").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            adapter.mouse_move_relative_normalized(dx, dy)
+        }
+        "reset_cursor_tracking" => {
+            adapter.reset_cursor_tracking()
+        }
+        "mouse_down" => {
+            let x = msg.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let y = msg.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let button = msg.get("button").and_then(|v| v.as_u64()).unwrap_or(0) as u8;
+            adapter.mouse_down(x, y, button)
+        }
+        "mouse_up" => {
+            let x = msg.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let y = msg.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let button = msg.get("button").and_then(|v| v.as_u64()).unwrap_or(0) as u8;
+            adapter.mouse_up(x, y, button)
+        }
+        "click" => {
+            let x = msg.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let y = msg.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let button = msg.get("button").and_then(|v| v.as_u64()).unwrap_or(0) as u8;
+            adapter.mouse_click(x, y, button)
+        }
+        "double_click" => {
+            let x = msg.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let y = msg.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let button = msg.get("button").and_then(|v| v.as_u64()).unwrap_or(0) as u8;
+            adapter.mouse_double_click(x, y, button)
+        }
+        "mouse_down_normalized" => {
+            let x_norm = msg.get("x").and_then(|v| v.as_f64()).unwrap_or(0.5);
+            let y_norm = msg.get("y").and_then(|v| v.as_f64()).unwrap_or(0.5);
+            let button = msg.get("button").and_then(|v| v.as_u64()).unwrap_or(0) as u8;
+            adapter.mouse_down_normalized(x_norm, y_norm, button)
+        }
+        "mouse_up_normalized" => {
+            let x_norm = msg.get("x").and_then(|v| v.as_f64()).unwrap_or(0.5);
+            let y_norm = msg.get("y").and_then(|v| v.as_f64()).unwrap_or(0.5);
+            let button = msg.get("button").and_then(|v| v.as_u64()).unwrap_or(0) as u8;
+            adapter.mouse_up_normalized(x_norm, y_norm, button)
+        }
+        "click_normalized" => {
+            let x_norm = msg.get("x").and_then(|v| v.as_f64()).unwrap_or(0.5);
+            let y_norm = msg.get("y").and_then(|v| v.as_f64()).unwrap_or(0.5);
+            let button = msg.get("button").and_then(|v| v.as_u64()).unwrap_or(0) as u8;
+            adapter.mouse_click_normalized(x_norm, y_norm, button)
+        }
+        "double_click_normalized" => {
+            let x_norm = msg.get("x").and_then(|v| v.as_f64()).unwrap_or(0.5);
+            let y_norm = msg.get("y").and_then(|v| v.as_f64()).unwrap_or(0.5);
+            let button = msg.get("button").and_then(|v| v.as_u64()).unwrap_or(0) as u8;
+            adapter.mouse_double_click_normalized(x_norm, y_norm, button)
+        }
+        "scroll" => {
+            let dx = msg.get("dx").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+            let dy = msg.get("dy").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+            adapter.scroll(dx, dy)
+        }
+        "key_press" => {
+            let key_code = msg.get("key_code").and_then(|v| v.as_u64()).unwrap_or(0) as u16;
+            let modifiers = msg.get("modifiers").and_then(|v| v.as_u64()).unwrap_or(0);
+            adapter.key_press(key_code, modifiers)
+        }
+        "switch_desktop" => {
+            let direction = msg.get("direction").and_then(|v| v.as_str()).unwrap_or("right");
+            adapter.switch_desktop(direction)
+        }
+        "set_volume" => {
+            let delta = msg.get("delta").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+            adapter.set_volume(delta)
+        }
+        "keyboard_shortcut" => {
+            let shortcut = msg.get("shortcut").and_then(|v| v.as_str()).unwrap_or("cmd+c");
+            adapter.keyboard_shortcut(shortcut)
+        }
+        "zoom" => {
+            let direction = msg.get("direction").and_then(|v| v.as_str()).unwrap_or("in");
+            let step = msg.get("step").and_then(|v| v.as_f64()).unwrap_or(0.1);
+            adapter.zoom(direction, step)
+        }
+        "semantic_action" => {
+            let name = msg.get("name").and_then(|v| v.as_str()).unwrap_or("");
+            adapter.semantic_action(name)
+        }
+        _ => {
+            eprintln!("[Rust] Unknown action: {}", action);
+            return;
+        }
+    };
+
+    if let Err(e) = result {
+        eprintln!("[Rust] Action '{}' failed: {}", action, e);
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 struct IpcCommand {
@@ -27,7 +155,8 @@ struct IpcResponse {
 struct PythonProcess {
     child: Option<Child>,
     stdin: Option<std::process::ChildStdin>,
-    stdout: Option<BufReader<std::process::ChildStdout>>,
+    /// Channel receiver for IPC responses (actions are processed separately)
+    response_receiver: Option<Receiver<String>>,
 }
 
 impl PythonProcess {
@@ -35,11 +164,16 @@ impl PythonProcess {
         PythonProcess {
             child: None,
             stdin: None,
-            stdout: None,
+            response_receiver: None,
         }
     }
 
-    fn start(&mut self, config_path: &str, app_handle: Option<&tauri::AppHandle>) -> Result<(), String> {
+    fn start(
+        &mut self,
+        config_path: &str,
+        app_handle: Option<&tauri::AppHandle>,
+        adapter: Arc<Mutex<Box<dyn ActionAdapter>>>,
+    ) -> Result<(), String> {
         if self.child.is_some() {
             return Err("Python process already running".to_string());
         }
@@ -125,7 +259,54 @@ impl PythonProcess {
         self.stdin = child.stdin.take();
         let stdout = child.stdout.take()
             .ok_or("Failed to capture Python stdout".to_string())?;
-        self.stdout = Some(BufReader::new(stdout));
+
+        // Create channel for IPC responses (actions bypass this channel)
+        let (response_tx, response_rx) = channel::<String>();
+        self.response_receiver = Some(response_rx);
+
+        // Clone adapter for thread
+        let adapter_clone = adapter.clone();
+
+        // Spawn a thread to read Python's stdout
+        // This thread handles both:
+        // 1. Action messages (type: "action") - executed immediately via adapter
+        // 2. IPC responses - forwarded to response channel for send_command to receive
+        std::thread::spawn(move || {
+            let reader = BufReader::new(stdout);
+            for line in reader.lines() {
+                if let Ok(line) = line {
+                    if line.trim().is_empty() {
+                        continue;
+                    }
+
+                    // Try to parse as JSON
+                    match serde_json::from_str::<serde_json::Value>(&line) {
+                        Ok(msg) => {
+                            // Check if this is an action message
+                            if msg.get("type").and_then(|v| v.as_str()) == Some("action") {
+                                // Process action immediately (fire-and-forget)
+                                let adapter = adapter_clone.lock().unwrap();
+                                process_action(&msg, &**adapter);
+                            } else {
+                                // Regular IPC response - forward to channel
+                                if let Err(e) = response_tx.send(line) {
+                                    eprintln!("[Rust] Failed to forward IPC response: {}", e);
+                                    break;
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("[Rust] Failed to parse Python output as JSON: {} - line: {}", e, line);
+                            // Still try to forward it in case it's a malformed response
+                            if let Err(_) = response_tx.send(line) {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            eprintln!("[Rust] Python stdout reader thread exiting");
+        });
 
         // Spawn a thread to monitor stderr
         if let Some(stderr) = child.stderr.take() {
@@ -151,7 +332,7 @@ impl PythonProcess {
         }
 
         // Generate unique request ID
-        use std::time::{SystemTime, UNIX_EPOCH};
+        use std::time::{SystemTime, UNIX_EPOCH, Duration};
         let request_id = format!("{}-{}",
             SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis(),
             command
@@ -182,13 +363,13 @@ impl PythonProcess {
 
         eprintln!("[Rust] Waiting for Python response...");
 
-        // Read responses with timeout to prevent hanging forever
-        use std::time::Duration;
-        use std::io::{BufRead as _, ErrorKind};
-
-        let timeout = Duration::from_secs(10); // 10 second timeout
+        // Read responses from the channel (actions are filtered out by the reader thread)
+        let timeout = Duration::from_secs(10);
         let start_time = std::time::Instant::now();
-        let max_attempts = 20;  // Prevent infinite loop
+        let max_attempts = 20;
+
+        let receiver = self.response_receiver.as_ref()
+            .ok_or("Response receiver not available")?;
 
         for attempt in 0..max_attempts {
             // Check if we've exceeded timeout
@@ -196,48 +377,36 @@ impl PythonProcess {
                 return Err(format!("Timeout waiting for Python response after {:?}", timeout));
             }
 
-            if let Some(ref mut stdout) = self.stdout {
-                let mut response_line = String::new();
+            // Try to receive with timeout
+            let remaining = timeout.saturating_sub(start_time.elapsed());
+            match receiver.recv_timeout(remaining.min(Duration::from_millis(500))) {
+                Ok(response_line) => {
+                    eprintln!("[Rust] Python response (attempt {}): {}", attempt + 1, response_line.trim());
 
-                // Try to read line with short timeout
-                match stdout.read_line(&mut response_line) {
-                    Ok(0) => {
-                        // EOF - Python process died
-                        return Err("Python process terminated unexpectedly".to_string());
-                    }
-                    Ok(_) => {
-                        eprintln!("[Rust] Python response (attempt {}): {}", attempt + 1, response_line.trim());
-
-                        // Skip empty lines
-                        if response_line.trim().is_empty() {
-                            eprintln!("[Rust] Warning: Got empty line from Python, continuing...");
-                            std::thread::sleep(Duration::from_millis(100));
-                            continue;
-                        }
-
-                        let response: IpcResponse = serde_json::from_str(&response_line)
-                            .map_err(|e| format!("Failed to parse Python response: {}", e))?;
-
-                        // Check if this response matches our request
-                        if response.request_id.as_ref() == Some(&request_id) {
-                            eprintln!("[Rust] ✓ Response matched request_id, success={}", response.success);
-                            return Ok(response);
-                        } else {
-                            eprintln!("[Rust] ⚠ Response has wrong request_id! Expected '{}', got '{:?}'. Continuing to read...",
-                                request_id, response.request_id);
-                        }
-                    }
-                    Err(e) if e.kind() == ErrorKind::WouldBlock => {
-                        // Non-blocking read, no data available yet
-                        std::thread::sleep(Duration::from_millis(100));
+                    // Skip empty lines
+                    if response_line.trim().is_empty() {
                         continue;
                     }
-                    Err(e) => {
-                        return Err(format!("Failed to read from Python stdout: {}", e));
+
+                    let response: IpcResponse = serde_json::from_str(&response_line)
+                        .map_err(|e| format!("Failed to parse Python response: {}", e))?;
+
+                    // Check if this response matches our request
+                    if response.request_id.as_ref() == Some(&request_id) {
+                        eprintln!("[Rust] ✓ Response matched request_id, success={}", response.success);
+                        return Ok(response);
+                    } else {
+                        eprintln!("[Rust] ⚠ Response has wrong request_id! Expected '{}', got '{:?}'. Continuing to read...",
+                            request_id, response.request_id);
                     }
                 }
-            } else {
-                return Err("Python stdout not available".to_string());
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    // Continue waiting
+                    continue;
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                    return Err("Python process terminated unexpectedly".to_string());
+                }
             }
         }
 
@@ -273,6 +442,7 @@ impl Drop for PythonProcess {
 struct AppState {
     python: Arc<Mutex<PythonProcess>>,
     config_path: String,
+    adapter: Arc<Mutex<Box<dyn ActionAdapter>>>,
 }
 
 #[tauri::command]
@@ -355,10 +525,54 @@ async fn get_cameras(state: tauri::State<'_, AppState>) -> Result<IpcResponse, S
     python.send_command("get_cameras", serde_json::json!({}))
 }
 
+#[cfg(target_os = "macos")]
+fn check_accessibility_permission() {
+    use std::process::Command;
+
+    eprintln!("[Rust] Checking Accessibility permission...");
+
+    // Use osascript to trigger the permission check via AppleScript
+    // This will show the system prompt if permission is not granted
+    let script = r#"
+        use framework "Foundation"
+        use framework "ApplicationServices"
+
+        set options to current application's NSDictionary's dictionaryWithObject:true forKey:"AXTrustedCheckOptionPrompt"
+        set trusted to current application's AXIsProcessTrustedWithOptions(options)
+        return trusted as boolean
+    "#;
+
+    match Command::new("osascript")
+        .args(["-l", "AppleScript", "-e", script])
+        .output()
+    {
+        Ok(output) => {
+            let result = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            eprintln!("[Rust] Accessibility permission check result: {}", result);
+            if result != "true" {
+                eprintln!("[Rust] ⚠ Accessibility permission not granted. Please grant permission and restart the app.");
+            }
+        }
+        Err(e) => {
+            eprintln!("[Rust] Failed to check accessibility permission: {}", e);
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn check_accessibility_permission() {
+    // No-op on non-macOS platforms
+}
+
 fn main() {
     eprintln!("[Rust] ============================================");
     eprintln!("[Rust] Handsi Tauri Application Starting");
     eprintln!("[Rust] ============================================");
+
+    // Check Accessibility permission BEFORE starting Python backend
+    // This ensures the permission is requested for the main app, and child processes can inherit it
+    #[cfg(target_os = "macos")]
+    check_accessibility_permission();
 
     // Find config path
     let config_path = std::env::var("HANDSI_CONFIG")
@@ -368,6 +582,12 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .setup(move |app| {
             eprintln!("[Rust] Running Tauri setup...");
+
+            // Create action adapter
+            eprintln!("[Rust] Creating action adapter...");
+            let adapter = create_adapter()
+                .map_err(|e| format!("Failed to create adapter: {}", e))?;
+            let adapter = Arc::new(Mutex::new(adapter));
 
             // Start Python process
             eprintln!("[Rust] Starting Python IPC process...");
@@ -380,12 +600,13 @@ fn main() {
                 Some(app.handle())
             };
 
-            python.start(&config_path, app_handle)?;
+            python.start(&config_path, app_handle, adapter.clone())?;
 
             // Store in app state
             app.manage(AppState {
                 python: Arc::new(Mutex::new(python)),
                 config_path: config_path.clone(),
+                adapter,
             });
 
             eprintln!("[Rust] Setup complete!");

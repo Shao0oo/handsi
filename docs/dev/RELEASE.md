@@ -22,35 +22,30 @@ When you push a version tag (e.g., `v0.1.0`), GitHub Actions will:
 
 ## Creating Your First Release
 
-### Step 1: Ensure Version Consistency
+### Step 1: Bump Version
 
-Make sure the version is synced across these files:
-
-**`package.json`:**
-```json
-{
-  "version": "0.1.x"
-}
-```
-
-**`pyproject.toml`:**
-```toml
-[project]
-version = "0.1.x"
-```
-
-**`src-tauri/tauri.conf.json`:**
-```json
-{
-  "version": "0.1.x"
-}
-```
-
-### Step 2: Commit Your Changes
+Use the version bump script to update all files at once:
 
 ```bash
-git add .
-git commit -m "Prepare for v0.1.x release"
+chmod +x scripts/*.sh
+./scripts/bump-version.sh x.x.x --commit
+```
+
+This updates version in all 5 locations:
+- `package.json` (Node/npm)
+- `pyproject.toml` (Python)
+- `src-tauri/tauri.conf.json` (Tauri metadata)
+- `src-tauri/Cargo.toml` (Rust binary)
+- `src/handsi/__init__.py` (Python runtime)
+
+**Options:**
+- `--dry-run` - Preview changes without writing
+- `--commit` - Auto-commit after updating
+- `--tag` - Create git tag (implies --commit)
+
+### Step 2: Push Changes
+
+```bash
 git push
 ```
 
@@ -100,7 +95,7 @@ The workflow creates:
 
 Before creating a release, verify:
 
-- [ ] Version numbers match in `package.json`, `pyproject.toml`, `tauri.conf.json`
+- [ ] Version bumped with `./scripts/bump-version.sh X.Y.Z --commit`
 - [ ] All changes committed and pushed to `main` (or your release branch)
 - [ ] App works locally: `./scripts/build-tauri.sh` succeeds
 - [ ] Update CHANGELOG.md (optional but recommended)
@@ -188,19 +183,25 @@ Currently, releases are **not code-signed**. Users will see:
 ## Example: Creating v0.2.0
 
 ```bash
-# 1. Update versions in package.json, pyproject.toml, tauri.conf.json
-# 2. Commit changes
-git add .
-git commit -m "Bump version to 0.2.0"
+# 1. Bump version and commit
+./scripts/bump-version.sh 0.2.0 --commit
 git push
 
-# 3. Create and push tag
+# 2. Create and push tag
 git tag v0.2.0
-git push --tags
+git push origin v0.2.0
 
-# 4. Wait for workflow to complete (~15 min)
-# 5. Visit https://github.com/yourname/handsi/releases
-# 6. Share the release!
+# 3. Wait for workflow to complete (~15 min)
+# 4. Visit https://github.com/yourname/handsi/releases
+# 5. Share the release!
+```
+
+Or use `--tag` to do it all at once:
+
+```bash
+./scripts/bump-version.sh 0.2.0 --tag
+git push origin main
+git push origin v0.2.0
 ```
 
 ---

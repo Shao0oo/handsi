@@ -3,7 +3,7 @@ name: Release Handsi
 on:
   push:
     tags:
-      - 'v*'  # Trigger on version tags like v0.1.0, v1.2.3
+      - 'v*'
   workflow_dispatch:  # Allow manual trigger
 
 env:
@@ -98,32 +98,38 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: 'Handsi ${{ github.ref_name }}'
           releaseBody: |
+
             ## Handsi ${{ github.ref_name }}
 
-            Contactless desktop control using hand tracking.
+            Download
+
+            Choose the right DMG:
+            - Apple Silicon (MX chip): Handsi_x.x.x_aarch64.dmg
+            - Intel: Handsi_x.x.x_x86_64.dmg
+            Not sure?  → About This Mac → check Chip (Apple) vs Processor (Intel).
 
             ### Installation (macOS)
             1. Download the DMG file below
             2. Open the DMG and drag Handsi.app to Applications
-            3. Launch Handsi from Applications
-            4. Grant Camera and Accessibility permissions when prompted
 
             ### First Launch
-            macOS will show a security warning because the app is not code-signed.
-            **Workaround:** Right-click Handsi.app → Open (instead of double-click)
+            macOS will show a security warning:
+            ```
+            “Handsi.app” is damaged and can’t be opened. You should move it to the Trash.
+            ```
+            This is because I do not have an apple developer account-thus, the app is non code-signed.
 
-            Or run in Terminal:
+            #### **Workaround in Terminal:** 
             ```bash
             xattr -cr /Applications/Handsi.app
-            open /Applications/Handsi.app
+            open /Applications/Handsi.app  # or just click app icon
             ```
 
-            ### System Requirements
-            - macOS 10.15+ (Catalina or newer)
-            - Webcam (built-in or external)
-            - Apple Silicon (M1/M2/M3) or Intel processor
+            #### Get Handsi!
+            - Wait for the app to load (30-60 seconds)
+            - Load cameras, select camera, and start detection
+            - Grant Camera and Accessibility permissions when / if prompted
 
-            🤖 Built with [Tauri](https://tauri.app) + Python + MediaPipe
           releaseDraft: false
           prerelease: false
           args: --target ${{ matrix.target }}

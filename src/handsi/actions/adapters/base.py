@@ -38,12 +38,16 @@ class ActionAdapter(ABC):
         pass
 
     @abstractmethod
-    def get_mouse_position_normalized(self) -> tuple[float, float]:
+    def move_mouse_relative(self, dx: float, dy: float) -> bool:
         """
-        Get current mouse cursor position in normalized coordinates.
+        Move mouse cursor by delta (relative movement).
+
+        Args:
+            dx: Delta X in normalized coordinates
+            dy: Delta Y in normalized coordinates
 
         Returns:
-            Tuple of (x, y) where x and y are in range [0, 1] (screen percentage)
+            True if movement successful, False otherwise
         """
         pass
 
@@ -159,6 +163,35 @@ class ActionAdapter(ABC):
 
         Returns:
             True if shortcut executed successfully, False otherwise
+        """
+        pass
+
+    @abstractmethod
+    def semantic_action(self, name: str) -> bool:
+        """
+        Execute semantic action (copy, paste, undo, etc.).
+
+        The adapter translates semantic action names to platform-specific
+        keyboard shortcuts (e.g., "copy" → Cmd+C on macOS, Ctrl+C on Linux).
+
+        Args:
+            name: Semantic action name (copy, paste, undo, cut, select_all, redo)
+
+        Returns:
+            True if action executed successfully, False otherwise
+        """
+        pass
+
+    @abstractmethod
+    def reset_cursor_tracking(self) -> bool:
+        """
+        Reset cursor tracking to actual OS position.
+
+        Call at gesture start to sync with actual cursor location.
+        This prevents cursor teleporting after manual mouse movement.
+
+        Returns:
+            True if reset successful, False otherwise
         """
         pass
 

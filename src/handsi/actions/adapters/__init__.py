@@ -6,6 +6,6 @@ and system actions.
 """
 
 from handsi.actions.adapters.base import ActionAdapter
-from handsi.actions.adapters.factory import AdapterFactory
+from handsi.actions.adapters.ipc import IPCAdapter
 
-__all__ = ["ActionAdapter", "AdapterFactory"]
+__all__ = ["ActionAdapter", "IPCAdapter"]

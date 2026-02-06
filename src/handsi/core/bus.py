@@ -66,6 +66,10 @@ class RuntimeState:
     hand_scale: float = 0.0  # Current hand size (wrist to MCP distance)
     cursor_position: tuple[float, float] = (0.0, 0.0)  # Normalized hand position
 
+    # Primary hand tracking (for multi-hand stability)
+    primary_hand: Optional[str] = None  # "Left" or "Right" - first detected becomes primary
+    primary_hand_last_seen: float = 0.0  # Timestamp when primary hand was last seen
+
     # NEW: Habit alert state (for preview overlay)
     habit_alert_active: bool = False
     habit_alert_message: str = ""

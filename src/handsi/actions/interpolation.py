@@ -138,6 +138,9 @@ class CursorInterpolator:
     def reset_anchor(self) -> None:
         """Reset hand anchor position for new gesture."""
         self._hand_anchor_pos = None
+        # Reset Rust's cursor tracking to actual OS position
+        # This prevents teleporting after manual mouse movement
+        self.adapter.reset_cursor_tracking()
 
     def is_enabled(self) -> bool:
         """Check if interpolation is enabled."""
@@ -233,29 +236,15 @@ class CursorInterpolator:
         if abs(hand_dx) < 0.0001 and abs(hand_dy) < 0.0001:
             return
 
-        # Get current mouse position
-        current_mouse_x, current_mouse_y = self.adapter.get_mouse_position_normalized()
-
-        # Calculate target mouse position
-        target_mouse_x = current_mouse_x + hand_dx
-        target_mouse_y = current_mouse_y + hand_dy
-
-        # Clamp to screen bounds
-        target_mouse_x = max(0.0, min(1.0, target_mouse_x))
-        target_mouse_y = max(0.0, min(1.0, target_mouse_y))
-
-        # Apply exponential moving average (EMA) for smoothness
+        # Apply smoothing to delta
+        # EMA simplifies to: smoothed_delta = alpha * delta * sensitivity
         alpha = 1.0 - self.config.smoothing_factor
-        new_mouse_x = current_mouse_x + alpha * (target_mouse_x - current_mouse_x) * self.config.sensitivity
-        new_mouse_y = current_mouse_y + alpha * (target_mouse_y - current_mouse_y) * self.config.sensitivity
+        smoothed_dx = alpha * hand_dx * self.config.sensitivity
+        smoothed_dy = alpha * hand_dy * self.config.sensitivity
 
-        # Move mouse
-        self.adapter.move_mouse(
-            new_mouse_x,
-            new_mouse_y,
-            normalized=True,
-            relative=False
-        )
+        # Send delta to Rust - it queries actual OS position and applies delta
+        # This avoids position caching issues when user manually moves the mouse
+        self.adapter.move_mouse_relative(smoothed_dx, smoothed_dy)
 
         # Update anchor for continuous tracking
         self._hand_anchor_pos = target_hand_pos

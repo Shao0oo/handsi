@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "handsi"
-version = "0.1.2"
+version = "0.2.0"
 description = "Contactless desktop control using hand/head/body tracking"
 readme = "README.md"
 requires-python = ">=3.11"

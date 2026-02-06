@@ -72,13 +72,11 @@ hiddenimports = [
     'handsi.core.config',
     'handsi.core.logging',
     'handsi.core.bus',
-    'handsi.core.state',
     'handsi.core.utils',
     'handsi.vision.capture',
     'handsi.vision.tracking',
     'handsi.gestures.infer',
     'handsi.actions.executor',
-    'handsi.actions.recognizer',
 
     # Third-party
     'pydantic',
@@ -104,7 +102,6 @@ hiddenimports = [
     # macOS specific
     'objc',
     'Quartz',
-    'CoreGraphics',
     'Foundation',
 ]
 

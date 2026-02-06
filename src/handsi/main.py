@@ -42,7 +42,7 @@ from handsi.actions.executor import ActionExecutorThread
 from handsi.core.bus import RuntimeState, create_queues
 from handsi.core.config import load_config
 from handsi.core.logging import log_info, setup_logging
-from handsi.core.utils import find_config_path
+from handsi.core.utils import find_config_path, needs_holistic_mode
 from handsi.gestures.infer import GestureInferenceThread
 # PreviewWindow imported conditionally (only for CLI mode with --preview)
 from handsi.vision.capture import CaptureThread
@@ -177,6 +177,9 @@ def main() -> int:
     runtime_state.latch_active = config.gestures.latch_active
     frame_queue, feature_queue, gesture_queue = create_queues()
 
+    # Determine tracker mode based on enabled features
+    use_holistic = needs_holistic_mode(config)
+
     # Create threads
     capture_thread = CaptureThread(
         config=config.camera,
@@ -188,7 +191,8 @@ def main() -> int:
         config=config.tracking,
         frame_queue=frame_queue,
         feature_queue=feature_queue,
-        runtime_state=runtime_state
+        runtime_state=runtime_state,
+        use_holistic=use_holistic
     )
 
     gesture_thread = GestureInferenceThread(

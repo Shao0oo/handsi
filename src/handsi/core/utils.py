@@ -2,8 +2,14 @@
 Utility functions for path resolution and common helpers.
 """
 
+from __future__ import annotations
+
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from handsi.core.config import HandsiConfig
 
 
 def get_project_root() -> Path:
@@ -76,3 +82,30 @@ def ensure_dir(path: Path) -> Path:
     """
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def needs_holistic_mode(config: HandsiConfig) -> bool:
+    """
+    Determine if holistic tracking mode is needed based on enabled features.
+
+    Holistic mode (face + pose + hands) is required when any feature
+    needs face or pose landmarks. Currently this includes:
+    - habit_awareness.enabled + habit_awareness.facial_contact_enabled
+
+    Args:
+        config: Application configuration
+
+    Returns:
+        True if holistic mode is needed, False for hands-only mode
+    """
+    # Check habit awareness features
+    if config.habit_awareness.enabled:
+        if config.habit_awareness.facial_contact_enabled:
+            return True
+        # Future: Add other habit features that need face/pose here
+
+    # Future: Add other features that need holistic data here
+    # Example: if config.posture_awareness.enabled:
+    #     return True
+
+    return False

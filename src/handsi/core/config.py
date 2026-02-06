@@ -21,7 +21,7 @@ class CameraConfig(BaseModel):
     resolution: tuple[int, int] = Field(default=(640, 480))
     fps_idle: int = Field(default=2, ge=1, le=30)
     fps_attentive: int = Field(default=5, ge=1, le=120)
-    fps_active: int = Field(default=10, ge=1, le=360)
+    fps_active: int = Field(default=60, ge=1, le=360)
 
     @field_validator("resolution")
     @classmethod
@@ -42,7 +42,7 @@ class TrackingConfig(BaseModel):
     attentive_timeout: float = Field(default=2.0, ge=0.5, le=10.0)
     fps_idle: float = Field(default=2.0, ge=1.0, le=10.0)
     fps_attentive: float = Field(default=10.0, ge=1.0, le=60.0)
-    fps_active: float = Field(default=20.0, ge=1.0, le=120.0)
+    fps_active: float = Field(default=60.0, ge=1.0, le=120.0)
 
     # Holistic tracking settings (always uses MediaPipe Holistic for hands + face + pose)
     holistic_model_complexity: int = Field(default=1, ge=0, le=2)
@@ -52,7 +52,7 @@ class TrackingConfig(BaseModel):
 
 class GestureConfig(BaseModel):
     """Gesture recognition settings."""
-    debounce_ms: int = Field(default=300, ge=0, le=2000)
+    debounce_ms: int = Field(default=500, ge=0, le=2000)
     latch_cooldown_ms: int = Field(default=500, ge=0, le=2000)
     latch_active: bool = Field(default=True)  # Start with gesture control enabled
     smoothing_window: int = Field(default=3, ge=1, le=10)
@@ -60,11 +60,11 @@ class GestureConfig(BaseModel):
 
     # Detection thresholds (hand-relative: fraction of hand size)
     # Hand size = distance from wrist to middle finger MCP knuckle
-    pinch_threshold: float = Field(default=0.2, ge=0.05, le=0.5)
-    fist_threshold: float = Field(default=1.0, ge=0.3, le=2.0)
+    pinch_threshold: float = Field(default=0.25, ge=0.05, le=0.5)
+    fist_threshold: float = Field(default=0.65, ge=0.3, le=2.0)
     open_hand_distance_threshold: float = Field(default=0.25, ge=0.1, le=0.6)  # DEPRECATED
-    open_hand_spread_threshold: float = Field(default=0.3, ge=0.1, le=0.8)
-    swipe_velocity_threshold: float = Field(default=0.8, ge=0.3, le=5.0)
+    open_hand_spread_threshold: float = Field(default=0.1, ge=0.1, le=0.8)
+    swipe_velocity_threshold: float = Field(default=5.0, ge=0.3, le=5.0)
     thumbs_vertical_threshold: float = Field(default=1.3, ge=0.5, le=2.0)
     confidence_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
 
@@ -73,32 +73,32 @@ class MouseConfig(BaseModel):
     """Mouse movement settings."""
     mirror_x: bool = Field(default=True)
     smoothing_factor: float = Field(default=0.3, ge=0.0, le=1.0)
-    dead_zone: float = Field(default=0.02, ge=0.0, le=0.03)
-    dead_zone_curve: float = Field(default=2.0, ge=1.0, le=3.0)
-    dead_zone_min_damping: float = Field(default=0.1, ge=0.0, le=0.5)
-    sensitivity: float = Field(default=1.5, ge=0.1, le=10.0)
+    dead_zone: float = Field(default=0.005, ge=0.0, le=0.03)
+    dead_zone_curve: float = Field(default=3.0, ge=1.0, le=3.0)
+    dead_zone_min_damping: float = Field(default=0.01, ge=0.0, le=0.5)
+    sensitivity: float = Field(default=0.7, ge=0.1, le=10.0)
     interpolation_rate: float = Field(default=60.0, ge=10.0, le=120.0)
 
 
 class ScrollConfig(BaseModel):
     """Scroll control settings."""
-    sensitivity: float = Field(default=1.5, ge=0.1, le=10.0)
-    dead_zone: float = Field(default=0.01, ge=0.0, le=0.03)
-    dead_zone_curve: float = Field(default=2.0, ge=1.0, le=3.0)
-    dead_zone_min_damping: float = Field(default=0.1, ge=0.0, le=0.5)
-    max_scroll_per_frame: int = Field(default=100, ge=10, le=10000)
+    sensitivity: float = Field(default=5.0, ge=0.1, le=10.0)
+    dead_zone: float = Field(default=0.02, ge=0.0, le=0.03)
+    dead_zone_curve: float = Field(default=3.0, ge=1.0, le=3.0)
+    dead_zone_min_damping: float = Field(default=0.01, ge=0.0, le=0.5)
+    max_scroll_per_frame: int = Field(default=1000, ge=10, le=10000)
     invert: bool = Field(default=True)
     momentum_enabled: bool = Field(default=True)
     momentum_decay: float = Field(default=0.95, ge=0.0, le=0.99)
-    momentum_min_velocity: float = Field(default=5.0, ge=0.1, le=10000.0)
-    momentum_stop_threshold: float = Field(default=1.0, ge=0.1, le=10000.0)
+    momentum_min_velocity: float = Field(default=150.0, ge=0.1, le=10000.0)
+    momentum_stop_threshold: float = Field(default=100.0, ge=0.1, le=10000.0)
     scroll_speed: int = Field(default=10, ge=1, le=100)  # pixels per discrete scroll event
 
 
 class ZoomConfig(BaseModel):
     """Zoom control settings."""
-    sensitivity: float = Field(default=3.0, ge=0.1, le=10.0)  # Higher = more frequent zoom steps
-    dead_zone: float = Field(default=0.02, ge=0.0, le=0.05)
+    sensitivity: float = Field(default=0.1, ge=0.01, le=10.0)  # Higher = more frequent zoom steps
+    dead_zone: float = Field(default=0.05, ge=0.0, le=0.05)
     dead_zone_curve: float = Field(default=2.0, ge=1.0, le=3.0)
     dead_zone_min_damping: float = Field(default=0.1, ge=0.0, le=0.5)
     zoom_step: float = Field(default=0.1, ge=0.01, le=1.0)  # zoom increment for discrete steps
@@ -107,17 +107,17 @@ class ZoomConfig(BaseModel):
 class VolumeConfig(BaseModel):
     """Volume control settings."""
     mirror_x: bool = Field(default=True)  # Mirror X-coordinate for natural camera movement
-    sensitivity: float = Field(default=3.0, ge=0.1, le=10.0)  # Higher = more frequent volume changes
-    dead_zone: float = Field(default=0.02, ge=0.0, le=0.05)
+    sensitivity: float = Field(default=1.0, ge=0.1, le=10.0)  # Higher = more frequent volume changes
+    dead_zone: float = Field(default=0.05, ge=0.0, le=0.05)
     dead_zone_curve: float = Field(default=2.0, ge=1.0, le=3.0)
     dead_zone_min_damping: float = Field(default=0.1, ge=0.0, le=0.5)
 
 
 class TabConfig(BaseModel):
     """Tab switching control settings."""
-    sensitivity: float = Field(default=3.0, ge=0.1, le=10.0)  # Higher = more frequent tab switches
-    dead_zone: float = Field(default=0.02, ge=0.0, le=0.05)
-    dead_zone_curve: float = Field(default=2.0, ge=1.0, le=3.0)
+    sensitivity: float = Field(default=0.1, ge=0.1, le=10.0)  # Higher = more frequent tab switches
+    dead_zone: float = Field(default=0.05, ge=0.0, le=0.05)
+    dead_zone_curve: float = Field(default=3.0, ge=1.0, le=3.0)
     dead_zone_min_damping: float = Field(default=0.1, ge=0.0, le=0.5)
 
 
@@ -170,10 +170,15 @@ class ActionConfig(BaseModel):
         return validated
 
 
+def get_default_log_path() -> str:
+    """Get default log file path in user's .handsi directory."""
+    return str(Path.home() / ".handsi" / "logs" / "handsi.log")
+
+
 class SystemConfig(BaseModel):
     """System-level settings."""
     log_level: str = Field(default="INFO")
-    log_file: str = Field(default="logs/handsi.log")
+    log_file: str = Field(default_factory=get_default_log_path)
     preview: bool = Field(default=False)
     preview_show_features: bool = Field(default=False)
     debug: bool = Field(default=False)
