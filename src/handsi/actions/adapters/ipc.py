@@ -245,6 +245,24 @@ class IPCAdapter:
             "shortcut": shortcut
         })
 
+    def semantic_action(self, name: str) -> bool:
+        """
+        Execute semantic action (copy, paste, undo, etc.).
+
+        Rust translates semantic action names to platform-specific shortcuts
+        (e.g., "copy" → Cmd+C on macOS, Ctrl+C on Linux).
+
+        Args:
+            name: Semantic action name (copy, paste, undo, cut, select_all, redo)
+
+        Returns:
+            True if action was sent successfully
+        """
+        return self._send_action({
+            "action": "semantic_action",
+            "name": name
+        })
+
     def key_press(self, key_code: int, modifiers: int = 0) -> bool:
         """
         Send a key press event with optional modifiers.

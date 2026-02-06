@@ -612,6 +612,21 @@ impl ActionAdapter for MacOSAdapter {
         Ok(())
     }
 
+    fn semantic_action(&self, name: &str) -> Result<(), String> {
+        // Map semantic actions to macOS shortcuts (Cmd key)
+        let shortcut = match name {
+            "copy" => "cmd+c",
+            "paste" => "cmd+v",
+            "undo" => "cmd+z",
+            "redo" => "cmd+shift+z",
+            "cut" => "cmd+x",
+            "select_all" => "cmd+a",
+            _ => return Err(format!("Unknown semantic action: {}", name)),
+        };
+        eprintln!("[Rust] Semantic action '{}' -> shortcut '{}'", name, shortcut);
+        self.keyboard_shortcut(shortcut)
+    }
+
     fn cleanup(&mut self) {
         // Clear held button state
         *HELD_BUTTON.lock().unwrap() = None;

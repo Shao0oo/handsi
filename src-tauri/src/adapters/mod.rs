@@ -71,6 +71,10 @@ pub trait ActionAdapter: Send {
     /// Zoom in or out (system-wide or browser)
     fn zoom(&self, direction: &str, step: f64) -> Result<(), String>;
 
+    /// Execute semantic action (platform translates to specific shortcuts)
+    /// Supported: "copy", "paste", "undo", "redo", "cut", "select_all"
+    fn semantic_action(&self, name: &str) -> Result<(), String>;
+
     /// Cleanup resources (called on adapter drop)
     fn cleanup(&mut self);
 }

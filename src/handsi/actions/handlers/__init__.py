@@ -26,6 +26,7 @@ from handsi.actions.handlers.keyboard import CopyHandler, PasteHandler, UndoHand
 from handsi.actions.handlers.latch import DisableLatchHandler, EnableLatchHandler
 from handsi.actions.handlers.mouse import MouseMoveHandler
 from handsi.actions.handlers.scroll import ContinuousScrollHandler, ScrollStepHandler
+from handsi.actions.handlers.tab import ContinuousTabHandler
 from handsi.actions.handlers.volume import ContinuousVolumeHandler
 from handsi.actions.handlers.zoom import ContinuousZoomHandler, ZoomStepHandler
 
@@ -49,6 +50,8 @@ __all__ = [
     "ContinuousZoomHandler",
     # Volume handler
     "ContinuousVolumeHandler",
+    # Tab handler
+    "ContinuousTabHandler",
     # Desktop handler
     "SwitchDesktopHandler",
     # Keyboard handlers

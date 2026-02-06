@@ -11,7 +11,7 @@ from handsi.actions.continuous_tracker import ContinuousActionTracker, Continuou
 from handsi.actions.handlers.base import ContinuousActionHandler, DiscreteActionHandler
 from handsi.core.bus import GestureEvent, RuntimeState
 from handsi.core.config import ZoomConfig
-from handsi.core.logging import log_debug, log_info
+from handsi.core.logging import log_debug
 
 
 class ZoomStepHandler(DiscreteActionHandler):
@@ -120,7 +120,7 @@ class ContinuousZoomHandler(ContinuousActionHandler):
             # Update tracker anchor
             self._tracker.update_anchor(hand_pos)
 
-            log_info(f"Zoom step: direction={direction}")
+            log_debug(f"Zoom step: direction={direction}")
             return result
 
         return True  # No zoom step needed yet

@@ -14,9 +14,9 @@ from handsi.core.logging import log_debug
 
 class CopyHandler(DiscreteActionHandler):
     """
-    Handler for copy action (Cmd+C).
+    Handler for copy action.
 
-    Executes copy keyboard shortcut when triggered.
+    Executes copy using platform-specific shortcut (Cmd+C on macOS, Ctrl+C on Linux).
     """
 
     def __init__(
@@ -27,16 +27,16 @@ class CopyHandler(DiscreteActionHandler):
         super().__init__(adapter, runtime_state)
 
     def execute(self, event: Optional[GestureEvent] = None) -> bool:
-        """Execute copy keyboard shortcut."""
+        """Execute copy action."""
         log_debug("Executing copy action")
-        return self.adapter.keyboard_shortcut('cmd+c')
+        return self.adapter.semantic_action("copy")
 
 
 class PasteHandler(DiscreteActionHandler):
     """
-    Handler for paste action (Cmd+V).
+    Handler for paste action.
 
-    Executes paste keyboard shortcut when triggered.
+    Executes paste using platform-specific shortcut (Cmd+V on macOS, Ctrl+V on Linux).
     """
 
     def __init__(
@@ -47,16 +47,16 @@ class PasteHandler(DiscreteActionHandler):
         super().__init__(adapter, runtime_state)
 
     def execute(self, event: Optional[GestureEvent] = None) -> bool:
-        """Execute paste keyboard shortcut."""
+        """Execute paste action."""
         log_debug("Executing paste action")
-        return self.adapter.keyboard_shortcut('cmd+v')
+        return self.adapter.semantic_action("paste")
 
 
 class UndoHandler(DiscreteActionHandler):
     """
-    Handler for undo action (Cmd+Z).
+    Handler for undo action.
 
-    Executes undo keyboard shortcut when triggered.
+    Executes undo using platform-specific shortcut (Cmd+Z on macOS, Ctrl+Z on Linux).
     """
 
     def __init__(
@@ -67,6 +67,6 @@ class UndoHandler(DiscreteActionHandler):
         super().__init__(adapter, runtime_state)
 
     def execute(self, event: Optional[GestureEvent] = None) -> bool:
-        """Execute undo keyboard shortcut."""
+        """Execute undo action."""
         log_debug("Executing undo action")
-        return self.adapter.keyboard_shortcut('cmd+z')
+        return self.adapter.semantic_action("undo")

@@ -167,6 +167,22 @@ class ActionAdapter(ABC):
         pass
 
     @abstractmethod
+    def semantic_action(self, name: str) -> bool:
+        """
+        Execute semantic action (copy, paste, undo, etc.).
+
+        The adapter translates semantic action names to platform-specific
+        keyboard shortcuts (e.g., "copy" → Cmd+C on macOS, Ctrl+C on Linux).
+
+        Args:
+            name: Semantic action name (copy, paste, undo, cut, select_all, redo)
+
+        Returns:
+            True if action executed successfully, False otherwise
+        """
+        pass
+
+    @abstractmethod
     def reset_cursor_tracking(self) -> bool:
         """
         Reset cursor tracking to actual OS position.

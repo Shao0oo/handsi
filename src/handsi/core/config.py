@@ -97,7 +97,7 @@ class ScrollConfig(BaseModel):
 
 class ZoomConfig(BaseModel):
     """Zoom control settings."""
-    sensitivity: float = Field(default=3.0, ge=0.1, le=10.0)  # Higher = more frequent zoom steps
+    sensitivity: float = Field(default=1.0, ge=0.01, le=10.0)  # Higher = more frequent zoom steps
     dead_zone: float = Field(default=0.02, ge=0.0, le=0.05)
     dead_zone_curve: float = Field(default=2.0, ge=1.0, le=3.0)
     dead_zone_min_damping: float = Field(default=0.1, ge=0.0, le=0.5)

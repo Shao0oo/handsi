@@ -120,6 +120,10 @@ fn process_action(msg: &serde_json::Value, adapter: &dyn ActionAdapter) {
             let step = msg.get("step").and_then(|v| v.as_f64()).unwrap_or(0.1);
             adapter.zoom(direction, step)
         }
+        "semantic_action" => {
+            let name = msg.get("name").and_then(|v| v.as_str()).unwrap_or("");
+            adapter.semantic_action(name)
+        }
         _ => {
             eprintln!("[Rust] Unknown action: {}", action);
             return;
