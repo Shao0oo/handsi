@@ -133,18 +133,19 @@ class AudioAlertHandler(BaseAlertHandler):
         try:
             if sys.platform == 'darwin':
                 # macOS beep
-                subprocess.run(
+                subprocess.Popen(
                     ['afplay', '/System/Library/Sounds/Ping.aiff'],
-                    check=False,
-                    timeout=1.0
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
                 )
-            elif sys.platform == 'linux':
-                # Linux beep
-                subprocess.run(
-                    ['paplay', '/usr/share/sounds/freedesktop/stereo/bell.oga'],
-                    check=False,
-                    timeout=1
-                )
+
+            # elif sys.platform == 'linux':
+            #     # Linux beep
+            #     subprocess.Popen(
+            #         ['paplay', '/usr/share/sounds/freedesktop/stereo/bell.oga'],
+            #         check=False,
+            #         timeout=1
+            #     )
             log_info(f"Audio alert triggered for: {event.gesture_name}")
 
         except Exception as e:

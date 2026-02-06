@@ -150,14 +150,17 @@ class GestureInferenceThread(threading.Thread):
 
         filtered = []
         for gesture_name, confidence, metadata in gestures:
-            # Two-hand gestures always pass (they require both hands)
-            if gesture_name.startswith("two_hand"):
-                filtered.append((gesture_name, confidence, metadata))
-                continue
+            # # Two-hand gestures always pass (they require both hands)
+            # if gesture_name.startswith("two_hand"):
+            #     filtered.append((gesture_name, confidence, metadata))
+            #     continue
 
             # Single-hand gestures must match primary hand
             gesture_handedness = metadata.get("handedness")
             if gesture_handedness == primary_handedness:
+                filtered.append((gesture_name, confidence, metadata))
+            elif gesture_handedness is None:
+                # If handedness is None, assume it's a two-hand gesture or a habit feature
                 filtered.append((gesture_name, confidence, metadata))
 
         return filtered
