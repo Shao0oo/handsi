@@ -482,6 +482,11 @@ function setConnectionStatus(status) {
         'connected': 'Connected'
     };
     elements.connectionStatus.querySelector('.label').textContent = labels[status] || 'Unknown';
+
+    // Disable start button when not connected (updateStatusUI handles the running state)
+    if (status !== 'connected') {
+        elements.startBtn.disabled = true;
+    }
 }
 
 // === Event Handlers ===
@@ -838,7 +843,11 @@ async function handleMappingChange(event) {
 // === Info Tab ===
 
 async function loadSystemInfo() {
-    const result = await getSystemInfo();
+    // Fetch system info from Python and accessibility status from Rust in parallel
+    const [result, accessResult] = await Promise.all([
+        getSystemInfo(),
+        invoke('check_accessibility').catch(() => null)
+    ]);
 
     if (!result.success) {
         elements.infoSystemPlatform.textContent = 'Error loading info';
@@ -859,10 +868,14 @@ async function loadSystemInfo() {
     elements.infoSystemVersion.title = info.system.version; // Show full version on hover
     elements.infoSystemPython.textContent = info.system.python_version;
 
-    // Permissions
-    const permStatus = info.permissions_status;
-    let permDisplay = permStatus.charAt(0).toUpperCase() + permStatus.slice(1);
-    let permClass = permStatus === 'granted' ? 'status-value running' : 'status-value stopped';
+    // Permissions - query Rust directly (Python can't check this since adapter moved to Rust)
+    let permDisplay = 'Unknown';
+    let permClass = 'status-value stopped';
+    if (accessResult && accessResult.success) {
+        const granted = accessResult.data.granted;
+        permDisplay = granted ? 'Granted' : 'Denied';
+        permClass = granted ? 'status-value running' : 'status-value stopped';
+    }
     elements.infoPermissions.textContent = permDisplay;
     elements.infoPermissions.className = `info-value ${permClass}`;
 }

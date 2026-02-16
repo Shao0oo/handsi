@@ -531,8 +531,7 @@ fn check_accessibility_permission() {
 
     eprintln!("[Rust] Checking Accessibility permission...");
 
-    // Use osascript to trigger the permission check via AppleScript
-    // This will show the system prompt if permission is not granted
+    // Use osascript to trigger the permission prompt if not granted
     let script = r#"
         use framework "Foundation"
         use framework "ApplicationServices"
@@ -562,6 +561,48 @@ fn check_accessibility_permission() {
 #[cfg(not(target_os = "macos"))]
 fn check_accessibility_permission() {
     // No-op on non-macOS platforms
+}
+
+/// Query accessibility permission status without showing a prompt.
+/// Used by the frontend to display permission status in the Info tab.
+#[cfg(target_os = "macos")]
+fn check_accessibility_status() -> bool {
+    use std::process::Command;
+
+    let script = r#"
+        use framework "Foundation"
+        use framework "ApplicationServices"
+
+        set options to current application's NSDictionary's dictionaryWithObject:false forKey:"AXTrustedCheckOptionPrompt"
+        set trusted to current application's AXIsProcessTrustedWithOptions(options)
+        return trusted as boolean
+    "#;
+
+    match Command::new("osascript")
+        .args(["-l", "AppleScript", "-e", script])
+        .output()
+    {
+        Ok(output) => {
+            String::from_utf8_lossy(&output.stdout).trim() == "true"
+        }
+        Err(_) => false,
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn check_accessibility_status() -> bool {
+    true // Non-macOS platforms don't need accessibility permission
+}
+
+#[tauri::command]
+async fn check_accessibility() -> Result<IpcResponse, String> {
+    let granted = check_accessibility_status();
+    Ok(IpcResponse {
+        success: true,
+        data: Some(serde_json::json!({ "granted": granted })),
+        error: None,
+        request_id: None,
+    })
 }
 
 fn main() {
@@ -624,7 +665,8 @@ fn main() {
             update_mappings,
             get_available_gestures_and_actions,
             get_habit_alert,
-            get_cameras
+            get_cameras,
+            check_accessibility
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
