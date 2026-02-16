@@ -101,6 +101,7 @@
                     <button id="stopBtn" class="btn btn-secondary" disabled>Stop Detection</button>
                 </div>
                 <div id="controlMessage" class="message"></div>
+                <div id="controlPermissionWarning" class="message" style="display: none;"></div>
             </section>
         </div>
 
@@ -352,10 +353,7 @@
                             <span class="info-value" id="infoPermissions">-</span>
                         </div>
                     </div>
-                    <p class="info-note">
-                        Note: Accessibility permissions are required for gesture control on macOS.
-                        If denied, grant them in System Settings → Privacy & Security → Accessibility.
-                    </p>
+                    <p class="info-note" id="permissionsNote"></p>
                 </div>
 
                 <div class="info-section">
