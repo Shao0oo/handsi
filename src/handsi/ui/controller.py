@@ -639,26 +639,14 @@ class HandsiController:
                 "python_version": sys.version.split()[0]
             }
 
-            # Check accessibility permissions (macOS only)
-            permissions_status = "unknown"
-            if platform.system() == "Darwin":
-                try:
-                    from handsi.actions.adapters.macos import MacOSAdapter
-                    adapter = MacOSAdapter()
-                    if adapter.initialize():
-                        permissions_status = "granted"
-                        adapter.cleanup()
-                    else:
-                        permissions_status = "denied"
-                except Exception:
-                    permissions_status = "unknown"
+            # Note: Accessibility permissions are checked directly by Rust
+            # via the check_accessibility Tauri command (not through Python IPC)
 
             return {
                 "success": True,
                 "data": {
                     "camera": camera_info,
-                    "system": system_info,
-                    "permissions_status": permissions_status
+                    "system": system_info
                 }
             }
 

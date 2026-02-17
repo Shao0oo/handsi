@@ -42,7 +42,7 @@ const STATUS_POLL_INTERVAL = 1000;  // ms (reduced from 500ms to minimize IPC lo
 
 // === State ===
 let statusPollTimer = null;
-let currentSettings = {};
+let currentSettings = null;
 let bridgeReady = true;  // Tauri is always ready
 
 // === DOM Elements ===
@@ -210,6 +210,16 @@ async function getSettings() {
     }
 }
 
+async function loadSettingsFromBackend() {
+    console.log('[JS] Loading settings from backend...');
+    const settingsResult = await getSettings();
+    console.log('[JS] Settings result:', settingsResult);
+    if (settingsResult.success) {
+        updateSettingsUI(settingsResult.data);
+        elements.saveSettingsBtn.disabled = false;
+    }
+}
+
 async function updateSettings(settings) {
     try {
         const result = await invoke('update_settings', { settings });
@@ -327,7 +337,7 @@ async function loadAvailableCameras(forceRefresh = false) {
         });
 
         // Select current device_id if it exists in list
-        if (currentSettings.device_id !== undefined) {
+        if (currentSettings?.device_id !== undefined) {
             select.value = currentSettings.device_id;
         }
 
@@ -482,6 +492,14 @@ function setConnectionStatus(status) {
         'connected': 'Connected'
     };
     elements.connectionStatus.querySelector('.label').textContent = labels[status] || 'Unknown';
+
+    // Disable start button only while initially connecting (backend loading)
+    // When disconnected, re-enable so user can click Start to reconnect
+    if (status === 'connecting') {
+        elements.startBtn.disabled = true;
+    } else if (status === 'disconnected') {
+        elements.startBtn.disabled = false;
+    }
 }
 
 // === Event Handlers ===
@@ -495,6 +513,11 @@ async function handleStart() {
     if (result.success) {
         showMessage(elements.controlMessage, 'success', 'Handsi started successfully');
         startStatusPolling();
+
+        // Load settings if they weren't loaded during init (e.g., backend was slow)
+        if (currentSettings === null) {
+            await loadSettingsFromBackend();
+        }
     } else {
         showMessage(elements.controlMessage, 'error', `Failed to start: ${result.data?.error || result.error}`);
         elements.startBtn.disabled = false;
@@ -527,6 +550,12 @@ async function handleStop() {
 }
 
 async function handleSaveSettings() {
+    // Guard: don't save if backend settings haven't loaded yet
+    if (!currentSettings) {
+        showMessage(elements.settingsMessage, 'error', 'Settings not yet loaded from backend');
+        return;
+    }
+
     // Collect current settings from UI
     const selectedCameraOption = elements.cameraDevice.selectedOptions[0];
     const settings = {
@@ -835,10 +864,67 @@ async function handleMappingChange(event) {
     }
 }
 
+// === Permissions ===
+
+const PERM_WARNING_MSG = 'Accessibility permissions not granted.'
+    + 'Go to System Settings \u2192 Privacy & Security \u2192 Accessibility, and enable Handsi.'
+    + 'If Handsi is already enabled, REMOVE the app from Accessibility and re-add it.';
+
+/**
+ * Check accessibility permissions via Rust and update all permission UI elements.
+ * Called on init (for controls page warning) and when loading the Info tab.
+ */
+async function updatePermissionStatus() {
+    const accessResult = await invoke('check_accessibility').catch(() => null);
+    if (!accessResult || !accessResult.success) return null;
+
+    const granted = accessResult.data.granted;
+
+    // Update Info tab permission display
+    if (elements.infoPermissions) {
+        elements.infoPermissions.textContent = granted ? 'Granted' : 'Denied';
+        elements.infoPermissions.className = granted
+            ? 'info-value status-value running'
+            : 'info-value status-value stopped';
+    }
+
+    // Update Info tab note
+    const permNote = document.getElementById('permissionsNote');
+    if (permNote) {
+        if (!granted) {
+            permNote.textContent = PERM_WARNING_MSG;
+            permNote.style.color = 'var(--error-color, #e74c3c)';
+        } else {
+            permNote.textContent = '';
+            permNote.style.color = '';
+        }
+    }
+
+    // Update controls page warning
+    const controlWarning = document.getElementById('controlPermissionWarning');
+    if (controlWarning) {
+        if (!granted) {
+            controlWarning.textContent = PERM_WARNING_MSG;
+            controlWarning.className = 'message error';
+            controlWarning.style.display = '';
+        } else {
+            controlWarning.textContent = '';
+            controlWarning.className = 'message';
+            controlWarning.style.display = 'none';
+        }
+    }
+
+    return granted;
+}
+
 // === Info Tab ===
 
 async function loadSystemInfo() {
-    const result = await getSystemInfo();
+    // Fetch system info from Python and accessibility status from Rust in parallel
+    const [result] = await Promise.all([
+        getSystemInfo(),
+        updatePermissionStatus()
+    ]);
 
     if (!result.success) {
         elements.infoSystemPlatform.textContent = 'Error loading info';
@@ -858,13 +944,6 @@ async function loadSystemInfo() {
     elements.infoSystemVersion.textContent = info.system.version;
     elements.infoSystemVersion.title = info.system.version; // Show full version on hover
     elements.infoSystemPython.textContent = info.system.python_version;
-
-    // Permissions
-    const permStatus = info.permissions_status;
-    let permDisplay = permStatus.charAt(0).toUpperCase() + permStatus.slice(1);
-    let permClass = permStatus === 'granted' ? 'status-value running' : 'status-value stopped';
-    elements.infoPermissions.textContent = permDisplay;
-    elements.infoPermissions.className = `info-value ${permClass}`;
 }
 
 // === First Run Modal ===
@@ -1006,6 +1085,35 @@ function stopStatusPolling() {
     }
 }
 
+// === Backend Connection ===
+
+/**
+ * Poll getStatus() until the backend responds, retrying every 2s for up to 1 minute.
+ * Returns true if connected, false if all attempts exhausted.
+ */
+async function waitForBackend() {
+    const MAX_ATTEMPTS = 30;
+    const RETRY_INTERVAL = 2000; // ms
+
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        console.log(`[JS] Backend connection attempt ${attempt}/${MAX_ATTEMPTS}...`);
+        const result = await getStatus();
+        if (result.success) {
+            updateStatusUI(result.data);
+            setConnectionStatus('connected');
+            if (result.data.running) {
+                startStatusPolling();
+            }
+            return true;
+        }
+        if (attempt < MAX_ATTEMPTS) {
+            await new Promise(r => setTimeout(r, RETRY_INTERVAL));
+        }
+    }
+    setConnectionStatus('disconnected');
+    return false;
+}
+
 // === Initialization ===
 
 async function init() {
@@ -1016,6 +1124,9 @@ async function init() {
     // Get DOM elements now that DOM is ready
     elements = getElements();
     console.log('✓ [JS] DOM elements loaded');
+
+    // Disable Save until real settings are loaded from backend
+    elements.saveSettingsBtn.disabled = true;
 
     // Wait for Tauri API to load
     try {
@@ -1059,7 +1170,7 @@ async function init() {
     console.log('[JS] Loading initial status...');
     setConnectionStatus('connecting');  // Show connecting state immediately
 
-    // Show looping "Connecting..." messages if it takes too long
+    // Show looping "Connecting..." messages while backend loads
     let connectingMessageInterval = null;
     const connectingMessages = [
         'Loading MediaPipe model...     (this may take a minute)',
@@ -1072,59 +1183,36 @@ async function init() {
     let messageIndex = 0;
 
     const connectingTimeout = setTimeout(() => {
-        // Show first message immediately
         elements.controlMessage.textContent = connectingMessages[messageIndex];
         elements.controlMessage.className = 'message info';
 
-        // Loop through messages every 2 seconds
         connectingMessageInterval = setInterval(() => {
             messageIndex = (messageIndex + 1) % connectingMessages.length;
             elements.controlMessage.textContent = connectingMessages[messageIndex];
         }, 6000);
     }, 1);
 
-    const statusResult = await getStatus();
+    // Connect to backend and check permissions in parallel
+    const [backendOk] = await Promise.all([
+        waitForBackend(),
+        updatePermissionStatus()
+    ]);
+
+    // Load settings AFTER backend is confirmed ready (otherwise we keep HTML defaults)
+    if (backendOk) {
+        await loadSettingsFromBackend();
+    }
+
+    // Clear connecting messages
     clearTimeout(connectingTimeout);
     if (connectingMessageInterval) {
         clearInterval(connectingMessageInterval);
     }
-    // Clear connecting message if it was shown
     elements.controlMessage.className = 'message';
     elements.controlMessage.textContent = '';
-    console.log('[JS] Initial status result:', statusResult);
-    if (statusResult.success) {
-        updateStatusUI(statusResult.data);
-        setConnectionStatus('connected');  // Backend is ready
 
-        // Start polling if already running
-        if (statusResult.data.running) {
-            startStatusPolling();
-        }
-    } else {
-        // Backend not ready yet (might be initializing)
-        console.log('[JS] Backend not ready, will retry...');
-        showMessage(elements.controlMessage, 'info', 'Backend initializing, please wait...');
-
-        // Retry connection after 3 seconds (backend might be loading MediaPipe)
-        setTimeout(async () => {
-            console.log('[JS] Retrying connection to backend...');
-            const retry = await getStatus();
-            if (retry.success) {
-                setConnectionStatus('connected');
-                updateStatusUI(retry.data);
-                showMessage(elements.controlMessage, 'success', 'Connected to backend');
-            } else {
-                setConnectionStatus('disconnected');
-                showMessage(elements.controlMessage, 'error', 'Failed to connect to backend');
-            }
-        }, 3000);
-    }
-
-    console.log('[JS] Loading initial settings...');
-    const settingsResult = await getSettings();
-    console.log('[JS] Initial settings result:', settingsResult);
-    if (settingsResult.success) {
-        updateSettingsUI(settingsResult.data);
+    if (!backendOk) {
+        showMessage(elements.controlMessage, 'error', 'Backend did not respond. Click Start Detection to retry.');
     }
 
     console.log('[JS] ✅ Initialization complete');
