@@ -42,7 +42,7 @@ const STATUS_POLL_INTERVAL = 1000;  // ms (reduced from 500ms to minimize IPC lo
 
 // === State ===
 let statusPollTimer = null;
-let currentSettings = {};
+let currentSettings = null;
 let bridgeReady = true;  // Tauri is always ready
 
 // === DOM Elements ===
@@ -210,6 +210,16 @@ async function getSettings() {
     }
 }
 
+async function loadSettingsFromBackend() {
+    console.log('[JS] Loading settings from backend...');
+    const settingsResult = await getSettings();
+    console.log('[JS] Settings result:', settingsResult);
+    if (settingsResult.success) {
+        updateSettingsUI(settingsResult.data);
+        elements.saveSettingsBtn.disabled = false;
+    }
+}
+
 async function updateSettings(settings) {
     try {
         const result = await invoke('update_settings', { settings });
@@ -327,7 +337,7 @@ async function loadAvailableCameras(forceRefresh = false) {
         });
 
         // Select current device_id if it exists in list
-        if (currentSettings.device_id !== undefined) {
+        if (currentSettings?.device_id !== undefined) {
             select.value = currentSettings.device_id;
         }
 
@@ -503,6 +513,11 @@ async function handleStart() {
     if (result.success) {
         showMessage(elements.controlMessage, 'success', 'Handsi started successfully');
         startStatusPolling();
+
+        // Load settings if they weren't loaded during init (e.g., backend was slow)
+        if (currentSettings === null) {
+            await loadSettingsFromBackend();
+        }
     } else {
         showMessage(elements.controlMessage, 'error', `Failed to start: ${result.data?.error || result.error}`);
         elements.startBtn.disabled = false;
@@ -535,6 +550,12 @@ async function handleStop() {
 }
 
 async function handleSaveSettings() {
+    // Guard: don't save if backend settings haven't loaded yet
+    if (!currentSettings) {
+        showMessage(elements.settingsMessage, 'error', 'Settings not yet loaded from backend');
+        return;
+    }
+
     // Collect current settings from UI
     const selectedCameraOption = elements.cameraDevice.selectedOptions[0];
     const settings = {
@@ -847,7 +868,7 @@ async function handleMappingChange(event) {
 
 const PERM_WARNING_MSG = 'Accessibility permissions not granted.'
     + 'Go to System Settings \u2192 Privacy & Security \u2192 Accessibility, and enable Handsi.'
-    + 'If Handsi is already enabled, DELETE the app from the list and re-add it.';
+    + 'If Handsi is already enabled, REMOVE the app from Accessibility and re-add it.';
 
 /**
  * Check accessibility permissions via Rust and update all permission UI elements.
@@ -1104,6 +1125,9 @@ async function init() {
     elements = getElements();
     console.log('✓ [JS] DOM elements loaded');
 
+    // Disable Save until real settings are loaded from backend
+    elements.saveSettingsBtn.disabled = true;
+
     // Wait for Tauri API to load
     try {
         await waitForTauriAPI();
@@ -1168,19 +1192,16 @@ async function init() {
         }, 6000);
     }, 1);
 
-    // Connect to backend, load settings, and check permissions in parallel
+    // Connect to backend and check permissions in parallel
     const [backendOk] = await Promise.all([
         waitForBackend(),
-        (async () => {
-            console.log('[JS] Loading initial settings...');
-            const settingsResult = await getSettings();
-            console.log('[JS] Initial settings result:', settingsResult);
-            if (settingsResult.success) {
-                updateSettingsUI(settingsResult.data);
-            }
-        })(),
         updatePermissionStatus()
     ]);
+
+    // Load settings AFTER backend is confirmed ready (otherwise we keep HTML defaults)
+    if (backendOk) {
+        await loadSettingsFromBackend();
+    }
 
     // Clear connecting messages
     clearTimeout(connectingTimeout);
