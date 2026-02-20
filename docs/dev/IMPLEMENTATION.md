@@ -1,149 +1,141 @@
-# implementation.md — Phase 1 (CLI MVP)
+# implementation.md — Phase 2
 
 ## Purpose
-Phase 1 delivers a **command-line** Handsi that:
-- Captures webcam frames
-- Tracks hands (optionally head/pose later)
-- Decodes a small, reliable gesture set
-- Applies **safety latch + debouncing**
-- Executes a minimal set of desktop actions
-- Runs locally with a debug preview window and logs
 
-**No tray app. No autostart. No teaching mode.** Just a solid engine.
+Handsi is a **contactless desktop control** application that:
+- Captures webcam frames and tracks hands/face via MediaPipe
+- Decodes gestures using rule-based detection with hand-scale normalization
+- Applies safety controls (latch, debouncing, cooldown)
+- Executes OS-level actions (mouse, keyboard, scroll, zoom, volume, desktop switching)
+- Runs as a **Tauri desktop app** (Rust frontend + Python backend via IPC)
+- Includes habit awareness (facial contact alerts)
+
+Phase 1 (CLI MVP) is complete. Phase 2 focuses on cross-platform expansion, AI/learning features, and custom gesture support.
 
 ---
 
-## Phase 1 Scope
+## Architecture Overview
 
-### Must-have
-- Real-time webcam capture (OpenCV)
-- Hand landmark tracking (MediaPipe Hands)
-- Gesture decoding (rule-based)
-- Temporal smoothing + state machine (latch, cooldown)
-- Action execution (macOS first; leave adapter interface for Linux)
-- CLI entrypoint with:
-  - `--preview` (overlay window)
-  - `--debug` (prints gesture states / confidence)
-  - `--config path`
+Handsi uses a **dual-process architecture**:
 
-### Nice-to-have (still Phase 1 if easy)
-- Basic head pose/face detection overlay (no actions yet)
-- JSON/TOML config instead of YAML (if you want better validation)
+```
+┌─────────────────────────────┐        ┌──────────────────────────────┐
+│  Tauri App (Rust)           │        │  Python Backend              │
+│                             │        │                              │
+│  - Desktop UI (WebView)     │◄──────►│  - Webcam capture (OpenCV)   │
+│  - Action execution         │  IPC   │  - Hand tracking (MediaPipe) │
+│  - Platform adapters        │ (JSON) │  - Gesture inference         │
+│    (CGEvent, Win32, X11)    │        │  - State machine             │
+│  - Window management        │        │  - Action handler logic      │
+│                             │        │                              │
+└─────────────────────────────┘        └──────────────────────────────┘
+```
 
-### Non-goals
-- System tray UI
-- Run-on-startup
-- Gesture teaching / personalization
-- Complex window management beyond a couple OS actions
+**Python** handles all vision, tracking, and gesture logic. When an action needs to execute, the Python backend sends a JSON message to **Rust** via stdout. Rust receives the message and executes it through platform-specific adapters (CGEvent on macOS, Win32 on Windows, X11/Wayland on Linux).
+
+### Why Rust executes actions
+
+On macOS, TCC (Transparency, Consent, Control) grants Accessibility permissions per-process. The Tauri app (Rust binary) has permission, but the Python sidecar subprocess does not. Moving action execution to Rust solves this permission boundary.
+
+### IPC Protocol
+
+All communication is JSON over stdin/stdout:
+
+**Command** (Rust → Python):
+```json
+{"command": "start", "args": {}, "request_id": "123-start"}
+```
+
+**Response** (Python → Rust):
+```json
+{"success": true, "data": {"status": "running"}, "request_id": "123-start"}
+```
+
+**Action** (Python → Rust, fire-and-forget):
+```json
+{"type": "action", "action": "mouse_move_normalized", "x": 0.5, "y": 0.3}
+```
 
 ---
 
 ## Threading Architecture
 
-Phase 1 uses a **5-thread pipeline** for maximum modularity and CPU efficiency:
+The Python backend uses a **5-thread pipeline**:
 
 ### Thread Breakdown
 
-**Thread 1: Capture**
-- Reads camera frames at **adaptive FPS** (1-10 Hz based on activity)
-- Pushes to `FrameQueue` (bounded size)
+**Thread 1: Capture** (`src/handsi/vision/capture.py`)
+- Reads camera frames at **adaptive FPS** (2–60 Hz based on activity)
+- Pushes to `FrameQueue` (bounded, max 2)
 - Drops frames if queue is full (frame-skipping backpressure)
-- Listens to shared `RuntimeState` for FPS adjustments
+- Reads `RuntimeState.current_fps` to adjust sleep time
 
-**Thread 2: Tracking + Features (inline)**
+**Thread 2: Tracking + Features** (`src/handsi/vision/tracking.py`)
 - Pops from `FrameQueue`
 - MediaPipe Hands tracking → landmarks
 - Feature extraction (inline, same thread)
-- Detects activity level → updates shared `RuntimeState.activity_level`
-- Pushes feature vectors to `FeatureQueue`
-- Controls own processing rate based on activity
+- Detects activity level → updates `RuntimeState.activity_level`
+- Pushes feature vectors to `FeatureQueue` (max 5)
 
-**Thread 3: Gesture Inference**
+**Thread 3: Gesture Inference** (`src/handsi/gestures/infer.py`)
 - Pops from `FeatureQueue`
-- Rule-based gesture detection (pinch, fist, swipe, etc.)
+- Rule-based gesture detection via `GestureDetector`
 - Temporal smoothing over sliding window
-- Pushes recognized gestures to `GestureEventQueue`
+- Pushes recognized gestures to `GestureQueue` (max 10)
+- Only detects gestures that have action mappings (performance optimization)
 
-**Thread 4: Action Executor**
-- Pops from `GestureEventQueue`
-- **State machine** (latch, debounce, cooldown) lives here
+**Thread 4: Action Executor** (`src/handsi/actions/executor.py`)
+- Pops from `GestureQueue`
+- **State machine** (latch, debounce, cooldown)
 - Maps gestures → actions via config
-- Executes OS actions (macOS adapters)
-- Updates `RuntimeState.last_gesture_time` on execution
+- Delegates to specialized handler classes
+- Sends actions to Rust via **IPC adapter** (`src/handsi/actions/adapters/ipc.py`)
+- Spawns two internal background threads:
+  - **CursorInterpolator** (`src/handsi/actions/interpolation.py`) — smooth cursor movement at 60 Hz
+  - **ScrollMomentum** (`src/handsi/actions/momentum.py`) — kinetic scrolling after gesture ends
 
-**Thread 5: Preview Window (optional, `--preview` only)**
-- Receives frame copies + overlay data (landmarks, gesture labels)
+**Thread 5: Preview Window** (optional, `--preview` only)
 - Renders debug visualization in OpenCV window
-- Non-blocking updates (drops frames if rendering falls behind)
+- Displays hand landmarks, gesture labels, FPS
+- Non-blocking (drops frames if rendering falls behind)
 
 ### Inter-Thread Communication
 
 All queues use `queue.Queue` (thread-safe, bounded):
 - **FrameQueue**: max 2 frames (drop oldest on overflow)
 - **FeatureQueue**: max 5 feature vectors
-- **GestureEventQueue**: max 10 events
+- **GestureQueue**: max 10 events
 
-**Shared RuntimeState** (thread-safe with locks):
+**Shared RuntimeState** (`src/handsi/core/bus.py`, protected by `threading.RLock`):
 ```python
 @dataclass
 class RuntimeState:
     activity_level: ActivityLevel  # IDLE | ATTENTIVE | ACTIVE
-    current_fps: int               # 1-10 Hz
+    current_fps: int               # 2-60 Hz
     last_gesture_time: float       # timestamp of last executed action
-    system_active: bool            # global enable/disable flag
+    latch_active: bool             # gesture control enabled/disabled
+    hand_scale: float              # current hand size (wrist to MCP)
+    cursor_position: tuple         # normalized hand position [0,1]
+    primary_hand: Optional[str]    # "Left" or "Right"
+    shutdown_requested: bool       # graceful shutdown flag
 ```
 
----
+### Queue Strategy & Backpressure
 
-## Adaptive FPS Control
-
-The system **dynamically adjusts capture/tracking rate** to minimize CPU usage when idle:
-
-### Activity Levels
-
-| Level | FPS | Trigger Condition |
-|-------|-----|-------------------|
-| **IDLE** | 1-2 Hz | No hands detected for >3 seconds |
-| **ATTENTIVE** | 5 Hz | Hands detected, no gesture in last 2 seconds |
-| **ACTIVE** | 10 Hz | Gesture detected/executing in last 1 second |
-
-### Control Flow
-
-1. **Tracking thread** detects hand presence after MediaPipe processing
-2. Updates `RuntimeState.activity_level` based on:
-   - Hand detection (present/absent)
-   - Time since last gesture (`last_gesture_time`)
-3. **Capture thread** reads `RuntimeState.current_fps` before each iteration
-4. Adjusts sleep time: `sleep(1.0 / current_fps)`
-
-### Benefits
-
-- **CPU efficiency**: 80-90% reduction in idle CPU usage
-- **Responsiveness**: Ramps up to 10 Hz within 100-200ms of detecting activity
-- **Smooth transitions**: Hysteresis prevents rapid FPS oscillation
-
----
-
-## Queue Strategy & Backpressure
-
-### Frame-Skipping at Source
-
-When `FrameQueue` is full:
-- Capture thread **drops the current frame** (doesn't block)
-- Logs warning: `CAP-002: Frame dropped (queue full)`
-- Continues capturing at target FPS
-
-### Why Not Block?
-
-Blocking would cause:
-- Camera buffer buildup (stale frames)
-- Cascade delays through entire pipeline
-- Unpredictable latency
-
-Frame-skipping ensures:
-- Always processing **fresh** frames
+When `FrameQueue` is full, the capture thread **drops the current frame** (doesn't block). This ensures:
+- Always processing **fresh** frames (no stale camera buffer buildup)
 - Bounded memory usage
 - Graceful degradation under load
+
+### Adaptive FPS Control
+
+| Level | FPS | Trigger |
+|-------|-----|---------|
+| **IDLE** | 2 Hz | No hands detected for >3 seconds |
+| **ATTENTIVE** | 5 Hz | Hands detected, no gesture in last 2 seconds |
+| **ACTIVE** | 60 Hz | Gesture detected/executing in last 1 second |
+
+The tracking thread updates `RuntimeState.activity_level` based on hand presence and gesture timing. The capture thread reads `RuntimeState.current_fps` and adjusts its sleep accordingly.
 
 ---
 
@@ -153,12 +145,14 @@ Each layer has a unique prefix for debugging:
 
 | Prefix | Layer | Example Errors |
 |--------|-------|----------------|
-| **CAP-xxx** | Capture | `CAP-001`: Camera open failed<br>`CAP-002`: Frame dropped (queue full)<br>`CAP-003`: Invalid frame dimensions |
-| **TRK-xxx** | Tracking | `TRK-001`: MediaPipe init failed<br>`TRK-002`: Landmark detection timeout<br>`TRK-003`: Invalid hand pose |
-| **FEA-xxx** | Features | `FEA-001`: Feature extraction failed<br>`FEA-002`: Insufficient landmarks<br>`FEA-003`: Normalization error |
-| **GES-xxx** | Gestures | `GES-001`: Unknown gesture type<br>`GES-002`: Confidence below threshold<br>`GES-003`: Temporal window incomplete |
-| **ACT-xxx** | Actions | `ACT-001`: Action mapping not found<br>`ACT-002`: OS adapter failed<br>`ACT-003`: Permission denied (accessibility) |
-| **GUI-xxx** | Preview | `GUI-001`: Window creation failed<br>`GUI-002`: Rendering timeout<br>`GUI-003`: Overlay data invalid |
+| **CAP-xxx** | Capture | `CAP-001`: Camera open failed, `CAP-002`: Frame dropped (queue full), `CAP-003`: Invalid frame dimensions |
+| **TRK-xxx** | Tracking | `TRK-001`: MediaPipe init failed, `TRK-002`: Landmark detection timeout, `TRK-003`: Invalid hand pose |
+| **FEA-xxx** | Features | `FEA-001`: Feature extraction failed, `FEA-002`: Insufficient landmarks, `FEA-003`: Normalization error |
+| **GES-xxx** | Gestures | `GES-001`: Unknown gesture type, `GES-002`: Gesture queue full |
+| **ACT-xxx** | Actions | `ACT-001`: Unexpected error in executor, `ACT-002`: OS adapter failed, `ACT-003`: Invalid action in config, `ACT-004`: Adapter init failed |
+| **GUI-xxx** | Preview | `GUI-001`: Window creation failed, `GUI-002`: Rendering timeout |
+| **CFG-xxx** | Configuration | `CFG-001`: Config file not found, `CFG-002`: Validation error, `CFG-003`: Invalid value |
+| **ALT-xxx** | Alerts | `ALT-001`: Audio alert failed |
 
 ### Logging Format
 
@@ -170,121 +164,527 @@ Each layer has a unique prefix for debugging:
 
 ---
 
-## Configuration Structure
+## Adding New Gestures
 
-Phase 1 uses **YAML** for flexibility (can migrate to TOML/JSON later).
+This section walks through every file that needs changes when adding a new gesture. Follow each step in order.
 
-### `config/default.yaml`
+### Step 1: Register the gesture
+
+**File:** `src/handsi/core/registry.py`
+
+Add your gesture name (alphabetically) to `AVAILABLE_GESTURES`:
+
+```python
+AVAILABLE_GESTURES = [
+    # ... existing gestures ...
+    "my_new_gesture",  # ← add here
+    # ...
+]
+```
+
+This list is the source of truth. The UI and config validation reference it.
+
+### Step 2: Implement detection logic
+
+**File:** `src/handsi/gestures/rules.py`
+
+Add a detection method to the `GestureDetector` class:
+
+```python
+def _detect_my_new_gesture(self, lm: list) -> Optional[tuple[str, float, dict]]:
+    """
+    Detect my_new_gesture from hand landmarks.
+
+    Args:
+        lm: List of 21 (x, y, z) tuples for hand landmarks
+
+    Returns:
+        (gesture_name, confidence, metadata) or None
+    """
+    hand_scale = self._get_hand_scale(lm)
+    if hand_scale < 1e-6:
+        return None
+
+    # Example: check distance between two landmarks
+    distance = self._normalized_distance(lm[4], lm[8], hand_scale)
+
+    if distance < self.my_gesture_threshold:
+        confidence = 1.0 - (distance / self.my_gesture_threshold)
+        position = lm[9][:2]  # middle MCP as hand center
+        return ("my_new_gesture", confidence, {
+            "position": position,
+            "hand_scale": hand_scale,
+            "distance": distance
+        })
+    return None
+```
+
+**Key patterns:**
+- Always normalize distances using `_get_hand_scale()` (wrist-to-middle-MCP distance). This makes detection work at any distance from the camera.
+- Return format is always `(gesture_name: str, confidence: float, metadata: dict)`.
+- Confidence must exceed `self.confidence_threshold` (default 0.7) to fire.
+- Include `position` and `hand_scale` in metadata — the action system uses these.
+
+### Step 3: Register in the detector loop
+
+**Same file:** `src/handsi/gestures/rules.py`, in `detect_gestures()`
+
+Add to the `single_hand_detectors` list (or `two_hand_detectors` for two-hand gestures):
+
+```python
+single_hand_detectors = [
+    # ... existing ...
+    ("my_new_gesture", lambda: self._detect_my_new_gesture(lm)),
+]
+```
+
+For two-hand gestures:
+```python
+two_hand_detectors = [
+    # ... existing ...
+    ("my_two_hand_gesture", lambda: self._detect_my_two_hand_gesture(lm_left, lm_right)),
+]
+```
+
+### Step 4: Add config threshold (if needed)
+
+**File:** `config/default.yaml`
+
+Add threshold under `gestures:`:
+```yaml
+gestures:
+  my_gesture_threshold: 0.25  # normalized distance threshold
+```
+
+**File:** `src/handsi/core/config.py`
+
+Add the field to `GestureConfig`:
+```python
+class GestureConfig(BaseModel):
+    # ... existing fields ...
+    my_gesture_threshold: float = Field(default=0.25)
+```
+
+Then use `self.my_gesture_threshold` in the `GestureDetector.__init__()` parameter list and the detection method.
+
+### Step 5: Map to an action
+
+**File:** `config/default.yaml`
+
+Add under `actions.mappings:`:
+```yaml
+actions:
+  mappings:
+    my_new_gesture: click  # or any existing action
+```
+
+You can map to an existing action or create a new one (see next section).
+
+### Summary: Files touched for a new gesture
+
+| Step | File | Change |
+|------|------|--------|
+| 1 | `src/handsi/core/registry.py` | Add to `AVAILABLE_GESTURES` |
+| 2 | `src/handsi/gestures/rules.py` | Add `_detect_*()` method |
+| 3 | `src/handsi/gestures/rules.py` | Add to detector loop in `detect_gestures()` |
+| 4 | `config/default.yaml` | Add threshold (optional) |
+| 4 | `src/handsi/core/config.py` | Add to `GestureConfig` (optional) |
+| 5 | `config/default.yaml` | Map gesture → action in `actions.mappings` |
+
+---
+
+## Adding New Actions
+
+This section walks through every file that needs changes when adding a new action.
+
+### Step 1: Register the action
+
+**File:** `src/handsi/core/registry.py`
+
+Add your action name (alphabetically) to `AVAILABLE_ACTIONS`:
+
+```python
+AVAILABLE_ACTIONS = [
+    # ... existing actions ...
+    "my_new_action",  # ← add here
+    # ...
+]
+```
+
+### Step 2: Add to the ActionName enum
+
+**File:** `src/handsi/core/types.py`
+
+Add a new enum value:
+
+```python
+class ActionName(str, Enum):
+    # ... existing ...
+    MY_NEW_ACTION = "my_new_action"
+```
+
+If the action is **continuous** (tracks state over time, no debouncing), also add it to `continuous_actions()`:
+
+```python
+@classmethod
+def continuous_actions(cls) -> set["ActionName"]:
+    return {cls.MOUSE_MOVE, cls.CONTINUOUS_SCROLL, ..., cls.MY_NEW_ACTION}
+```
+
+### Step 3: Create the handler
+
+**File:** `src/handsi/actions/handlers/my_action.py` (new file)
+
+Choose a base class:
+- `ActionHandler` — generic base
+- `DiscreteActionHandler` — one-shot actions (click, copy). `on_gesture_continue()` is a no-op.
+- `ContinuousActionHandler` — stateful actions (scroll, zoom). Provides `reset_tracking()` hook.
+
+```python
+from handsi.actions.handlers.base import DiscreteActionHandler
+from handsi.core.bus import GestureEvent
+
+
+class MyNewActionHandler(DiscreteActionHandler):
+    """Handler for my_new_action."""
+
+    def execute(self, event=None) -> bool:
+        """Execute the action."""
+        return self.adapter.semantic_action("my_action")
+```
+
+For continuous actions, use `ContinuousActionHandler` and implement `on_gesture_start()`, `on_gesture_continue()`, `on_gesture_end()`:
+
+```python
+from handsi.actions.handlers.base import ContinuousActionHandler
+
+
+class MyContinuousHandler(ContinuousActionHandler):
+    def __init__(self, adapter, runtime_state, config):
+        super().__init__(adapter, runtime_state)
+        self._anchor = None
+
+    def reset_tracking(self) -> None:
+        self._anchor = None
+
+    def on_gesture_start(self, event) -> None:
+        super().on_gesture_start(event)
+        self._anchor = event.metadata.get("position")
+
+    def on_gesture_continue(self, event) -> None:
+        # Calculate delta from anchor and execute
+        pass
+
+    def execute(self, event=None) -> bool:
+        return True
+```
+
+### Step 4: Register in the executor
+
+**File:** `src/handsi/actions/executor.py`
+
+Import your handler and add it to `_create_handlers()`:
+
+```python
+from handsi.actions.handlers.my_action import MyNewActionHandler
+
+# In _create_handlers():
+ActionName.MY_NEW_ACTION: MyNewActionHandler(
+    self.adapter,
+    self.runtime_state
+),
+```
+
+### Step 5: Map a gesture to the action
+
+**File:** `config/default.yaml`
 
 ```yaml
-camera:
-  device_id: 0
-  resolution: [640, 480]
-  # Adaptive FPS ranges
-  fps_idle: 2         # Hz when no hands detected
-  fps_attentive: 5    # Hz when hands present, no gesture
-  fps_active: 10      # Hz during/after gesture execution
-
-tracking:
-  max_hands: 2
-  min_detection_confidence: 0.5
-  min_tracking_confidence: 0.5
-  # Activity level transitions
-  idle_timeout: 3.0        # seconds without hands → IDLE
-  attentive_timeout: 2.0   # seconds without gesture → ATTENTIVE
-
-gestures:
-  # Debouncing: cooldown after gesture fires
-  debounce_ms: 300          # ignore same gesture for 300ms after firing
-  # Latch: cooldown for activation gesture
-  latch_cooldown_ms: 500    # prevent rapid latch on/off
-  # Temporal smoothing
-  smoothing_window: 3       # frames to average over
-
 actions:
-  # Gesture → Action mappings (modular for future changes)
   mappings:
-    pinch: click
-    fist: drag_start
-    open_palm: drag_end
-    swipe_left: prev_desktop
-    swipe_right: next_desktop
-    two_finger_spread: zoom_in
-    two_finger_pinch: zoom_out
-    # Latch gesture (enables/disables control mode)
-    thumbs_up: toggle_latch
-
-system:
-  log_level: INFO           # DEBUG | INFO | WARN | ERROR
-  # log_file: ~/.handsi/logs/handsi.log  # default; override with absolute path
-  preview: false            # override with --preview
-  debug: false              # override with --debug
-
-macos:
-  # macOS-specific settings
-  accessibility_check: true  # verify permissions on startup
-  scroll_speed: 10           # pixels per scroll event
-  zoom_step: 0.1             # zoom increment (0.1 = 10%)
+    some_gesture: my_new_action
 ```
 
-### Config Validation
+### Step 6: Implement on the Rust side (if new OS operation)
 
-- Loaded via `handsi/core/config.py`
-- Pydantic models for validation (type safety, bounds checking)
-- Errors logged as `CFG-xxx` if invalid
+If your action uses an existing IPC method (e.g., `self.adapter.semantic_action()`, `self.adapter.keyboard_shortcut()`), no Rust changes are needed.
+
+If you need a **new OS-level operation**:
+
+**6a. Add to the ActionAdapter trait:**
+
+**File:** `src-tauri/src/adapters/mod.rs`
+
+```rust
+pub trait ActionAdapter: Send {
+    // ... existing methods ...
+    fn my_new_operation(&self, param: f64) -> Result<(), String>;
+}
+```
+
+**6b. Implement for each platform:**
+
+- `src-tauri/src/adapters/macos.rs` — macOS implementation (CGEvent, AppleScript)
+- `src-tauri/src/adapters/linux.rs` — Linux implementation (or stub)
+- `src-tauri/src/adapters/windows.rs` — Windows implementation (or stub)
+
+**6c. Add IPC routing:**
+
+**File:** `src-tauri/src/main.rs`, in `process_action()`:
+
+```rust
+"my_new_operation" => {
+    let param = msg.get("param").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    adapter.my_new_operation(param)
+}
+```
+
+**6d. Add IPC method in Python:**
+
+**File:** `src/handsi/actions/adapters/ipc.py`
+
+```python
+def my_new_operation(self, param: float) -> bool:
+    return self._send_action({
+        "action": "my_new_operation",
+        "param": float(param)
+    })
+```
+
+### Summary: Files touched for a new action
+
+| Step | File | Change |
+|------|------|--------|
+| 1 | `src/handsi/core/registry.py` | Add to `AVAILABLE_ACTIONS` |
+| 2 | `src/handsi/core/types.py` | Add to `ActionName` enum |
+| 3 | `src/handsi/actions/handlers/<new>.py` | Create handler class |
+| 4 | `src/handsi/actions/executor.py` | Register in `_create_handlers()` |
+| 5 | `config/default.yaml` | Map gesture → action |
+| 6a | `src-tauri/src/adapters/mod.rs` | Add to `ActionAdapter` trait (if new OS op) |
+| 6b | `src-tauri/src/adapters/macos.rs` | macOS implementation (if new OS op) |
+| 6b | `src-tauri/src/adapters/linux.rs` | Linux implementation (if new OS op) |
+| 6b | `src-tauri/src/adapters/windows.rs` | Windows implementation (if new OS op) |
+| 6c | `src-tauri/src/main.rs` | Add case in `process_action()` (if new OS op) |
+| 6d | `src/handsi/actions/adapters/ipc.py` | Add IPC method (if new OS op) |
 
 ---
 
-## Module Breakdown (Updated)
+## Module Breakdown
 
-### Core Modules
+### Python — Core (`src/handsi/core/`)
 
-**Capture** (`handsi/vision/capture.py`)
-- `CaptureThread(threading.Thread)`: Webcam capture with adaptive FPS
-- `get_frame()`: Non-blocking frame retrieval
-- Error codes: `CAP-xxx`
+| File | Purpose |
+|------|---------|
+| `bus.py` | `RuntimeState`, queue definitions, `GestureEvent` dataclass |
+| `config.py` | Pydantic config models, YAML loading and validation |
+| `logging.py` | Structured logging with error code prefixes |
+| `types.py` | `ActionName` enum, `GestureMetadata` TypedDict |
+| `registry.py` | Master lists of available gestures and actions |
+| `utils.py` | Path resolution, general utilities |
 
-**Tracking + Features** (`handsi/vision/tracking.py`)
-- `TrackingThread(threading.Thread)`: MediaPipe processing + feature extraction (inline)
-- `MediaPipeTracker`: Wrapper for MediaPipe Hands
-- `extract_features(landmarks)`: Landmark → normalized feature vector
-- Updates `RuntimeState.activity_level` based on detection
-- Error codes: `TRK-xxx`, `FEA-xxx`
+### Python — Vision (`src/handsi/vision/`)
 
-**Gestures** (`handsi/gestures/`)
-- `rules.py`: Rule-based detector (pinch, fist, swipe, open palm)
-- `infer.py`: `GestureInferenceThread` (pops features, detects gestures)
-- `smoothing.py`: Temporal averaging over sliding window
-- Error codes: `GES-xxx`
+| File | Purpose |
+|------|---------|
+| `capture.py` | `CaptureThread` — webcam capture with adaptive FPS |
+| `tracking.py` | `TrackingThread` — MediaPipe tracking + feature extraction |
 
-**Actions** (`handsi/actions/`)
-- `executor.py`: `ActionExecutorThread` with **state machine** (latch, debounce)
-- `mapping.py`: Loads gesture → action mappings from config
-- `adapters/macos.py`: macOS action implementations (Quartz, Accessibility APIs)
-- `adapters/linux.py`: Linux stub (Phase 2)
-- Error codes: `ACT-xxx`
+### Python — Gestures (`src/handsi/gestures/`)
 
-**Preview** (`handsi/ui/preview.py`)
-- `PreviewThread(threading.Thread)`: OpenCV window rendering (optional)
-- Receives frame copies + overlay data (landmarks, gesture labels, FPS)
-- Non-blocking (drops frames if can't keep up)
-- Error codes: `GUI-xxx`
+| File | Purpose |
+|------|---------|
+| `rules.py` | `GestureDetector` — rule-based detection (1000+ lines) |
+| `infer.py` | `GestureInferenceThread` — temporal smoothing + queue |
+| `smoothing.py` | Sliding-window temporal averaging |
 
-**Core Infrastructure** (`handsi/core/`)
-- `bus.py`: Queue definitions + `RuntimeState` class
-- `config.py`: YAML loading + Pydantic validation
-- `logging.py`: Structured logging with error code prefixes
+### Python — Actions (`src/handsi/actions/`)
 
-**Entrypoint** (`handsi/main.py`)
-- CLI argument parsing (`--preview`, `--debug`, `--config`)
-- Thread lifecycle management (start, join, graceful shutdown)
-- Signal handling (Ctrl+C)
+| File | Purpose |
+|------|---------|
+| `executor.py` | `ActionExecutorThread` — main orchestrator |
+| `state_machine.py` | `GestureStateMachine` — latch, debounce, cooldown |
+| `interpolation.py` | `CursorInterpolator` — smooth 60 Hz cursor movement |
+| `momentum.py` | `ScrollMomentum` — kinetic scrolling after gesture ends |
+| `adapters/ipc.py` | `IPCAdapter` — fire-and-forget JSON to Rust |
+| `adapters/base.py` | `ActionAdapter` base class (Python interface) |
+| `handlers/base.py` | `ActionHandler`, `DiscreteActionHandler`, `ContinuousActionHandler` |
+| `handlers/click.py` | Click, double-click, right-click handlers |
+| `handlers/mouse.py` | Mouse movement handler |
+| `handlers/scroll.py` | Scroll step + continuous scroll handlers |
+| `handlers/zoom.py` | Zoom step + continuous zoom handlers |
+| `handlers/volume.py` | Continuous volume handler |
+| `handlers/tab.py` | Continuous tab switching handler |
+| `handlers/desktop.py` | Desktop/workspace switching handler |
+| `handlers/keyboard.py` | Copy, paste, undo handlers |
+| `handlers/latch.py` | Enable/disable latch handlers |
+| `handlers/alert.py` | Habit awareness alert handlers (visual + audio) |
+
+### Python — UI (`src/handsi/ui/`)
+
+| File | Purpose |
+|------|---------|
+| `controller.py` | Backend controller — orchestrates thread lifecycle |
+| `ipc_server.py` | IPC command handler (stdin/stdout JSON protocol) |
+| `preview.py` | OpenCV debug preview window |
+
+### Python — Teach (`src/handsi/teach/`)
+
+Scaffolded for Phase 3. Currently empty placeholders.
+
+### Rust — Tauri App (`src-tauri/src/`)
+
+| File | Purpose |
+|------|---------|
+| `main.rs` | Tauri app entry point, IPC handling, `process_action()` routing |
+| `adapters/mod.rs` | `ActionAdapter` trait + `create_adapter()` factory |
+| `adapters/macos.rs` | macOS adapter (CGEvent, AppleScript, multi-monitor) |
+| `adapters/linux.rs` | Linux adapter (stub — Phase 2) |
+| `adapters/windows.rs` | Windows adapter (stub — Phase 2) |
+
+### Entrypoint (`src/handsi/main.py`)
+
+- Parses CLI arguments (`--ipc`, `--cli`, `--preview`, `--config`)
+- Starts thread pipeline via `controller.py`
+- Signal handling (Ctrl+C → graceful shutdown)
 
 ---
 
-## Deliverables (Acceptance Criteria)
-You can run:
+## Configuration
+
+All configuration lives in `config/default.yaml` and is validated by Pydantic models in `src/handsi/core/config.py`.
+
+The config covers camera settings, tracking thresholds, gesture detection parameters, action mappings, mouse/scroll/zoom/volume/tab tuning, and habit awareness settings.
+
+User-specific overrides can be placed in `~/.handsi/config.yaml`. See the default config file for all available options.
+
+---
+
+## How to Build and Run
+
+### Prerequisites
 
 ```bash
-python -m handsi.main --preview --debug --config config/default.yaml
+conda activate handsi
+pip install -e .
 ```
+
+### Development Mode
+
+```bash
+npm run dev
+# or
+./scripts/dev-tauri.sh
+```
+
+This starts the Tauri app in dev mode, which spawns the Python backend as a subprocess:
+```
+python -m handsi.main --ipc stdio --config config/default.yaml
+```
+
+### Production Build
+
+```bash
+./scripts/build-tauri.sh
+```
+
+This:
+1. Builds the Python backend with PyInstaller → `src-tauri/bin/handsi-backend`
+2. Compiles the Rust/Tauri app
+3. Creates `Handsi.app` bundle and `.dmg` installer
+
+### Python-Only Preview (no actions)
+
+For debugging hand tracking without the Tauri app:
+
+```bash
+conda activate handsi
+python -m handsi.main --cli --preview
+```
+
+This runs the capture + tracking + gesture pipeline with a debug visualization window but **no action execution** (since actions require the Rust side for OS permissions).
+
+---
+
+## Phase 2 Roadmap
+
+- **Cross-platform expansion** — implement Linux and Windows adapters (see next section)
+- **Automatic gesture adding** — allow users to define custom gestures
+- **AI and learning features** — ML-based gesture recognition alongside rules
+- **Teaching mode** — record, label, and train custom gesture models (scaffolded in `src/handsi/teach/`)
+- **Improved UI** — settings, gesture mapping editor, live feedback
+
+---
+
+## Cross-Platform Expansion
+
+The Rust adapter architecture is designed for cross-platform support. The Python side is already fully platform-agnostic.
+
+### Where to add Linux support
+
+1. **`src-tauri/src/adapters/linux.rs`** — implement all `ActionAdapter` trait methods
+   - Mouse: X11 via `XTest` extension, or `uinput`/`evdev` for Wayland
+   - Keyboard: `xdotool` or `XTest`
+   - Scroll: `XTest` scroll events
+   - Desktop switching: `wmctrl` or D-Bus
+   - Volume: `pactl` (PulseAudio) or `amixer` (ALSA)
+   - Zoom: keyboard shortcuts (`Ctrl++`/`Ctrl+-`)
+
+2. **`src-tauri/src/adapters/mod.rs`** — already wired via conditional compilation:
+   ```rust
+   #[cfg(target_os = "linux")]
+   {
+       let mut adapter = Box::new(linux::LinuxAdapter::new());
+       adapter.initialize()?;
+       Ok(adapter)
+   }
+   ```
+
+3. **No Python changes needed** — all actions flow through `IPCAdapter` regardless of platform.
+
+4. **CI/CD** — `.github/workflows/release.yml` needs Linux build targets (Ubuntu runner, AppImage/deb packaging).
+
+### Where to add Windows support
+
+1. **`src-tauri/src/adapters/windows.rs`** — implement all `ActionAdapter` trait methods
+   - Mouse/Keyboard: Win32 `SendInput` API
+   - Scroll: Win32 `mouse_event` with `MOUSEEVENTF_WHEEL`
+   - Desktop switching: Virtual Desktop COM API
+   - Volume: `IAudioEndpointVolume` COM interface
+   - Zoom: keyboard shortcuts (`Ctrl++`/`Ctrl+-`)
+
+2. **`src-tauri/src/adapters/mod.rs`** — already wired via conditional compilation.
+
+3. **CI/CD** — needs Windows build targets (windows-latest runner, MSI/NSIS packaging).
+
+### Platform adapter trait
+
+All platform adapters must implement every method in `ActionAdapter` (`src-tauri/src/adapters/mod.rs`):
+
+```rust
+pub trait ActionAdapter: Send {
+    fn initialize(&mut self) -> Result<(), String>;
+    fn mouse_move(&self, x: f64, y: f64) -> Result<(), String>;
+    fn mouse_move_normalized(&self, x_norm: f64, y_norm: f64) -> Result<(), String>;
+    fn mouse_down(&self, x: f64, y: f64, button: u8) -> Result<(), String>;
+    fn mouse_up(&self, x: f64, y: f64, button: u8) -> Result<(), String>;
+    fn mouse_click(&self, x: f64, y: f64, button: u8) -> Result<(), String>;
+    fn mouse_double_click(&self, x: f64, y: f64, button: u8) -> Result<(), String>;
+    fn mouse_down_normalized(&self, x_norm: f64, y_norm: f64, button: u8) -> Result<(), String>;
+    fn mouse_up_normalized(&self, x_norm: f64, y_norm: f64, button: u8) -> Result<(), String>;
+    fn mouse_click_normalized(&self, x_norm: f64, y_norm: f64, button: u8) -> Result<(), String>;
+    fn mouse_double_click_normalized(&self, x_norm: f64, y_norm: f64, button: u8) -> Result<(), String>;
+    fn get_mouse_position_normalized(&self) -> Result<(f64, f64), String>;
+    fn mouse_move_relative_normalized(&self, dx: f64, dy: f64) -> Result<(), String>;
+    fn reset_cursor_tracking(&self) -> Result<(), String>;
+    fn scroll(&self, dx: i32, dy: i32) -> Result<(), String>;
+    fn key_press(&self, key_code: u16, modifiers: u64) -> Result<(), String>;
+    fn switch_desktop(&self, direction: &str) -> Result<(), String>;
+    fn set_volume(&self, delta: i32) -> Result<(), String>;
+    fn keyboard_shortcut(&self, shortcut: &str) -> Result<(), String>;
+    fn zoom(&self, direction: &str, step: f64) -> Result<(), String>;
+    fn semantic_action(&self, name: &str) -> Result<(), String>;
+    fn cleanup(&mut self);
+}
+```
+
+The `create_adapter()` factory function uses `#[cfg(target_os = "...")]` to select the correct implementation at compile time.

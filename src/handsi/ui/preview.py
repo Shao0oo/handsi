@@ -4,8 +4,6 @@ Preview window for debugging and visualization.
 Displays camera feed with overlaid hand landmarks and system status.
 Runs in main loop (not threaded) to work on macOS.
 
-NOTE: Phase 1 uses OpenCV preview in main loop for simplicity.
-      Phase 2+ will use PySide6 system tray with Qt-based preview.
 """
 
 import time

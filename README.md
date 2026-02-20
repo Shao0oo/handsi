@@ -27,7 +27,7 @@ Handsi is a local, privacy-first gesture control system that tracks your hands v
 ## Use Cases
 
 ### Reading papers away from the desk
-Stand or walk around while reading on your screen. Control scrolling, zooming, and page navigation without being tethered to your desk.
+Stand or walk around while reading on your screen. Control scrolling, zooming, changing tabs, and page navigation without being tethered to your desk.
 
 ### Watching videos while eating
 Keep both hands free to eat while controlling playback, volume, and navigation with simple gestures.
@@ -47,15 +47,20 @@ Perfect for when you want to get handsi!
 - Configurable gesture → action mapping
 - Actions:
   - Mouse movement
-  - Click and drag
+  - Click
   - Scroll (vertical/horizontal)
+  - Volume control
   - Zoom in/out
+  - Tab through windows
   - Desktop switching (next/previous workspace)
   - Window management (view all windows)
-  - Volume control
+  - Copy, paste, undo
+  - etc...
+- Habit detection 
+  - Prevents abscentmindedly touching your face
+  - Must be enabled in settings and gestures
 
 **Planned:**
-- Head/body tracking (active vs inactive hands)
 - Adjustable signals learned over time
 - Voice + motion labeling
 - Onboarding and calibration
@@ -67,7 +72,7 @@ Perfect for when you want to get handsi!
 
 | Platform | Status | Notes |
 |----------|--------|-------|
-| **macOS** | ✅ Supported | Apple Silicon (MX) and Intel |
+| **macOS** | ✅ Supported | Apple Silicon and Intel |
 | **Linux** | ⏳ Planned | Future release |
 | **Windows** | ⏳ Planned | Future release |
 
@@ -98,12 +103,6 @@ Perfect for when you want to get handsi!
 - **Backend:** Python 3.11
 - **Computer Vision:** MediaPipe, OpenCV
 - **Platform Integration:** PyObjC (macOS)
-
----
-
-## Visualization and UI
-
-*Coming soon*
 
 ---
 

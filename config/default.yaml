@@ -42,7 +42,7 @@ gestures:
   latch_cooldown_ms: 500    # prevent rapid latch on/off
   latch_active: true         # start with gesture control enabled
   # Temporal smoothing
-  smoothing_window: 3       # frames to average over
+  smoothing_window: 1       # frames to average over
   consistency_threshold: 0.6  # fraction of frames that must agree (0-1)
 
   # Detection thresholds - ALL VALUES ARE NOW HAND-RELATIVE (as fraction of hand size)
